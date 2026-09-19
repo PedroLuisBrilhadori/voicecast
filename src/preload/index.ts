@@ -55,9 +55,11 @@ contextBridge.exposeInMainWorld("voicecast", bridge);
 contextBridge.exposeInMainWorld("vcInternal", {
   /** Nível do mic do recorder (0..1). */
   micLevel: (level: number) => ipcRenderer.send(IPC.micLevel, level),
-  /** Entrega do blob no stop — canal restrito ao prefixo recorder:. */
+  /** Entrega do blob no stop — canais restritos aos prefixos de captura. */
   sendBlob: (channel: string, payload: { b64: string; ext: string }) => {
-    if (!channel.startsWith("recorder:blob:")) throw new Error("canal não autorizado");
+    if (!channel.startsWith("recorder:blob:") && !channel.startsWith("ditado:blob:")) {
+      throw new Error("canal não autorizado");
+    }
     ipcRenderer.send(channel, payload);
   },
   /** Resultado do overlay de região (canal único por seleção). */

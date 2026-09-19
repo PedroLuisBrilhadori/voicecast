@@ -132,6 +132,17 @@ export function createEditor(dir: string, name: string): BrowserWindow {
   return w;
 }
 
+/** Renderer oculto do ditado (mic-only, mesma página do recorder, modo=ditado). */
+export function createDitado(blobChannel: string): BrowserWindow {
+  const w = new BrowserWindow({
+    show: false,
+    webPreferences: webPrefs,
+  });
+  void w.loadFile(dist("recorder.html"), { query: { ch: blobChannel, mode: "ditado" } });
+  wireLogging(w, "ditado");
+  return w;
+}
+
 /** Renderer oculto que roda o getUserMedia(desktop)+MediaRecorder. */
 export function createRecorder(blobChannel: string): BrowserWindow {
   const w = new BrowserWindow({

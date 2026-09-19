@@ -28,6 +28,7 @@ import {
 import { createPicker, createEditor } from "./windows";
 import { ensureLayout } from "./storage";
 import { initLogging, logError, logInfo } from "./logging";
+import { registerDitadoHotkey } from "./ditado";
 import {
   asrHealth,
 } from "./asr";
@@ -197,6 +198,25 @@ if (!gotLock) {
     globalShortcut.register("Control+Shift+F9", () => {
       void recordFullscreen();
     });
+
+    // Ditado F9 (v2): só assume o F9 se o daemon suportar hold (patch novo)
+    // ou não existir. Daemon velho (sem endpoint) → F9 fica com ele.
+    void (async () => {
+      try {
+        const r = await fetch("http://127.0.0.1:8700/api/external/hold", {
+          signal: AbortSignal.timeout(2000),
+        });
+        if (r.ok) {
+          registerDitadoHotkey();
+          logInfo("daemon com suporte a hold — F9 assumido pelo voicecast");
+        } else {
+          logInfo(`daemon velho (HTTP ${r.status}) — F9 permanece no voice-dictation`);
+        }
+      } catch {
+        registerDitadoHotkey(); // sem daemon: v2 completa, F9 é nosso
+        logInfo("daemon ausente — F9 assumido pelo voicecast");
+      }
+    })();
 
     if (process.argv.includes("--dev") || process.env.VOICECAST_DEV === "1") {
       logInfo("--dev: abrindo picker");

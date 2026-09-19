@@ -10,6 +10,7 @@ type VCRec = { ok: boolean; error?: string };
 
 const params = new URLSearchParams(location.search);
 const BLOB_CH = params.get("ch") ?? "";
+const MODE = params.get("mode") ?? "sessao";
 
 let currentStream: MediaStream | null = null;
 let recorder: MediaRecorder | null = null;
@@ -147,6 +148,44 @@ window.vcCancel = (): void => {
   } catch {}
 };
 
+// ── ditado (mic-only, sem vídeo) ───────────────────────────────
+
+let audioOnly: { rec: MediaRecorder; stream: MediaStream } | null = null;
+
+window.vcRecordDictation = async (): Promise<{ ok: boolean; error?: string }> => {
+  cancelled = false;
+  chunks = [];
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioOnly = { stream, rec: new MediaRecorder(stream) }; // webm/opus default — ASR decodifica
+    audioOnly.rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    audioOnly.rec.start(500);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e) };
+  }
+};
+
+window.vcStopDictation = async (): Promise<void> => {
+  const a = audioOnly;
+  if (!a) return;
+  await new Promise<void>((res) => {
+    a.rec.onstop = () => res();
+    try {
+      a.rec.stop();
+    } catch {
+      res();
+    }
+  });
+  a.stream.getTracks().forEach((t) => t.stop());
+  audioOnly = null;
+  if (cancelled || !BLOB_CH) return;
+  const blob = new Blob(chunks, { type: "audio/webm" });
+  const b64 = await blobToB64(blob);
+  console.info(`[ditado] stop: chunks=${chunks.length} bytes=${blob.size}`);
+  window.vcInternal.sendBlob(BLOB_CH, { b64, ext: "webm" });
+};
+
 window.vcPause = (p: boolean): void => {
   try {
     if (p) recorder?.pause();
@@ -160,6 +199,8 @@ declare global {
     vcStop: () => Promise<void>;
     vcCancel: () => void;
     vcPause: (p: boolean) => void;
+    vcRecordDictation: () => Promise<{ ok: boolean; error?: string }>;
+    vcStopDictation: () => Promise<void>;
     vcInternal: {
       micLevel: (level: number) => void;
       sendBlob: (ch: string, payload: { b64: string; ext: string }) => void;
@@ -167,3 +208,5 @@ declare global {
     };
   }
 }
+
+void MODE;
