@@ -36,7 +36,7 @@ function wireLogging(w: BrowserWindow, tag: string): void {
 export function createPicker(): BrowserWindow {
   const w = new BrowserWindow({
     width: 900,
-    height: 640,
+    height: 820,
     show: false,
     autoHideMenuBar: true,
     title: "voicecast",

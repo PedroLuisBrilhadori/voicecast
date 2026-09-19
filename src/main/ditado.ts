@@ -58,6 +58,41 @@ async function daemonRecording(): Promise<boolean> {
   }
 }
 
+// ── posse do F9 (heartbeat TTL — se o voicecast morrer, o F9 volta ao daemon) ──
+
+let heartbeatTimer: NodeJS.Timeout | null = null;
+
+/** Reivindica (claim=true) ou devolve (claim=false) a posse do F9 no daemon. */
+export async function claimHotkey(claim: boolean): Promise<boolean> {
+  try {
+    const r = await fetch(`${panelUrl()}/api/external/hotkey`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(claim ? { owner: "voicecast", ttl_s: 60 } : { owner: null }),
+      signal: AbortSignal.timeout(2500),
+    });
+    if (!r.ok) return false;
+    if (claim && !heartbeatTimer) {
+      heartbeatTimer = setInterval(() => {
+        void fetch(`${panelUrl()}/api/external/hotkey`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ owner: "voicecast", ttl_s: 60 }),
+          signal: AbortSignal.timeout(2500),
+        }).catch(() => {});
+      }, 20_000);
+      heartbeatTimer.unref?.();
+    }
+    if (!claim && heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ── captura mic-only (renderer oculto, sem foco) ───────────────
 
 async function startCapture(): Promise<{ ok: boolean; error?: string }> {

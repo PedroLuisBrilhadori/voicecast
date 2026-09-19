@@ -152,6 +152,21 @@ window.vcCancel = (): void => {
 
 let audioOnly: { rec: MediaRecorder; stream: MediaStream } | null = null;
 
+/** Beep de feedback (parity com o daemon antigo): tom alto no start, grave no stop. */
+function beep(freq: number, ms: number): void {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = freq;
+    gain.gain.value = 0.06;
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + ms / 1000);
+    osc.onended = () => void ctx.close();
+  } catch {}
+}
+
 window.vcRecordDictation = async (): Promise<{ ok: boolean; error?: string }> => {
   cancelled = false;
   chunks = [];
@@ -160,6 +175,7 @@ window.vcRecordDictation = async (): Promise<{ ok: boolean; error?: string }> =>
     audioOnly = { stream, rec: new MediaRecorder(stream) }; // webm/opus default — ASR decodifica
     audioOnly.rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     audioOnly.rec.start(500);
+    beep(1200, 90);
     return { ok: true };
   } catch (e) {
     return { ok: false, error: String((e as Error)?.message ?? e) };
@@ -169,6 +185,7 @@ window.vcRecordDictation = async (): Promise<{ ok: boolean; error?: string }> =>
 window.vcStopDictation = async (): Promise<void> => {
   const a = audioOnly;
   if (!a) return;
+  beep(700, 110);
   await new Promise<void>((res) => {
     a.rec.onstop = () => res();
     try {

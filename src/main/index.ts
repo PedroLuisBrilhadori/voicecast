@@ -28,7 +28,7 @@ import {
 import { createPicker, createEditor } from "./windows";
 import { ensureLayout } from "./storage";
 import { initLogging, logError, logInfo } from "./logging";
-import { registerDitadoHotkey } from "./ditado";
+import { registerDitadoHotkey, claimHotkey } from "./ditado";
 import {
   asrHealth,
 } from "./asr";
@@ -207,8 +207,13 @@ if (!gotLock) {
           signal: AbortSignal.timeout(2000),
         });
         if (r.ok) {
-          registerDitadoHotkey();
-          logInfo("daemon com suporte a hold — F9 assumido pelo voicecast");
+          const claimed = await claimHotkey(true);
+          if (claimed) {
+            registerDitadoHotkey();
+            logInfo("posse do F9 transferida ao voicecast (daemon renova por TTL)");
+          } else {
+            logInfo("daemon não aceitou a posse do F9 — tecla permanece com ele");
+          }
         } else {
           logInfo(`daemon velho (HTTP ${r.status}) — F9 permanece no voice-dictation`);
         }
@@ -278,6 +283,7 @@ if (!gotLock) {
 
   app.on("will-quit", () => {
     globalShortcut.unregisterAll();
+    void claimHotkey(false); // devolve o F9 ao daemon
   });
 
   // fechar janela ≠ sair (o app vive nos atalhos globais)
