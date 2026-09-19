@@ -1,0 +1,31 @@
+{
+  "name": "voicecast",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sessões de contexto: voz + tela gravadas localmente, transcritas (ASR local) e transformadas em referências para agentes de código.",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.json --noEmit",
+    "build:main": "tsc -p tsconfig.node.json",
+    "build:renderer": "vite build",
+    "build": "pnpm build:main && pnpm build:renderer",
+    "dev:win": "pnpm --silent build && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/sync-to-host.ps1 -Run",
+    "test": "vitest run",
+    "ci:local": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "packageManager": "pnpm@10.18.0",
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4",
+    "electron": "^44.4.3",
+    "typescript": "^5.8",
+    "vite": "^6",
+    "vitest": "^3"
+  },
+  "dependencies": {
+    "react": "^19",
+    "react-dom": "^19"
+  }
+}
