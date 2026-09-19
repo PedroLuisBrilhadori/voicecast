@@ -1,20 +1,21 @@
-# sync do repo (WSL) para a cópia executável no Windows — padrão voice-dictation
-# Uso: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/sync-to-host.ps1 [-Run]
+# sync do repo (WSL) para a c-pia execut-vel no Windows - padr-o voice-dictation
+# Uso (do WSL): powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/sync-to-host.ps1 [-Run]
 param([switch]$Run)
 
 $ErrorActionPreference = "Stop"
-$Repo  = "C:\Users\pedro\programing\projetos\voicecast"
-$Dest  = "$env:LOCALAPPDATA\voicecast\src"
+$Repo = '\\wsl.localhost\Ubuntu\home\pedro\programing\projetos\voicecast'
+$Dest = "$env:LOCALAPPDATA\voicecast\src"
 
-if (-not (Test-Path $Repo)) { throw "repo não encontrado: $Repo" }
+if (-not (Test-Path $Repo)) { throw "repo n-o encontrado: $Repo" }
 
-# espelha src+configs (sem node_modules/dist) — robocopy /MIR cuida de remoções
+# espelha src+scripts+dist+configs (sem node_modules) - /MIR cuida de remo--es
 robocopy "$Repo\src" "$Dest\src" /MIR /NJH /NJS /NDL /NFL | Out-Null
 robocopy "$Repo\scripts" "$Dest\scripts" /MIR /NJH /NJS /NDL /NFL | Out-Null
+robocopy "$Repo\dist" "$Dest\dist" /MIR /NJH /NJS /NDL /NFL | Out-Null
 Copy-Item "$Repo\package.json" "$Dest\" -Force
 
 if (-not (Test-Path "$Dest\node_modules")) {
-    Write-Host "node_modules ausente — instalando (primeira vez)…"
+    Write-Host "node_modules ausente - instalando (primeira vez, baixa o Electron)-"
     Push-Location $Dest
     npm install --no-audit --no-fund
     Pop-Location

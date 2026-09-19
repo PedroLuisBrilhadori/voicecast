@@ -11,5 +11,13 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist/renderer"),
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "src/renderer/index.html"),
+        overlay: path.resolve(__dirname, "src/renderer/overlay.html"),
+        bar: path.resolve(__dirname, "src/renderer/bar.html"),
+        recorder: path.resolve(__dirname, "src/renderer/recorder.html"),
+      },
+    },
   },
 });

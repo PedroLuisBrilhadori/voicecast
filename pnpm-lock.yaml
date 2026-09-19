@@ -30,6 +30,9 @@ importers:
       electron:
         specifier: ^44.4.3
         version: 44.4.3
+      esbuild:
+        specifier: ^0.25
+        version: 0.25.12
       typescript:
         specifier: ^5.8
         version: 5.9.3

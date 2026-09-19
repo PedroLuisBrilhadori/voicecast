@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <title>voicecast · gravação</title>
+  </head>
+  <body style="margin:0;background:#000">
+    <!-- o <video> puxa frames do compositor: sem ele, MediaRecorder em janela
+         oculta grava lixo (diferença exata vs PoC da F0, que funcionava) -->
+    <video id="v" muted autoplay playsinline style="width:160px;height:90px"></video>
+    <script type="module" src="/recorder.ts"></script>
+  </body>
+</html>

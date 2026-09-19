@@ -7,8 +7,9 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.json --noEmit",
     "build:main": "tsc -p tsconfig.node.json",
+    "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload/index.js",
     "build:renderer": "vite build",
-    "build": "pnpm build:main && pnpm build:renderer",
+    "build": "pnpm build:main && pnpm build:preload && pnpm build:renderer",
     "dev:win": "pnpm --silent build && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/sync-to-host.ps1 -Run",
     "test": "vitest run",
     "ci:local": "pnpm typecheck && pnpm test && pnpm build"
@@ -20,6 +21,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^4",
     "electron": "^44.4.3",
+    "esbuild": "^0.25",
     "typescript": "^5.8",
     "vite": "^6",
     "vitest": "^3"
