@@ -35,6 +35,20 @@ export const IPC = {
   micLevel: "capture:mic-level",
   /** Recorder → main: entrega o blob no fim (canal único por sessão via query). */
   blob: "recorder:blob", // prefixo — canal real é `recorder:blob:<startedAt>`
+
+  // ── biblioteca e pós-produção (M2) ───────────────────────────
+  listSessions: "library:list",
+  getSession: "library:get",
+  updateSession: "library:update-meta",
+  deleteSession: "library:delete",
+  transcribeSession: "library:transcribe",
+  createClip: "library:create-clip",
+  captureFrame: "library:capture-frame",
+  buildContext: "library:build-context",
+  copyText: "library:copy",
+  openPath: "library:open-path",
+  openEditor: "library:open-editor",
+  asrStatus: "library:asr-status",
 } as const;
 
 export interface PingRequest {
@@ -122,4 +136,69 @@ export interface VoicecastBridge {
   getState(): Promise<RecordingState>;
   /** Assina eventos broadcast (retorna unsubscribe). */
   onEvent(cb: (e: CaptureEvent) => void): () => void;
+
+  // M2 — biblioteca e pós-produção
+  listSessions(): Promise<SessionSummary[]>;
+  getSession(dir: string, name: string): Promise<SessionDetail | null>;
+  updateSession(dir: string, name: string, patch: { title?: string; tags?: string[] }): Promise<OpResult>;
+  deleteSession(dir: string, name: string): Promise<OpResult>;
+  transcribeSession(dir: string, name: string): Promise<OpResult>;
+  createClip(dir: string, name: string, inS: number, outS: number, label?: string): Promise<{ ok: true; file: string; bytes: number } | { ok: false; error: string }>;
+  captureFrame(dir: string, name: string, atS: number): Promise<{ ok: true; file: string } | { ok: false; error: string }>;
+  buildContext(dir: string, name: string, range?: { inS: number; outS: number } | null): Promise<{ ok: true; markdown: string } | { ok: false; error: string }>;
+  copyText(text: string): Promise<OpResult>;
+  openPath(winPath: string): Promise<OpResult>;
+  /** Abre o editor da sessão numa janela própria. */
+  openEditor(dir: string, name: string): Promise<OpResult>;
+  asrStatus(): Promise<{ ok: boolean; source?: string }>;
 }
+
+// ── biblioteca / pós-produção (M2) ─────────────────────────────
+
+export interface SessionSummary {
+  dir: string;
+  name: string;
+  status: string;
+  startedAt: string | null;
+  durationS: number | null;
+  mode: string | null;
+  sourceLabel: string | null;
+  title: string | null;
+  tags: string[];
+  sizeBytes: number | null;
+  hasMp4: boolean;
+  hasTranscript: boolean;
+  transcriptStatus: string | null;
+  /** dataURL do thumbnail (carregado pelo main). */
+  thumb?: string | null;
+  markers: number[];
+}
+
+export interface TranscriptInfo {
+  text: string;
+  language: string | null;
+  words: { w: string; start: number; end: number; p: number }[];
+  segments: { start: number; end: number; text: string }[];
+}
+
+export interface SessionDetail {
+  dir: string;
+  name: string;
+  meta: {
+    status?: string;
+    startedAt?: string;
+    durationS?: number;
+    mode?: string;
+    sourceLabel?: string;
+    title?: string;
+    tags?: string[];
+    markers?: number[];
+    transcriptStatus?: string;
+    sizeBytes?: number;
+  };
+  transcript: TranscriptInfo | null;
+  /** file:// URL do mp4 para o <video> do editor. */
+  videoUrl: string;
+}
+
+export type OpResult = { ok: true } | { ok: false; error: string };

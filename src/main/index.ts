@@ -25,9 +25,24 @@ import {
   stopRecording,
   subscribeEvents,
 } from "./capture";
-import { createPicker } from "./windows";
+import { createPicker, createEditor } from "./windows";
 import { ensureLayout } from "./storage";
 import { initLogging, logError, logInfo } from "./logging";
+import {
+  asrHealth,
+} from "./asr";
+import {
+  buildContext,
+  captureFrame,
+  copyToClipboard,
+  createClip,
+  deleteSession,
+  getSessionDetail,
+  listSessions,
+  openInFolder,
+  transcribeAndStore,
+  updateSessionMeta,
+} from "./library";
 
 initLogging();
 logInfo("boot voicecast: argv=", process.argv, "pid=", process.pid);
@@ -93,6 +108,56 @@ function registerIpc(): void {
     return { ok: true };
   });
   ipcMain.handle(IPC.getState, () => getState());
+  ipcMain.handle(IPC.asrStatus, () => asrHealth());
+  ipcMain.handle(IPC.listSessions, () => listSessions());
+  ipcMain.handle(IPC.getSession, (_e, dir: string, name: string) => {
+    const d = getSessionDetail(dir, name);
+    if (!d) return null;
+    return {
+      dir,
+      name,
+      meta: d.meta,
+      transcript: d.transcript,
+      videoUrl: "file:///" + d.mp4.replace(/\\/g, "/"),
+    };
+  });
+  ipcMain.handle(IPC.updateSession, (_e, dir: string, name: string, patch: { title?: string; tags?: string[] }) => {
+    updateSessionMeta(dir, name, patch);
+    return { ok: true } as const;
+  });
+  ipcMain.handle(IPC.deleteSession, (_e, dir: string, name: string) => {
+    deleteSession(dir, name);
+    return { ok: true } as const;
+  });
+  ipcMain.handle(IPC.transcribeSession, async (_e, dir: string, name: string) => {
+    const ok = await transcribeAndStore(dir, name);
+    return ok ? { ok: true } as const : { ok: false, error: "transcrição falhou (ASR indisponível?)" };
+  });
+  ipcMain.handle(IPC.createClip, async (_e, dir: string, name: string, inS: number, outS: number, label?: string) => {
+    const r = await createClip(dir, name, inS, outS, label);
+    return "error" in r ? { ok: false, error: r.error } : { ok: true, file: r.file, bytes: r.bytes };
+  });
+  ipcMain.handle(IPC.captureFrame, async (_e, dir: string, name: string, atS: number) => {
+    const r = await captureFrame(dir, name, atS);
+    return "error" in r ? { ok: false, error: r.error } : { ok: true, file: r.file };
+  });
+  ipcMain.handle(IPC.buildContext, async (_e, dir: string, name: string, range?: { inS: number; outS: number } | null) => {
+    const r = await buildContext({ dir, name, range });
+    return "error" in r ? { ok: false, error: r.error } : { ok: true, markdown: r.markdown };
+  });
+  ipcMain.handle(IPC.copyText, (_e, text: string) => {
+    copyToClipboard(text);
+    return { ok: true } as const;
+  });
+  ipcMain.handle(IPC.openPath, (_e, winPath: string) => {
+    openInFolder(winPath);
+    return { ok: true } as const;
+  });
+  ipcMain.handle(IPC.openEditor, (_e, dir: string, name: string) => {
+    createEditor(dir, name);
+    return { ok: true } as const;
+  });
+
   ipcMain.on(IPC.micLevel, (_e, level: number) => {
     broadcast({ type: "mic-level", level });
   });
@@ -115,7 +180,16 @@ if (!gotLock) {
     ensureLayout();
     applyRetention();
     registerIpc();
-    subscribeEvents(broadcast);
+    subscribeEvents((e) => {
+      broadcast(e);
+      // M2: sessão finalizada → dispara transcrição automática em background
+      if (e.type === "session-done") {
+        void transcribeAndStore(e.dir, e.name).then((ok) => {
+          broadcast({ type: "session-done", dir: e.dir, name: e.name, mp4: e.mp4 });
+          if (!ok) logInfo("transcrição automática ficou pendente (retranscreva no editor)");
+        });
+      }
+    });
 
     if (!globalShortcut.register("Control+F9", togglePicker)) {
       logError("Ctrl+F9 não pôde ser registrado");
@@ -127,6 +201,23 @@ if (!gotLock) {
     if (process.argv.includes("--dev") || process.env.VOICECAST_DEV === "1") {
       logInfo("--dev: abrindo picker");
       pickerWindow().show();
+    }
+
+    // --open-editor=YYYY-MM-DD/hhmm-hash abre o editor direto (debug/usuário)
+    const openEd = process.argv.find((a) => a.startsWith("--open-editor="));
+    if (openEd) {
+      const [dir, name] = openEd.split("=")[1]!.split("/");
+      if (dir && name) createEditor(dir, name);
+    }
+
+    // --transcribe=YYYY-MM-DD/hhmm-hash transcreve a sessão e sai (sem janela/som)
+    const tr = process.argv.find((a) => a.startsWith("--transcribe="));
+    if (tr) {
+      const [dir, name] = tr.split("=")[1]!.split("/");
+      void transcribeAndStore(dir, name).then((ok) => {
+        logInfo(`--transcribe ${dir}/${name}: ${ok ? "ok" : "falhou"}`);
+        app.exit(ok ? 0 : 1);
+      });
     }
 
     // gancho de teste determinístico: grava 8s fullscreen+mic com um marker e para

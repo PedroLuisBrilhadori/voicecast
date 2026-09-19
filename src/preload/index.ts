@@ -26,6 +26,22 @@ const bridge: VoicecastBridge = {
   addMarker: () => ipcRenderer.invoke(IPC.addMarker),
   pause: (paused: boolean) => ipcRenderer.invoke(IPC.pause, paused),
   getState: (): Promise<RecordingState> => ipcRenderer.invoke(IPC.getState),
+  listSessions: () => ipcRenderer.invoke(IPC.listSessions),
+  getSession: (dir: string, name: string) => ipcRenderer.invoke(IPC.getSession, dir, name),
+  updateSession: (dir: string, name: string, patch: { title?: string; tags?: string[] }) =>
+    ipcRenderer.invoke(IPC.updateSession, dir, name, patch),
+  deleteSession: (dir: string, name: string) => ipcRenderer.invoke(IPC.deleteSession, dir, name),
+  transcribeSession: (dir: string, name: string) => ipcRenderer.invoke(IPC.transcribeSession, dir, name),
+  createClip: (dir: string, name: string, inS: number, outS: number, label?: string) =>
+    ipcRenderer.invoke(IPC.createClip, dir, name, inS, outS, label),
+  captureFrame: (dir: string, name: string, atS: number) =>
+    ipcRenderer.invoke(IPC.captureFrame, dir, name, atS),
+  buildContext: (dir: string, name: string, range?: { inS: number; outS: number } | null) =>
+    ipcRenderer.invoke(IPC.buildContext, dir, name, range),
+  copyText: (text: string) => ipcRenderer.invoke(IPC.copyText, text),
+  openPath: (winPath: string) => ipcRenderer.invoke(IPC.openPath, winPath),
+  openEditor: (dir: string, name: string) => ipcRenderer.invoke(IPC.openEditor, dir, name),
+  asrStatus: () => ipcRenderer.invoke(IPC.asrStatus),
   onEvent: (cb: (e: CaptureEvent) => void) => {
     const h = (_e: unknown, ev: CaptureEvent) => cb(ev);
     ipcRenderer.on(IPC.event, h);

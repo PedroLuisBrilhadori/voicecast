@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Bootstrap, RecordingState, SourceInfo, StartRecordingRequest } from "../shared/ipc";
+import type { Bootstrap, RecordingState, SessionSummary, SourceInfo, StartRecordingRequest } from "../shared/ipc";
 
 declare global {
   interface Window {
@@ -20,6 +20,20 @@ export function App() {
   const [withMic, setWithMic] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [sessionSearch, setSessionSearch] = useState("");
+
+  const refreshSessions = useCallback(() => {
+    window.voicecast.listSessions().then(setSessions).catch(console.error);
+  }, []);
+
+  useEffect(() => {
+    refreshSessions();
+    const off = window.voicecast.onEvent((e) => {
+      if (e.type === "session-done" || e.type === "session-error") refreshSessions();
+    });
+    return off;
+  }, [refreshSessions]);
 
   useEffect(() => {
     window.voicecast.getBootstrap().then(setBoot).catch(console.error);
@@ -206,6 +220,53 @@ export function App() {
           </p>
         )}
       </footer>
+
+      <section className="library">
+        <h2>
+          Sessões <span className="muted">({sessions.length})</span>
+        </h2>
+        <input
+          className="search"
+          placeholder="Buscar na biblioteca…"
+          value={sessionSearch}
+          onChange={(e) => setSessionSearch(e.target.value)}
+        />
+        <div className="grid sessions">
+          {sessions
+            .filter((s) =>
+              ((s.title ?? "") + s.name + (s.sourceLabel ?? "") + s.mode)
+                .toLowerCase()
+                .includes(sessionSearch.toLowerCase()),
+            )
+            .slice(0, 12)
+            .map((s) => (
+              <button
+                key={`${s.dir}/${s.name}`}
+                className="card session"
+                title={`${s.dir} ${s.name} · ${s.status}`}
+                onClick={async () => {
+                  await window.voicecast.openEditor(s.dir, s.name);
+                }}
+              >
+                {s.thumb ? (
+                  <img src={`file:///${s.thumb.replace(/\\/g, "/")}`} alt="" />
+                ) : (
+                  <div className="nothumb" />
+                )}
+                <span className="sess-title">{s.title || `${s.name.slice(0, 4)} · ${s.mode ?? "?"}`}</span>
+                <span className="sess-meta">
+                  {Math.round((s.durationS ?? 0) / 60)}min ·{" "}
+                  {s.transcriptStatus === "done"
+                    ? "transcrito"
+                    : s.transcriptStatus === "pending"
+                      ? "transcrevendo…"
+                      : s.status}
+                </span>
+              </button>
+            ))}
+          {!sessions.length && <p className="muted">Nenhuma sessão gravada ainda.</p>}
+        </div>
+      </section>
     </div>
   );
 }

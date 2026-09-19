@@ -186,3 +186,41 @@ footer {
 
 /* ── M1: barra ──────────────────────────────────────────── */
 body.bar-body { background: transparent; overflow: hidden; }
+
+/* ── M2: biblioteca ─────────────────────────────────────── */
+.library { margin-top: 26px; }
+.library h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
+.sessions { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.card.session { padding: 8px; gap: 5px; }
+.card.session img, .nothumb { width: 100%; aspect-ratio: 16/9; border-radius: 6px; background: #000; object-fit: cover; }
+.sess-title { font-size: 12.5px; color: var(--text); }
+.sess-meta { font-size: 11px; color: var(--muted); }
+
+/* ── M2: editor ─────────────────────────────────────────── */
+.app.editor { display: flex; flex-direction: column; height: 100vh; }
+.ed-head { display: flex; gap: 10px; align-items: center; }
+.title-input {
+  flex: 1; padding: 7px 12px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; color: var(--text); font: inherit;
+}
+.ed-main { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-top: 14px; flex: 1; min-height: 0; }
+.ed-player { display: flex; flex-direction: column; gap: 10px; }
+.ed-player video { width: 100%; border-radius: 12px; background: #000; max-height: 56vh; }
+.ed-controls { display: flex; gap: 10px; align-items: center; }
+.mono { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; }
+.ed-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ed-transcript { overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.ed-transcript-head { display: flex; gap: 10px; align-items: baseline; }
+.ed-transcript-head h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.words { line-height: 1.9; font-size: 14.5px; cursor: default; }
+.words .w { border-radius: 4px; padding: 1px 2px; }
+.words .w:hover { background: var(--accent-soft); }
+.words .w.on { background: var(--accent); color: #fff; }
+.words .w.low { text-decoration: underline dotted var(--err); }
+.markers { display: flex; gap: 6px; flex-wrap: wrap; }
+.ed-foot { margin-top: 14px; }
+.status-bar {
+  position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+  background: var(--accent); color: #fff; padding: 8px 18px; border-radius: 999px;
+  font-size: 13.5px; box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+}

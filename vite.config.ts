@@ -17,6 +17,7 @@ export default defineConfig({
         overlay: path.resolve(__dirname, "src/renderer/overlay.html"),
         bar: path.resolve(__dirname, "src/renderer/bar.html"),
         recorder: path.resolve(__dirname, "src/renderer/recorder.html"),
+        editor: path.resolve(__dirname, "src/renderer/editor.html"),
       },
     },
   },

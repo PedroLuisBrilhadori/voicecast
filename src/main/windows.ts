@@ -115,6 +115,23 @@ export function createBar(modeLabel: string): BrowserWindow {
   return w;
 }
 
+/** Editor de sessão (M2): player + transcrição + clipes + contexto. */
+export function createEditor(dir: string, name: string): BrowserWindow {
+  const w = new BrowserWindow({
+    width: 1180,
+    height: 760,
+    show: false,
+    autoHideMenuBar: true,
+    title: `voicecast · ${name}`,
+    backgroundColor: "#101014",
+    webPreferences: webPrefs,
+  });
+  void w.loadFile(dist("editor.html"), { query: { dir, name } });
+  wireLogging(w, "editor");
+  w.show();
+  return w;
+}
+
 /** Renderer oculto que roda o getUserMedia(desktop)+MediaRecorder. */
 export function createRecorder(blobChannel: string): BrowserWindow {
   const w = new BrowserWindow({
