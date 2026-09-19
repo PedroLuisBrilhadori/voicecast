@@ -137,8 +137,6 @@ window.vcStop = async (): Promise<void> => {
   console.info(`[recorder] stop: chunks=${chunks.length} mime=${mime}`);
   const blob = new Blob(chunks, { type: mime });
   const b64 = await blobToB64(blob);
-  const first = await hex(blob);
-  console.info(`[recorder] blob total=${blob.size} head=${first}`);
   window.vcInternal.sendBlob(BLOB_CH, { b64, ext: mime.includes("mp4") ? "mp4" : "webm" });
 };
 
