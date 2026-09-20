@@ -190,11 +190,19 @@ body.bar-body { background: transparent; overflow: hidden; }
 /* ── M2: biblioteca ─────────────────────────────────────── */
 .library { margin-top: 26px; }
 .library h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
+.tabs.small { margin-top: 0; margin-bottom: 10px; }
+.tabs.small .tab { padding: 3px 12px; font-size: 12.5px; }
 .sessions { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
 .card.session { padding: 8px; gap: 5px; }
 .card.session img, .nothumb { width: 100%; aspect-ratio: 16/9; border-radius: 6px; background: #000; object-fit: cover; }
+.nothumb.ditado { display: flex; align-items: center; justify-content: center; font-size: 26px; background: linear-gradient(135deg, #1d1430, #0c0c10); }
 .sess-title { font-size: 12.5px; color: var(--text); }
-.sess-meta { font-size: 11px; color: var(--muted); }
+.sess-preview {
+  font-size: 11px; color: var(--muted);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  min-height: 2.4em;
+}
+.sess-meta { font-size: 11px; color: var(--muted); opacity: 0.8; }
 
 /* ── M2: editor ─────────────────────────────────────────── */
 .app.editor { display: flex; flex-direction: column; height: 100vh; }

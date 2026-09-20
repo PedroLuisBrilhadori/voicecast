@@ -28,7 +28,7 @@ import {
 import { createPicker, createEditor } from "./windows";
 import { ensureLayout } from "./storage";
 import { initLogging, logError, logInfo } from "./logging";
-import { registerDitadoHotkey, claimHotkey } from "./ditado";
+import { registerDitadoHotkey, claimHotkey, toggleDitado } from "./ditado";
 import {
   asrHealth,
 } from "./asr";
@@ -41,6 +41,7 @@ import {
   getSessionDetail,
   listSessions,
   openInFolder,
+  searchSessions,
   transcribeAndStore,
   updateSessionMeta,
 } from "./library";
@@ -110,16 +111,18 @@ function registerIpc(): void {
   });
   ipcMain.handle(IPC.getState, () => getState());
   ipcMain.handle(IPC.asrStatus, () => asrHealth());
-  ipcMain.handle(IPC.listSessions, () => listSessions());
+  ipcMain.handle(IPC.listSessions, (_e, query?: string) => searchSessions(query ?? ""));
   ipcMain.handle(IPC.getSession, (_e, dir: string, name: string) => {
     const d = getSessionDetail(dir, name);
     if (!d) return null;
+    const mediaFile = d.mp4 || d.audio;
     return {
       dir,
       name,
       meta: d.meta,
       transcript: d.transcript,
-      videoUrl: "file:///" + d.mp4.replace(/\\/g, "/"),
+      mediaUrl: mediaFile ? "file:///" + mediaFile.replace(/\\/g, "/") : null,
+      mediaKind: d.mp4 ? "video" : d.audio ? "audio" : null,
     };
   });
   ipcMain.handle(IPC.updateSession, (_e, dir: string, name: string, patch: { title?: string; tags?: string[] }) => {
@@ -158,6 +161,7 @@ function registerIpc(): void {
     createEditor(dir, name);
     return { ok: true } as const;
   });
+  ipcMain.handle(IPC.ditadoToggle, () => toggleDitado());
 
   ipcMain.on(IPC.micLevel, (_e, level: number) => {
     broadcast({ type: "mic-level", level });

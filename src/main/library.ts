@@ -9,7 +9,7 @@ import { asrHealth, transcribeSession, type Transcript } from "./asr";
 import { resolveFfmpeg, runFfmpeg } from "./ffmpeg";
 import { logError, logInfo } from "./logging";
 import { sessionDirs, sessionsRoot } from "./storage";
-import { wslPathQuoted, winPathToWsl } from "../shared/paths";
+import { sessionDirName, wslPathQuoted } from "../shared/paths";
 
 // ── tipos de biblioteca ────────────────────────────────────────
 
@@ -29,6 +29,8 @@ export interface SessionSummary {
   transcriptStatus: string | null;
   thumb: string | null; // caminho Windows do thumb (ou null)
   markers: number[];
+  /** Primeiras palavras da transcrição (subtítulo do card). */
+  preview: string | null;
 }
 
 interface Meta {
@@ -42,6 +44,8 @@ interface Meta {
   sizeBytes?: number;
   markers?: number[];
   transcriptStatus?: string;
+  /** Ditado: primeira frase da transcrição (título automático). */
+  textPreview?: string;
 }
 
 // ── biblioteca ─────────────────────────────────────────────────
@@ -59,6 +63,14 @@ export function listSessions(): SessionSummary[] {
       try {
         const m = JSON.parse(fs.readFileSync(metaPath, "utf8")) as Meta;
         const dirs = sessionDirs(day, name);
+        const transcriptPath = dirs.transcript;
+        const hasTranscript = fs.existsSync(transcriptPath);
+        const preview = hasTranscript
+          ? (JSON.parse(fs.readFileSync(transcriptPath, "utf8")) as Transcript).text
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 120)
+          : null;
         out.push({
           dir: day,
           name,
@@ -71,12 +83,13 @@ export function listSessions(): SessionSummary[] {
           tags: m.tags ?? [],
           sizeBytes: m.sizeBytes ?? null,
           hasMp4: fs.existsSync(dirs.mp4),
-          hasTranscript: fs.existsSync(dirs.transcript),
+          hasTranscript,
           transcriptStatus: m.transcriptStatus ?? null,
           thumb: fs.existsSync(path.join(dirs.thumbs, "session.png"))
             ? path.join(dirs.thumbs, "session.png")
             : null,
           markers: m.markers ?? [],
+          preview,
         });
       } catch {}
     }
@@ -85,17 +98,67 @@ export function listSessions(): SessionSummary[] {
   return out;
 }
 
+/** Busca full-text simples: título + texto da transcrição + tags. */
+export function searchSessions(query: string): SessionSummary[] {
+  const q = query.trim().toLowerCase();
+  const all = listSessions();
+  if (!q) return all;
+  return all.filter(
+    (s) =>
+      `${s.title ?? ""} ${s.name} ${s.mode ?? ""} ${(s.tags ?? []).join(" ")} ${s.preview ?? ""}`
+        .toLowerCase()
+        .includes(q),
+  );
+}
+
 export function getSessionDetail(
   dir: string,
   name: string,
-): { meta: Meta; transcript: Transcript | null; mp4: string } | null {
+): { meta: Meta; transcript: Transcript | null; mp4: string; audio: string | null } | null {
   const dirs = sessionDirs(dir, name);
   if (!fs.existsSync(dirs.meta)) return null;
   const meta = JSON.parse(fs.readFileSync(dirs.meta, "utf8")) as Meta;
   const transcript = fs.existsSync(dirs.transcript)
     ? (JSON.parse(fs.readFileSync(dirs.transcript, "utf8")) as Transcript)
     : null;
-  return { meta, transcript, mp4: dirs.mp4 };
+  const audioFile = fs.existsSync(dirs.audio) ? dirs.audio : null;
+  const videoFile = fs.existsSync(dirs.mp4) ? dirs.mp4 : null;
+  if (!videoFile && !audioFile) return null;
+  return { meta, transcript, mp4: videoFile ?? "", audio: audioFile };
+}
+
+/** Persiste um ditado como sessão de áudio na biblioteca (mesmo layout). */
+export function saveDictationSession(
+  startedAt: number,
+  ext: string,
+  audioB64: string,
+  transcript: Transcript,
+): { dir: string; name: string } {
+  const now = new Date(startedAt);
+  const dayDir = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate(),
+  ).padStart(2, "0")}`;
+  const name = sessionDirName(now, `${startedAt}:ditado:${Math.random()}`);
+  const dirs = sessionDirs(dayDir, name);
+  fs.mkdirSync(dirs.root, { recursive: true });
+
+  fs.writeFileSync(dirs.audio, Buffer.from(audioB64, "base64"));
+  fs.writeFileSync(dirs.transcript, JSON.stringify(transcript, null, 2));
+  const preview = transcript.text.replace(/\s+/g, " ").trim().slice(0, 60);
+  writeMeta(dirs.meta, {
+    status: "finalizada",
+    startedAt: new Date(startedAt).toISOString(),
+    endedAt: new Date().toISOString(),
+    durationS: +((Date.now() - startedAt) / 1000).toFixed(1),
+    mode: "ditado",
+    sourceLabel: "mic",
+    title: preview || "Ditado vazio",
+    textPreview: preview,
+    transcriptStatus: "done",
+    sizeBytes: fs.statSync(dirs.audio).size,
+  });
+  logInfo(`ditado salvo na biblioteca: ${dayDir}/${name} "${preview}"`);
+  return { dir: dayDir, name };
 }
 
 const safeNamePart = (s: string) => s.replace(/[^\w.-]+/g, "-").slice(0, 60);
@@ -207,10 +270,16 @@ export async function buildContext(
   const dur = meta.durationS ? `${fmtTs(meta.durationS)}` : "?";
 
   const lines: string[] = [];
-  lines.push(`### voicecast ${input.dir} ${input.name.slice(0, 4)} (${dur}) — ${title}`);
+  lines.push(
+    `### voicecast ${input.dir} ${input.name.slice(0, 4)} (${dur}) — ${title}${meta.mode === "ditado" ? " · ditado" : ""}`,
+  );
 
-  // vídeo principal
-  lines.push(`Vídeo: ${wslPathQuoted(dirs.mp4)}`);
+  // mídia principal
+  if (fs.existsSync(dirs.mp4)) {
+    lines.push(`Vídeo: ${wslPathQuoted(dirs.mp4)}`);
+  } else if (fs.existsSync(dirs.audio)) {
+    lines.push(`Áudio: ${wslPathQuoted(dirs.audio)}`);
+  }
 
   // trecho transcrito
   if (transcript) {

@@ -13,9 +13,12 @@ function fmt(s: number): string {
 }
 
 /** Barra compacta frameless: REC + timer + waveform + markers + controles.
- *  Arrastável pela área esquerda (-webkit-app-region: drag). */
+ *  Arrastável pela área esquerda (-webkit-app-region: drag).
+ *  Modo ditado (query ditado=1): sem foco, só timer + waveform + parar. */
 export function BarApp() {
-  const mode = new URLSearchParams(location.search).get("mode") ?? "Gravação";
+  const qs = new URLSearchParams(location.search);
+  const mode = qs.get("mode") ?? "Gravação";
+  const isDitado = qs.get("ditado") === "1";
   const [elapsed, setElapsed] = useState(0);
   const [markers, setMarkers] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -39,8 +42,13 @@ export function BarApp() {
     };
   }, []);
 
-  // timer por polling do estado (sobrevive a reinício do main)
+  // timer por polling do estado (ditado não expõe startedAt via getState: usa relógio local)
   useEffect(() => {
+    if (isDitado) {
+      const t0 = Date.now();
+      const iv = window.setInterval(() => setElapsed((Date.now() - t0) / 1000), 500);
+      return () => clearInterval(iv);
+    }
     let alive = true;
     const tick = () =>
       window.voicecast.getState().then((s) => {
@@ -55,7 +63,7 @@ export function BarApp() {
       alive = false;
       clearInterval(iv);
     };
-  }, []);
+  }, [isDitado]);
 
   return (
     <div
@@ -104,35 +112,46 @@ export function BarApp() {
         {levels.current.length === 0 && <span style={{ color: "#55555f", fontSize: 10 }}>mic…</span>}
       </div>
 
-      <button
-        title="Marcar momento (Ctrl+M)"
-        onClick={() => void window.voicecast.addMarker()}
-        style={{ padding: "4px 10px" }}
-      >
-        ◆ {markers}
-      </button>
-      <button
-        onClick={() => {
-          setPaused(!paused);
-          void window.voicecast.pause(!paused);
-        }}
-        style={{ padding: "4px 10px" }}
-      >
-        {paused ? "▶" : "❚❚"}
-      </button>
-      <button
-        onClick={() => void window.voicecast.stopRecording()}
-        style={{ background: "#2d1b3d", borderColor: "#7c4dff", padding: "4px 14px", fontWeight: 700 }}
-      >
-        ■ Parar
-      </button>
-      <button
-        title="Cancelar (não salva)"
-        onClick={() => void window.voicecast.cancelRecording()}
-        style={{ padding: "4px 10px", color: "#ff8a8a" }}
-      >
-        ✕
-      </button>
+      {isDitado ? (
+        <button
+          onClick={() => void window.voicecast.ditadoToggle()}
+          style={{ background: "#2d1b3d", borderColor: "#7c4dff", padding: "4px 14px", fontWeight: 700 }}
+        >
+          ■ Parar
+        </button>
+      ) : (
+        <>
+          <button
+            title="Marcar momento (Ctrl+M)"
+            onClick={() => void window.voicecast.addMarker()}
+            style={{ padding: "4px 10px" }}
+          >
+            ◆ {markers}
+          </button>
+          <button
+            onClick={() => {
+              setPaused(!paused);
+              void window.voicecast.pause(!paused);
+            }}
+            style={{ padding: "4px 10px" }}
+          >
+            {paused ? "▶" : "❚❚"}
+          </button>
+          <button
+            onClick={() => void window.voicecast.stopRecording()}
+            style={{ background: "#2d1b3d", borderColor: "#7c4dff", padding: "4px 14px", fontWeight: 700 }}
+          >
+            ■ Parar
+          </button>
+          <button
+            title="Cancelar (não salva)"
+            onClick={() => void window.voicecast.cancelRecording()}
+            style={{ padding: "4px 10px", color: "#ff8a8a" }}
+          >
+            ✕
+          </button>
+        </>
+      )}
     </div>
   );
 }

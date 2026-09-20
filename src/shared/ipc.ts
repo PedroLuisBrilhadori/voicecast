@@ -48,6 +48,7 @@ export const IPC = {
   copyText: "library:copy",
   openPath: "library:open-path",
   openEditor: "library:open-editor",
+  ditadoToggle: "ditado:toggle",
   asrStatus: "library:asr-status",
 } as const;
 
@@ -138,7 +139,7 @@ export interface VoicecastBridge {
   onEvent(cb: (e: CaptureEvent) => void): () => void;
 
   // M2 — biblioteca e pós-produção
-  listSessions(): Promise<SessionSummary[]>;
+  listSessions(query?: string): Promise<SessionSummary[]>;
   getSession(dir: string, name: string): Promise<SessionDetail | null>;
   updateSession(dir: string, name: string, patch: { title?: string; tags?: string[] }): Promise<OpResult>;
   deleteSession(dir: string, name: string): Promise<OpResult>;
@@ -150,6 +151,8 @@ export interface VoicecastBridge {
   openPath(winPath: string): Promise<OpResult>;
   /** Abre o editor da sessão numa janela própria. */
   openEditor(dir: string, name: string): Promise<OpResult>;
+  /** Liga/desliga o ditado (usado pela barra do ditado). */
+  ditadoToggle(): Promise<{ ok: boolean; error?: string }>;
   asrStatus(): Promise<{ ok: boolean; source?: string }>;
 }
 
@@ -172,6 +175,8 @@ export interface SessionSummary {
   /** dataURL do thumbnail (carregado pelo main). */
   thumb?: string | null;
   markers: number[];
+  /** Primeiras palavras da transcrição (subtítulo do card). */
+  preview?: string | null;
 }
 
 export interface TranscriptInfo {
@@ -197,8 +202,9 @@ export interface SessionDetail {
     sizeBytes?: number;
   };
   transcript: TranscriptInfo | null;
-  /** file:// URL do mp4 para o <video> do editor. */
-  videoUrl: string;
+  /** file:// URL da mídia para o player do editor. */
+  mediaUrl: string | null;
+  mediaKind: "video" | "audio" | null;
 }
 
 export type OpResult = { ok: true } | { ok: false; error: string };

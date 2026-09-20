@@ -19,6 +19,7 @@ export interface SessionDirs {
   root: string;
   video: string; // original.fmp4 (bruto do MediaRecorder)
   mp4: string; // session.mp4 (remux faststart)
+  audio: string; // audio.webm (ditado — sem vídeo)
   meta: string; // meta.json
   transcript: string; // transcript.json
   clips: string;
@@ -32,6 +33,7 @@ export function sessionDirs(dayDir: string, name: string): SessionDirs {
     root,
     video: path.join(root, "original.fmp4"),
     mp4: path.join(root, "session.mp4"),
+    audio: path.join(root, "audio.webm"),
     meta: path.join(root, "meta.json"),
     transcript: path.join(root, "transcript.json"),
     clips: path.join(root, "clips"),

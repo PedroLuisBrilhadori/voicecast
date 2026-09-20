@@ -30,7 +30,13 @@ export function initLogging(): void {
 
   const write = (level: string, args: unknown[]) => {
     const line = `[${new Date().toISOString()}] [${level}] ${args
-      .map((a) => (typeof a === "string" ? a : JSON.stringify(a)))
+      .map((a) =>
+        a instanceof Error
+          ? (a.stack ?? String(a))
+          : typeof a === "string"
+            ? a
+            : JSON.stringify(a),
+      )
       .join(" ")}\n`;
     try {
       stream?.write(line);

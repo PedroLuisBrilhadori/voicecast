@@ -22,10 +22,11 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionSearch, setSessionSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "ditado" | "screen" | "window" | "region">("all");
 
   const refreshSessions = useCallback(() => {
-    window.voicecast.listSessions().then(setSessions).catch(console.error);
-  }, []);
+    window.voicecast.listSessions(sessionSearch).then(setSessions).catch(console.error);
+  }, [sessionSearch]);
 
   useEffect(() => {
     refreshSessions();
@@ -34,6 +35,12 @@ export function App() {
     });
     return off;
   }, [refreshSessions]);
+
+  // debounce da busca full-text
+  useEffect(() => {
+    const t = setTimeout(refreshSessions, 250);
+    return () => clearTimeout(t);
+  }, [sessionSearch, refreshSessions]);
 
   useEffect(() => {
     window.voicecast.getBootstrap().then(setBoot).catch(console.error);
@@ -223,48 +230,93 @@ export function App() {
 
       <section className="library">
         <h2>
-          Sessões <span className="muted">({sessions.length})</span>
+          Sessões{" "}
+          <span className="muted">
+            (
+            {
+              sessions.filter((s) =>
+                typeFilter === "all"
+                  ? true
+                  : typeFilter === "ditado"
+                    ? s.mode === "ditado"
+                    : s.mode === typeFilter,
+              ).length
+            }
+            )
+          </span>
         </h2>
+        <div className="tabs small">
+          {(
+            [
+              ["all", "Todos"],
+              ["ditado", "🎙 Ditados"],
+              ["region", "▭ Regiões"],
+              ["window", "🪟 Janelas"],
+              ["screen", "🖥 Telas"],
+            ] as const
+          ).map(([id, label]) => (
+            <button key={id} className={`tab ${typeFilter === id ? "on" : ""}`} onClick={() => setTypeFilter(id)}>
+              {label}
+            </button>
+          ))}
+        </div>
         <input
           className="search"
-          placeholder="Buscar na biblioteca…"
+          placeholder="Buscar na fala das transcrições… (full-text)"
           value={sessionSearch}
           onChange={(e) => setSessionSearch(e.target.value)}
         />
         <div className="grid sessions">
           {sessions
             .filter((s) =>
-              ((s.title ?? "") + s.name + (s.sourceLabel ?? "") + s.mode)
-                .toLowerCase()
-                .includes(sessionSearch.toLowerCase()),
+              typeFilter === "all"
+                ? true
+                : typeFilter === "ditado"
+                  ? s.mode === "ditado"
+                  : s.mode === typeFilter,
             )
             .slice(0, 12)
-            .map((s) => (
-              <button
-                key={`${s.dir}/${s.name}`}
-                className="card session"
-                title={`${s.dir} ${s.name} · ${s.status}`}
-                onClick={async () => {
-                  await window.voicecast.openEditor(s.dir, s.name);
-                }}
-              >
-                {s.thumb ? (
-                  <img src={`file:///${s.thumb.replace(/\\/g, "/")}`} alt="" />
-                ) : (
-                  <div className="nothumb" />
-                )}
-                <span className="sess-title">{s.title || `${s.name.slice(0, 4)} · ${s.mode ?? "?"}`}</span>
-                <span className="sess-meta">
-                  {Math.round((s.durationS ?? 0) / 60)}min ·{" "}
-                  {s.transcriptStatus === "done"
-                    ? "transcrito"
-                    : s.transcriptStatus === "pending"
-                      ? "transcrevendo…"
-                      : s.status}
-                </span>
-              </button>
-            ))}
-          {!sessions.length && <p className="muted">Nenhuma sessão gravada ainda.</p>}
+            .map((s) => {
+              const d = s.startedAt ? new Date(s.startedAt) : null;
+              const quando = d
+                ? d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) +
+                  " " +
+                  d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+                : s.name;
+              return (
+                <button
+                  key={`${s.dir}/${s.name}`}
+                  className="card session"
+                  title={`${s.dir} ${s.name} · ${s.status}${s.preview ? ` — ${s.preview}` : ""}`}
+                  onClick={async () => {
+                    await window.voicecast.openEditor(s.dir, s.name);
+                  }}
+                >
+                  {s.thumb ? (
+                    <img src={`file:///${s.thumb.replace(/\\/g, "/")}`} alt="" />
+                  ) : s.mode === "ditado" ? (
+                    <div className="nothumb ditado">🎙</div>
+                  ) : (
+                    <div className="nothumb" />
+                  )}
+                  <span className="sess-title">{s.title || `${s.name.slice(0, 4)} · ${s.mode ?? "?"}`}</span>
+                  {s.preview && <span className="sess-preview">{s.preview}</span>}
+                  <span className="sess-meta">
+                    {quando} · {s.mode === "ditado" ? "ditado" : s.mode ?? "?"} ·{" "}
+                    {s.transcriptStatus === "done"
+                      ? "transcrito"
+                      : s.transcriptStatus === "pending"
+                        ? "transcrevendo…"
+                        : s.status}
+                  </span>
+                </button>
+              );
+            })}
+          {!sessions.length && (
+            <p className="muted">
+              {sessionSearch ? "Nada encontrado nessa busca." : "Nenhuma sessão gravada ainda."}
+            </p>
+          )}
         </div>
       </section>
     </div>

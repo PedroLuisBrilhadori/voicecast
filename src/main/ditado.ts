@@ -7,15 +7,19 @@
  * :8700 (v2 transição); sem daemon, funciona igual (nada para suspender).
  */
 import { clipboard, globalShortcut, ipcMain } from "electron";
-import { transcribeSession } from "./asr";
+import { transcribeAudioFile } from "./asr";
 import { logError, logInfo } from "./logging";
-import { createDitado } from "./windows";
+import { createDitado, createBar } from "./windows";
+import { saveDictationSession } from "./library";
+import { Buffer } from "node:buffer";
 
 type DictationState = "idle" | "recording" | "transcribing";
 
 let state: DictationState = "idle";
 let recorderWin: Electron.BrowserWindow | null = null;
+let barWin: Electron.BrowserWindow | null = null;
 let blobPromise: Promise<{ b64: string; ext: string }> | null = null;
+let ditadoStartedAt = 0;
 let hotkeyRegistered = false;
 
 export function ditadoState(): DictationState {
@@ -93,6 +97,22 @@ export async function claimHotkey(claim: boolean): Promise<boolean> {
   }
 }
 
+// ── barra de feedback (sem roubar foco) ────────────────────────
+
+function startDitadoBar(): void {
+  const { screen } = require("electron") as typeof import("electron");
+  const d = screen.getPrimaryDisplay();
+  barWin = createBar("Ditado", { ditado: true });
+  const b = barWin.getBounds();
+  barWin.setPosition(d.workArea.x + d.workArea.width - b.width - 18, d.workArea.y + d.workArea.height - b.height - 18);
+  barWin.showInactive(); // aparece SEM tomar foco — o Ctrl+V cola onde você estava
+}
+
+function closeDitadoBar(): void {
+  if (barWin && !barWin.isDestroyed()) barWin.close();
+  barWin = null;
+}
+
 // ── captura mic-only (renderer oculto, sem foco) ───────────────
 
 async function startCapture(): Promise<{ ok: boolean; error?: string }> {
@@ -154,9 +174,12 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
     const held = await daemonHold(true);
     logInfo(`ditado: início (daemon hold ${held ? "aplicado" : "ausente"})`);
     state = "recording";
+    ditadoStartedAt = Date.now();
+    startDitadoBar();
     const cap = await startCapture();
     if (!cap.ok) {
       state = "idle";
+      closeDitadoBar();
       await daemonHold(false);
       logError("ditado: captura falhou:", cap.error ?? "?");
       return cap;
@@ -166,21 +189,34 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
 
   if (state === "recording") {
     state = "transcribing";
+    const startedAt = ditadoStartedAt;
     try {
       recorderWin?.webContents.executeJavaScript("window.vcStopDictation()", true).catch(() => {});
-      const payload = await (blobPromise ?? Promise.resolve({ b64: "", ext: "wav" }));
+      const payload = await (blobPromise ?? Promise.resolve({ b64: "", ext: "webm" }));
       await stopCaptureWindow();
 
-      const wav = Buffer.from(payload.b64, "base64");
+      // o ASR só engole wav/pcm estáveis → extrai wav do webm via ffmpeg
       const { writeFileSync, mkdtempSync, rmSync } = await import("node:fs");
       const { tmpdir } = await import("node:os");
       const { join } = await import("node:path");
-      const tmp = join(mkdtempSync(join(tmpdir(), "vc-ditado-")), "ditado.wav");
-      writeFileSync(tmp, wav);
-
-      const t = await transcribeSession(tmp);
-      rmSync(tmp, { force: true });
+      const tmpDir = mkdtempSync(join(tmpdir(), "vc-ditado-"));
+      const src = join(tmpDir, `ditado.${payload.ext}`);
+      writeFileSync(src, Buffer.from(payload.b64, "base64"));
+      const t = await transcribeAudioFile(src);
+      rmSync(tmpDir, { recursive: true, force: true });
       const text = t.text.trim();
+
+      // v2: ditado com fala vira sessão de áudio na biblioteca; silêncio descarta
+      if (text) {
+        try {
+          saveDictationSession(startedAt, payload.ext, payload.b64, t);
+        } catch (e) {
+          logError("ditado: falhou ao salvar histórico:", e);
+        }
+      } else {
+        logInfo("ditado: nada reconhecido — não salva histórico");
+      }
+
       if (text) await pasteToFocused(text);
       else logInfo("ditado: nada reconhecido");
       return { ok: true };
@@ -189,6 +225,7 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
       return { ok: false, error: String(e) };
     } finally {
       await daemonHold(false);
+      closeDitadoBar();
       state = "idle";
     }
   }

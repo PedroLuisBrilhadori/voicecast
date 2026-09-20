@@ -94,22 +94,29 @@ export function selectRegionOnDisplay(displayIndex = 0): Promise<Rect | null> {
   });
 }
 
-/** Barra compacta frameless sempre-no-topo durante a gravação. */
-export function createBar(modeLabel: string): BrowserWindow {
+/** Barra compacta frameless sempre-no-topo durante a gravação.
+ *  opts.ditado: botões viram toggle do ditado; caller decide show() vs showInactive(). */
+export function createBar(
+  modeLabel: string,
+  opts: { ditado?: boolean } = {},
+): BrowserWindow {
   const w = new BrowserWindow({
-    width: 460,
+    width: opts.ditado ? 300 : 460,
     height: 56,
     show: false,
     frame: false,
     resizable: false,
     skipTaskbar: true,
     alwaysOnTop: true,
+    focusable: !opts.ditado, // ditado: janela NÃO focável (não rouba nem mantém foco)
     hasShadow: true,
     backgroundColor: "#0c0c10",
     webPreferences: webPrefs,
   });
   w.setAlwaysOnTop(true, "screen-saver");
-  void w.loadFile(dist("bar.html"), { query: { mode: modeLabel } });
+  void w.loadFile(dist("bar.html"), {
+    query: { mode: modeLabel, ...(opts.ditado ? { ditado: "1" } : {}) },
+  });
   wireLogging(w, "bar");
   w.show();
   return w;

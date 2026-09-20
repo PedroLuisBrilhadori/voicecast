@@ -105,6 +105,7 @@ export function EditorApp() {
   if (!detail) return <div className="app muted">carregando sessão…</div>;
 
   const t = detail.transcript;
+  const isAudio = detail.mediaKind === "audio";
 
   return (
     <div className="app editor">
@@ -118,8 +119,8 @@ export function EditorApp() {
           onBlur={saveTitle}
         />
         <span className="tag">
-          {detail.meta.mode ?? "?"} · {fmt(detail.meta.durationS ?? 0)} ·{" "}
-          {detail.meta.markers?.length ?? 0} markers
+          {detail.meta.mode === "ditado" ? "🎙 ditado" : detail.meta.mode ?? "?"} ·{" "}
+          {fmt(detail.meta.durationS ?? 0)} · {detail.meta.markers?.length ?? 0} markers
         </span>
         <button className="go big" onClick={doContext} title="Gera markdown com paths WSL e copia">
           ⧉ Copiar contexto p/ ZCode
@@ -128,16 +129,19 @@ export function EditorApp() {
 
       <main className="ed-main">
         <div className="ed-player">
-          <video
-            ref={videoRef}
-            src={detail.videoUrl}
-            onTimeUpdate={(e) => setTime((e.target as HTMLVideoElement).currentTime)}
-            onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
-            onClick={togglePlay}
-          />
+          {detail.mediaUrl && isAudio && <audio ref={videoRef as never} src={detail.mediaUrl} controls style={{ width: "100%" }} />}
+          {detail.mediaUrl && !isAudio && (
+            <video
+              ref={videoRef}
+              src={detail.mediaUrl}
+              onTimeUpdate={(e) => setTime((e.target as HTMLVideoElement).currentTime)}
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
+              onClick={togglePlay}
+            />
+          )}
           <div className="ed-controls">
-            <button onClick={togglePlay}>{playing ? "❚❚" : "▶"}</button>
+            {!isAudio && <button onClick={togglePlay}>{playing ? "❚❚" : "▶"}</button>}
             <span className="mono">{fmt(time)}</span>
             <input
               type="range"
@@ -150,17 +154,19 @@ export function EditorApp() {
             />
             <span className="mono">{fmt(detail.meta.durationS ?? 0)}</span>
           </div>
-          <div className="ed-tools">
-            <button onClick={markIn} disabled={!sel && time <= 0}>I marcar início</button>
-            <button onClick={markOut}>O marcar fim</button>
-            {sel && (
-              <span className="tag">
-                trecho {fmt(sel.inS)}–{fmt(sel.outS)}
-              </span>
-            )}
-            <button onClick={doClip} disabled={!sel}>✂ criar clipe</button>
-            <button onClick={doFrame}>📷 print do frame</button>
-          </div>
+          {!isAudio && (
+            <div className="ed-tools">
+              <button onClick={markIn} disabled={!sel && time <= 0}>I marcar início</button>
+              <button onClick={markOut}>O marcar fim</button>
+              {sel && (
+                <span className="tag">
+                  trecho {fmt(sel.inS)}–{fmt(sel.outS)}
+                </span>
+              )}
+              <button onClick={doClip} disabled={!sel}>✂ criar clipe</button>
+              <button onClick={doFrame}>📷 print do frame</button>
+            </div>
+          )}
         </div>
 
         <div className="ed-transcript" ref={transcriptRef}>

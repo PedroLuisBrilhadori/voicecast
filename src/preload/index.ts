@@ -26,7 +26,7 @@ const bridge: VoicecastBridge = {
   addMarker: () => ipcRenderer.invoke(IPC.addMarker),
   pause: (paused: boolean) => ipcRenderer.invoke(IPC.pause, paused),
   getState: (): Promise<RecordingState> => ipcRenderer.invoke(IPC.getState),
-  listSessions: () => ipcRenderer.invoke(IPC.listSessions),
+  listSessions: (query?: string) => ipcRenderer.invoke(IPC.listSessions, query),
   getSession: (dir: string, name: string) => ipcRenderer.invoke(IPC.getSession, dir, name),
   updateSession: (dir: string, name: string, patch: { title?: string; tags?: string[] }) =>
     ipcRenderer.invoke(IPC.updateSession, dir, name, patch),
@@ -41,6 +41,7 @@ const bridge: VoicecastBridge = {
   copyText: (text: string) => ipcRenderer.invoke(IPC.copyText, text),
   openPath: (winPath: string) => ipcRenderer.invoke(IPC.openPath, winPath),
   openEditor: (dir: string, name: string) => ipcRenderer.invoke(IPC.openEditor, dir, name),
+  ditadoToggle: () => ipcRenderer.invoke(IPC.ditadoToggle),
   asrStatus: () => ipcRenderer.invoke(IPC.asrStatus),
   onEvent: (cb: (e: CaptureEvent) => void) => {
     const h = (_e: unknown, ev: CaptureEvent) => cb(ev);

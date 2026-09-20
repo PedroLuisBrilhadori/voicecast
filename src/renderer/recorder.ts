@@ -175,6 +175,7 @@ window.vcRecordDictation = async (): Promise<{ ok: boolean; error?: string }> =>
     audioOnly = { stream, rec: new MediaRecorder(stream) }; // webm/opus default — ASR decodifica
     audioOnly.rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     audioOnly.rec.start(500);
+    startMicLevel(stream); // waveform na barra do ditado
     beep(1200, 90);
     return { ok: true };
   } catch (e) {
@@ -186,6 +187,7 @@ window.vcStopDictation = async (): Promise<void> => {
   const a = audioOnly;
   if (!a) return;
   beep(700, 110);
+  if (levelTimer) clearInterval(levelTimer);
   await new Promise<void>((res) => {
     a.rec.onstop = () => res();
     try {

@@ -62,49 +62,61 @@ async function extractWav(mp4: string): Promise<string> {
   return wav;
 }
 
-/** Transcreve o mp4 da sessão via /v1/transcribe (failover de endpoints). */
-export async function transcribeSession(mp4: string): Promise<Transcript> {
-  const wav = await extractWav(mp4);
-  try {
-    const buf = fs.readFileSync(wav);
-    let lastErr = "sem endpoint";
-    for (const ep of asrUrls()) {
-      try {
-        const form = new FormData();
-        form.append("file", new Blob([new Uint8Array(buf)], { type: "audio/wav" }), path.basename(wav));
-        logInfo(`ASR: transcrevendo via ${ep.name} (${(buf.length / 1_048_576).toFixed(1)}MB wav)`);
-        const r = await fetch(`${ep.url}/v1/transcribe`, {
-          method: "POST",
-          body: form,
-          signal: AbortSignal.timeout(600_000), // sessões longas: whisper no GPU é ~realtime
-        });
-        if (!r.ok) {
-          lastErr = `HTTP ${r.status}`;
-          continue;
-        }
-        const j = (await r.json()) as {
-          text: string;
-          language?: string | null;
-          words?: AsrWord[];
-          segments?: AsrSegment[];
-          model?: string;
-        };
-        return {
-          text: j.text ?? "",
-          language: j.language ?? null,
-          words: j.words ?? [],
-          segments: j.segments ?? [],
-          model: j.model,
-          transcribedAt: new Date().toISOString(),
-        };
-      } catch (e) {
-        lastErr = String(e);
+/** Transcreve bytes de áudio (webm/opus, wav…) direto via /v1/transcribe. */
+export async function transcribeBuffer(
+  buf: Buffer,
+  filename: string,
+): Promise<Transcript> {
+  let lastErr = "sem endpoint";
+  for (const ep of asrUrls()) {
+    try {
+      const form = new FormData();
+      form.append("file", new Blob([new Uint8Array(buf)], { type: "audio/webm" }), filename);
+      logInfo(`ASR: transcrevendo via ${ep.name} (${(buf.length / 1_048_576).toFixed(2)}MB)`);
+      const r = await fetch(`${ep.url}/v1/transcribe`, {
+        method: "POST",
+        body: form,
+        signal: AbortSignal.timeout(600_000),
+      });
+      if (!r.ok) {
+        lastErr = `HTTP ${r.status}`;
+        continue;
       }
+      const j = (await r.json()) as {
+        text: string;
+        language?: string | null;
+        words?: AsrWord[];
+        segments?: AsrSegment[];
+        model?: string;
+      };
+      return {
+        text: j.text ?? "",
+        language: j.language ?? null,
+        words: j.words ?? [],
+        segments: j.segments ?? [],
+        model: j.model,
+        transcribedAt: new Date().toISOString(),
+      };
+    } catch (e) {
+      lastErr = String(e);
     }
-    throw new Error(`ASR indisponível (${lastErr})`);
+  }
+  throw new Error(`ASR indisponível (${lastErr})`);
+}
+
+/** Transcreve qualquer arquivo de áudio/vídeo: extrai wav 16k via ffmpeg e envia. */
+export async function transcribeAudioFile(file: string): Promise<Transcript> {
+  const wav = await extractWav(file);
+  try {
+    return await transcribeBuffer(fs.readFileSync(wav), path.basename(wav));
   } finally {
     fs.rmSync(wav, { force: true });
   }
+}
+
+/** Transcreve o mp4 da sessão via /v1/transcribe (failover de endpoints). */
+export async function transcribeSession(mp4: string): Promise<Transcript> {
+  return transcribeAudioFile(mp4);
 }
 
 export function logAsrError(e: unknown): void {
