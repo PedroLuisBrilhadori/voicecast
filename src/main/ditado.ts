@@ -12,6 +12,9 @@ import { logError, logInfo } from "./logging";
 import { createDitado, createBar } from "./windows";
 import { saveDictationSession } from "./library";
 import { counter, histogram, withSpan } from "./telemetry";
+import { spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
 import { Buffer } from "node:buffer";
 import { IPC, type CaptureEvent } from "../shared/ipc";
 
@@ -31,6 +34,7 @@ let recorderWin: Electron.BrowserWindow | null = null;
 let barWin: Electron.BrowserWindow | null = null;
 let blobPromise: Promise<{ b64: string; ext: string }> | null = null;
 let ditadoStartedAt = 0;
+let ditadoHwnd = 0;
 let hotkeyRegistered = false;
 
 export function ditadoState(): DictationState {
@@ -158,21 +162,88 @@ async function stopCaptureWindow(): Promise<void> {
 
 // ── colagem na janela focada (clipboard + Ctrl+V sintético) ────
 
-async function pasteToFocused(text: string): Promise<void> {
+// ── colagem na janela focada: o CÓDIGO PROVADO do daemon (v2 reusa) ──
+// paste_into_focused (win32.py): clipboard + SendInput scan codes (struct
+// INPUT cbSize 40) + refoco do HWND capturado no início do ditado + fallback
+// unicode. Mesmo comportamento do F9 antigo, literalmente o mesmo código.
+
+function voicePython(): string | null {
+  const py = path.join(
+    process.env.LOCALAPPDATA ?? "",
+    "voice-dictation",
+    ".venv",
+    "Scripts",
+    "python.exe",
+  );
+  return fs.existsSync(py) ? py : null;
+}
+
+function voiceSrc(): string {
+  return path.join(process.env.LOCALAPPDATA ?? "", "voice-dictation", "src");
+}
+
+function spawnHidden(cmd: string, args: string[]) {
+  return spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+}
+
+async function captureForegroundHwnd(): Promise<number> {
+  const py = voicePython();
+  if (!py) return 0;
+  return new Promise((res) => {
+    const script =
+      `import sys; sys.path.insert(0, r"${voiceSrc()}"); ` +
+      "from voice.platform import get_backend; print(get_backend().foreground_hwnd())";
+    const child = spawnHidden(py, ["-c", script]);
+    let out = "";
+    child.stdout?.on("data", (d: Buffer) => (out += d.toString()));
+    child.on("error", () => res(0));
+    child.on("exit", () => res(parseInt(out.trim(), 10) || 0));
+    setTimeout(() => res(0), 5000);
+  });
+}
+
+/** Cola via paste_into_focused do daemon (stdin = texto, argv1 = hwnd alvo). */
+async function pasteViaDaemonCode(text: string, hwnd: number): Promise<boolean> {
+  const py = voicePython();
+  if (!py) return false;
+  return new Promise((res) => {
+    const script =
+      `import sys; sys.path.insert(0, r"${voiceSrc()}"); ` +
+      "from voice.platform import get_backend\n" +
+      "text = sys.stdin.read()\n" +
+      `used = get_backend().paste_into_focused(text, "auto", ${hwnd})\n` +
+      'print("usado:", used, "chars:", len(text))';
+    const child = spawnHidden(py, ["-c", script]);
+    let err = "";
+    child.stdout?.on("data", (d: Buffer) => logInfo(`[paste] ${d.toString().trim()}`));
+    child.stderr?.on("data", (d: Buffer) => (err += d.toString()));
+    child.stdin?.end(text);
+    child.on("error", () => res(false));
+    child.on("exit", (code) => {
+      if (code !== 0) logError(`[paste] python saiu ${code}: ${err.slice(-300)}`);
+      res(code === 0);
+    });
+  });
+}
+
+async function pasteToFocused(text: string, hwnd: number): Promise<void> {
+  // caminho principal: código provado do daemon (refoco do HWND + SendInput)
+  if (await pasteViaDaemonCode(text, hwnd)) return;
+  // fallback: clipboard + SendKeys (sem janela de console — windowsHide)
   clipboard.writeText(text);
-  const { spawn } = require("node:child_process") as typeof import("node:child_process");
-  // SendWait entrega o Ctrl+V à janela em foco (voicecast nunca rouba o foco)
+  logInfo("ditado: paste do daemon indisponível — fallback SendKeys");
   const ps = spawn(
     "powershell.exe",
     [
       "-NoProfile",
+      "-WindowStyle", "Hidden",
       "-Command",
       "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^v')",
     ],
-    { stdio: "ignore", detached: true },
+    { stdio: "ignore", detached: true, windowsHide: true },
   );
   ps.unref();
-  logInfo(`ditado: colado ${text.length} chars via Ctrl+V sintético`);
+  logInfo(`ditado: fallback colou ${text.length} chars`);
 }
 
 // ── toggle F9 ──────────────────────────────────────────────────
@@ -186,6 +257,12 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
     logInfo(`ditado: início (daemon hold ${held ? "aplicado" : "ausente"})`);
     state = "recording";
     ditadoStartedAt = Date.now();
+    // HWND da janela em foco AGORA — a colagem refoca ela, mesmo que você
+    // mude de janela enquanto o whisper transcreve (comportamento do daemon)
+    void captureForegroundHwnd().then((h) => {
+      ditadoHwnd = h;
+      logInfo(`ditado: alvo da colagem hwnd=${h}`);
+    });
     startDitadoBar();
     broadcast({ type: "ditado-state", phase: "recording" });
     const cap = await startCapture();
@@ -216,9 +293,20 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
         const tmpDir = mkdtempSync(join(tmpdir(), "vc-ditado-"));
         const src = join(tmpDir, `ditado.${payload.ext}`);
         writeFileSync(src, Buffer.from(payload.b64, "base64"));
-        const t0 = Date.now();
-        const t = await transcribeAudioFile(src);
-        H_TRANSCRIBE?.record((Date.now() - t0) / 1000, { kind: "ditado" });
+      const t0 = Date.now();
+      // gancho de teste E2E: VOICECAST_DITADO_FAKE_TEXT pula o ASR (texto fixo)
+      const fake = process.env.VOICECAST_DITADO_FAKE_TEXT;
+      const t = fake
+        ? {
+            text: fake,
+            language: "pt",
+            words: [],
+            segments: [],
+            transcribedAt: new Date().toISOString(),
+            model: "fake",
+          }
+        : await transcribeAudioFile(src);
+      H_TRANSCRIBE?.record((Date.now() - t0) / 1000, { kind: "ditado" });
         rmSync(tmpDir, { recursive: true, force: true });
         const text = t.text.trim();
 
@@ -233,7 +321,7 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
           logInfo("ditado: nada reconhecido — não salva histórico");
         }
 
-        if (text) await pasteToFocused(text);
+        if (text) await pasteToFocused(text, ditadoHwnd);
         M_DICTATIONS?.add(1, { status: text ? "ok" : "vazio" });
       });
       return { ok: true };

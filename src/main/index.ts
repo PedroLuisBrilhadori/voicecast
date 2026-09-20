@@ -183,7 +183,9 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     logInfo("whenReady: registrando IPC/atalhos…");
-    void initTelemetry();
+    // telemetria DEPOIS do probe do daemon: o import do SDK OTel bloqueia o
+    // event loop por alguns segundos e faria o probe de 2s expirar à toa
+    setTimeout(() => void initTelemetry(), 3000);
     ensureLayout();
     applyRetention();
     registerIpc();
