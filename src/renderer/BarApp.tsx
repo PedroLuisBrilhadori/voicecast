@@ -20,6 +20,7 @@ export function BarApp() {
   const mode = qs.get("mode") ?? "Gravação";
   const isDitado = qs.get("ditado") === "1";
   const [elapsed, setElapsed] = useState(0);
+  const [transcribing, setTranscribing] = useState(false);
   const [markers, setMarkers] = useState(0);
   const [paused, setPaused] = useState(false);
   const levels = useRef<number[]>([]);
@@ -33,6 +34,8 @@ export function BarApp() {
       } else if (e.type === "state" && e.state.startedAt) {
         setMarkers(e.state.markers.length);
         setPaused(e.state.paused);
+      } else if (e.type === "ditado-state") {
+        setTranscribing(e.phase === "transcribing");
       }
     });
     const t = window.setInterval(() => forceRender((n) => n + 1), 500);
@@ -46,7 +49,9 @@ export function BarApp() {
   useEffect(() => {
     if (isDitado) {
       const t0 = Date.now();
-      const iv = window.setInterval(() => setElapsed((Date.now() - t0) / 1000), 500);
+      const iv = window.setInterval(() => {
+        if (!transcribing) setElapsed((Date.now() - t0) / 1000);
+      }, 500);
       return () => clearInterval(iv);
     }
     let alive = true;
@@ -82,17 +87,23 @@ export function BarApp() {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, WebkitAppRegion: "drag" } as React.CSSProperties}>
-        <span
-          style={{
-            width: 10,
-            height: 10,
-            borderRadius: 99,
-            background: paused ? "#f4b942" : "#ff5555",
-            boxShadow: paused ? "none" : "0 0 8px #ff5555",
-            animation: paused ? "none" : "pulse 1.2s infinite",
-          }}
-        />
-        <strong style={{ fontSize: 14, minWidth: 46 }}>{fmt(elapsed)}</strong>
+        {transcribing ? (
+          <span style={{ color: "#f4b942", fontSize: 12.5, fontWeight: 600 }}>⏳ transcrevendo…</span>
+        ) : (
+          <>
+            <span
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: 99,
+                background: paused ? "#f4b942" : "#ff5555",
+                boxShadow: paused ? "none" : "0 0 8px #ff5555",
+                animation: paused ? "none" : "pulse 1.2s infinite",
+              }}
+            />
+            <strong style={{ fontSize: 14, minWidth: 46 }}>{fmt(elapsed)}</strong>
+          </>
+        )}
         <span style={{ color: "#9a9aa8", fontSize: 11 }}>{mode}</span>
       </div>
 

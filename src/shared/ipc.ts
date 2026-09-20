@@ -121,7 +121,8 @@ export type CaptureEvent =
   | { type: "mic-level"; level: number } // 0..1
   | { type: "preview"; dataUrl: string } // miniatura periódica durante REC
   | { type: "session-done"; dir: string; name: string; mp4: string }
-  | { type: "session-error"; message: string };
+  | { type: "session-error"; message: string }
+  | { type: "ditado-state"; phase: "recording" | "transcribing" };
 
 /** Superfície exposta ao renderer via contextBridge (window.voicecast). */
 export interface VoicecastBridge {

@@ -6,12 +6,23 @@
  * Ctrl+V sintético). Antes de capturar, segura o F9 do daemon via hold no
  * :8700 (v2 transição); sem daemon, funciona igual (nada para suspender).
  */
-import { clipboard, globalShortcut, ipcMain } from "electron";
+import { BrowserWindow, clipboard, globalShortcut, ipcMain } from "electron";
 import { transcribeAudioFile } from "./asr";
 import { logError, logInfo } from "./logging";
 import { createDitado, createBar } from "./windows";
 import { saveDictationSession } from "./library";
+import { counter, histogram, withSpan } from "./telemetry";
 import { Buffer } from "node:buffer";
+import { IPC, type CaptureEvent } from "../shared/ipc";
+
+const M_DICTATIONS = counter("voicecast_dictations_total", "ditados por status");
+const H_TRANSCRIBE = histogram("voicecast_transcribe_seconds", "duração da transcrição ASR");
+
+function broadcast(e: CaptureEvent): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send(IPC.event, e);
+  }
+}
 
 type DictationState = "idle" | "recording" | "transcribing";
 
@@ -176,6 +187,7 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
     state = "recording";
     ditadoStartedAt = Date.now();
     startDitadoBar();
+    broadcast({ type: "ditado-state", phase: "recording" });
     const cap = await startCapture();
     if (!cap.ok) {
       state = "idle";
@@ -190,37 +202,43 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
   if (state === "recording") {
     state = "transcribing";
     const startedAt = ditadoStartedAt;
+    broadcast({ type: "ditado-state", phase: "transcribing" });
     try {
-      recorderWin?.webContents.executeJavaScript("window.vcStopDictation()", true).catch(() => {});
-      const payload = await (blobPromise ?? Promise.resolve({ b64: "", ext: "webm" }));
-      await stopCaptureWindow();
+      await withSpan("ditado.stop", { duration_s: +((Date.now() - startedAt) / 1000).toFixed(1) }, async () => {
+        recorderWin?.webContents.executeJavaScript("window.vcStopDictation()", true).catch(() => {});
+        const payload = await (blobPromise ?? Promise.resolve({ b64: "", ext: "webm" }));
+        await stopCaptureWindow();
 
-      // o ASR só engole wav/pcm estáveis → extrai wav do webm via ffmpeg
-      const { writeFileSync, mkdtempSync, rmSync } = await import("node:fs");
-      const { tmpdir } = await import("node:os");
-      const { join } = await import("node:path");
-      const tmpDir = mkdtempSync(join(tmpdir(), "vc-ditado-"));
-      const src = join(tmpDir, `ditado.${payload.ext}`);
-      writeFileSync(src, Buffer.from(payload.b64, "base64"));
-      const t = await transcribeAudioFile(src);
-      rmSync(tmpDir, { recursive: true, force: true });
-      const text = t.text.trim();
+        // o ASR só engole wav/pcm estáveis → extrai wav do webm via ffmpeg
+        const { writeFileSync, mkdtempSync, rmSync } = await import("node:fs");
+        const { tmpdir } = await import("node:os");
+        const { join } = await import("node:path");
+        const tmpDir = mkdtempSync(join(tmpdir(), "vc-ditado-"));
+        const src = join(tmpDir, `ditado.${payload.ext}`);
+        writeFileSync(src, Buffer.from(payload.b64, "base64"));
+        const t0 = Date.now();
+        const t = await transcribeAudioFile(src);
+        H_TRANSCRIBE?.record((Date.now() - t0) / 1000, { kind: "ditado" });
+        rmSync(tmpDir, { recursive: true, force: true });
+        const text = t.text.trim();
 
-      // v2: ditado com fala vira sessão de áudio na biblioteca; silêncio descarta
-      if (text) {
-        try {
-          saveDictationSession(startedAt, payload.ext, payload.b64, t);
-        } catch (e) {
-          logError("ditado: falhou ao salvar histórico:", e);
+        // v2: ditado com fala vira sessão de áudio na biblioteca; silêncio descarta
+        if (text) {
+          try {
+            saveDictationSession(startedAt, payload.ext, payload.b64, t);
+          } catch (e) {
+            logError("ditado: falhou ao salvar histórico:", e);
+          }
+        } else {
+          logInfo("ditado: nada reconhecido — não salva histórico");
         }
-      } else {
-        logInfo("ditado: nada reconhecido — não salva histórico");
-      }
 
-      if (text) await pasteToFocused(text);
-      else logInfo("ditado: nada reconhecido");
+        if (text) await pasteToFocused(text);
+        M_DICTATIONS?.add(1, { status: text ? "ok" : "vazio" });
+      });
       return { ok: true };
     } catch (e) {
+      M_DICTATIONS?.add(1, { status: "erro" });
       logError("ditado: transcrição/colagem falhou:", e);
       return { ok: false, error: String(e) };
     } finally {

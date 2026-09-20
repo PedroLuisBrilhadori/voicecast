@@ -22,6 +22,10 @@ import { sessionDirName } from "../shared/paths";
 import { sessionDirs, sessionsRoot } from "./storage";
 import { resolveFfmpeg, runFfmpeg, type Ffmpeg } from "./ffmpeg";
 import { logError, logInfo } from "./logging";
+import { counter, histogram, withSpan } from "./telemetry";
+
+const M_SESSIONS = counter("voicecast_sessions_total", "sessões finalizadas por modo");
+const H_FINALIZE = histogram("voicecast_finalize_seconds", "duração do pipeline de fim de sessão");
 import { createBar, createRecorder, selectRegionOnDisplay } from "./windows";
 
 type Listener = (e: CaptureEvent) => void;
@@ -98,6 +102,8 @@ function writeMeta(metaPath: string, meta: unknown): void {
 }
 
 async function finalizeSession(input: FinishInput): Promise<void> {
+  return withSpan("session.finalize", { mode: input.mode }, async () => {
+  const t0 = Date.now();
   const { dir, name, b64, startedAt, mode, sourceLabel, rect } = input;
   logInfo(`finishRecording: ${name} blob=${(b64.length / 1_048_576).toFixed(1)}MB(b64)`);
   const dirs = sessionDirs(dir, name);
@@ -152,8 +158,11 @@ async function finalizeSession(input: FinishInput): Promise<void> {
   });
 
   logInfo(`sessão finalizada: ${dir}/${name} (${(sizeBytes / 1_048_576).toFixed(1)}MB)`);
+  M_SESSIONS?.add(1, { mode });
+  H_FINALIZE?.record((Date.now() - t0) / 1000);
   emit({ type: "session-done", dir, name, mp4: dirs.mp4 });
   cleanupAfterStop();
+  });
 }
 
 function cleanupAfterStop(): void {

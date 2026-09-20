@@ -10,6 +10,11 @@ import { resolveFfmpeg, runFfmpeg } from "./ffmpeg";
 import { logError, logInfo } from "./logging";
 import { sessionDirs, sessionsRoot } from "./storage";
 import { sessionDirName, wslPathQuoted } from "../shared/paths";
+import { counter, histogram, withSpan } from "./telemetry";
+
+const M_SESSIONS = counter("voicecast_sessions_total", "sessões finalizadas por modo");
+const M_TRANSCRIBE = counter("voicecast_transcriptions_total", "transcrições por status");
+const H_TRANSCRIBE = histogram("voicecast_transcribe_seconds", "duração da transcrição ASR");
 
 // ── tipos de biblioteca ────────────────────────────────────────
 
@@ -177,17 +182,22 @@ export async function transcribeAndStore(dir: string, name: string): Promise<boo
   if (!health.ok) {
     logError("ASR fora do ar — transcrição ficará pendente (retranscreva depois)");
     patch({ transcriptStatus: "sem-asr" });
+    M_TRANSCRIBE?.add(1, { status: "sem-asr" });
     return false;
   }
+  const t0 = Date.now();
   try {
     const t = await transcribeSession(dirs.mp4);
     fs.writeFileSync(dirs.transcript, JSON.stringify(t, null, 2));
     patch({ transcriptStatus: "done" });
+    H_TRANSCRIBE?.record((Date.now() - t0) / 1000, { kind: "sessao" });
+    M_TRANSCRIBE?.add(1, { status: "ok" });
     logInfo(`transcrição pronta: ${dir}/${name} (${t.words.length} palavras)`);
     return true;
   } catch (e) {
     logError("transcrição falhou:", e);
     patch({ transcriptStatus: "erro" });
+    M_TRANSCRIBE?.add(1, { status: "erro" });
     return false;
   }
 }

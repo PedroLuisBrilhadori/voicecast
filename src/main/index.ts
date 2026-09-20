@@ -29,6 +29,7 @@ import { createPicker, createEditor } from "./windows";
 import { ensureLayout } from "./storage";
 import { initLogging, logError, logInfo } from "./logging";
 import { registerDitadoHotkey, claimHotkey, toggleDitado } from "./ditado";
+import { initTelemetry } from "./telemetry";
 import {
   asrHealth,
 } from "./asr";
@@ -182,6 +183,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     logInfo("whenReady: registrando IPC/atalhos…");
+    void initTelemetry();
     ensureLayout();
     applyRetention();
     registerIpc();
