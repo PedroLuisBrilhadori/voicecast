@@ -140,6 +140,8 @@ export interface RecordingState {
   startedAt: number | null;
   paused: boolean;
   markers: number[];
+  /** True entre o pedido de start e a captura aberta (barra mostra "preparando…"). */
+  arming?: boolean;
   /** Nome da última sessão finalizada (picker abre o editor nela — M2). */
   lastSession?: { dir: string; name: string };
   error?: string;

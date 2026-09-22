@@ -3,11 +3,21 @@
  * Métricas + traces via OTLP-HTTP para o collector local (:4318, stack
  * observability do unidocs). Degradação graciosa: collector fora → nada quebra.
  *
+ * Os counters/histogramas são declarados no module-load, ANTES do init (que é
+ * 3s pós-ready) — por isso vêm do core lazy (src/shared/telemetry-core.ts),
+ * que resolve o instrumento no primeiro add/record com o meter pós-init.
+ *
  * Env: OTEL_ENABLED (default 1) · OTEL_EXPORTER_OTLP_ENDPOINT (default :4318)
  */
 import { logError, logInfo } from "./logging";
+import { createTelemetryCore } from "../shared/telemetry-core";
 
-let meter: import("@opentelemetry/api").Meter | null = null;
+const core = createTelemetryCore();
+
+/** Lazy: resolvem o instrumento no primeiro emit (ver telemetry-core.ts). */
+export const counter: typeof core.counter = core.counter;
+export const histogram: typeof core.histogram = core.histogram;
+
 let tracer: import("@opentelemetry/api").Tracer | null = null;
 let started = false;
 
@@ -36,12 +46,12 @@ export async function initTelemetry(): Promise<void> {
       }),
     });
     sdk.start();
-    meter = api.metrics.getMeter("voicecast");
+    core.setMeter(api.metrics.getMeter("voicecast"));
     tracer = api.trace.getTracer("voicecast");
     logInfo("telemetria: OTLP para", endpoint);
   } catch (e) {
     logError("telemetria indisponível (seguindo sem ela):", (e as Error)?.message ?? e);
-    meter = null;
+    core.setMeter(null);
     tracer = null;
   }
 }
@@ -63,22 +73,4 @@ export async function withSpan<T>(
       span.end();
     }
   });
-}
-
-export function counter(
-  name: string,
-  description: string,
-): { add: (n: number, attrs?: Record<string, string>) => void } | null {
-  if (!meter) return null;
-  const c = meter.createCounter(name, { description });
-  return { add: (n, attrs) => c.add(n, attrs) };
-}
-
-export function histogram(
-  name: string,
-  description: string,
-): { record: (n: number, attrs?: Record<string, string>) => void } | null {
-  if (!meter) return null;
-  const h = meter.createHistogram(name, { description });
-  return { record: (n, attrs) => h.record(n, attrs) };
 }

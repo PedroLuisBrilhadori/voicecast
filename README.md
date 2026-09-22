@@ -12,11 +12,11 @@ Tudo 100% local (nada sai da máquina).
 | Marco | Escopo | Estado |
 |---|---|---|
 | F0 | De-risk: decisão Electron vs Tauri, pipeline MP4, handoff ZCode | ✅ ([relatório](docs/RELATORIO-F0.md)) |
-| M0 | Repo + fundação Electron (Ctrl+F9, IPC, storage layout, CI) | 🚧 em progresso |
-| M1 | Captura: tela cheia / janela / região + barra REC + remux MP4 | pendente |
-| M2 | Editor (transcrição sincronizada), clipes, prints, biblioteca, copiar contexto | pendente |
+| M0 | Repo + fundação Electron (Ctrl+F9, IPC, storage layout, CI) | ✅ |
+| M1 | Captura: tela cheia / janela / região + barra REC + remux MP4 | ✅ |
+| M2 | Editor (transcrição sincronizada), clipes, prints, biblioteca, copiar contexto | ✅ |
 | M3 | Modo ao vivo (spike → UI), gate Jev, TTS | futuro |
-| M4 | Polish: Wayland/note, telemetria OTel, import externo | futuro |
+| M4 | Polish: Wayland/note, telemetria OTel, import externo | em curso — telemetria ✅ ([relatório](docs/RELATORIO-TELEMETRIA.md)) |
 
 ## Arquitetura
 

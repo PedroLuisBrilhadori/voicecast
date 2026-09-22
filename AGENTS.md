@@ -81,6 +81,15 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 - **React/react-dom devem ficar na MESMA versão exata** (ex.: 19.2.7 +
   19.2.7) — minors diferentes (^19) resolveram 19.2.7/19.3.0 e quebraram a
   barra em runtime (React error #527, silencioso no build).
+- **Telemetria OTel** (ver docs/RELATORIO-TELEMETRIA.md): métricas via core
+  lazy `src/shared/telemetry-core.ts` — counters/histograms declarados no
+  module-load resolvem o instrumento no primeiro emit (init do SDK é 3s
+  pós-ready; emit antes disso é descartado). Endpoint `localhost:4318`
+  (collector do unidocs), kill-switch `OTEL_ENABLED=0`. Start de gravação:
+  barra nasce em `arming` ("preparando captura…") e `startedAt` vira o do
+  `recorder.start()` — nunca usar o início do warm-up como relógio da sessão.
+  Dashboard: Grafana local, uid `voicecast` (repo unidocs,
+  `volumes/grafana/dashboards-json/`).
 
 ## Comandos
 

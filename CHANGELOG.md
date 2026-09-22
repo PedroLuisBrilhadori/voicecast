@@ -17,6 +17,8 @@ Janela: 2026-09-19 → 2026-09-22. Do zero à v2: fundação Electron, captura c
 - **[an]** Painel standalone de anotações: Ctrl+Alt+H global abre o painel fora de sessão; gravação/ditado adotam o painel aberto, preservando traços pré-REC (4afef1a)
 - **[an]** Atalho extra Ctrl+Alt+X limpa as marcações, junto do Ctrl+Alt+C (c1445a0)
 - **[asr]** Voicecast hospeda o próprio backend de transcrição — fim da dependência do voice-dictation (38fcc5c)
+- **[tel]** Métricas OTel vivas de verdade (core lazy em `shared/telemetry-core.ts`) + instrumentação do start: `session_starts_total`, `session_start_seconds{stage}`, spans `session.start`/`recorder.load`/`recorder.open`/`sources.list` e dashboard Grafana `voicecast` (no unidocs)
+- **[tel]** Barra REC abre na hora ("preparando captura…" com `arming`) e o relógio da sessão passa a ser o `recorder.start()` real — timer/duração/markers casam com o mp4 e a transcrição
 
 ### Changed
 
@@ -31,6 +33,7 @@ Janela: 2026-09-19 → 2026-09-22. Do zero à v2: fundação Electron, captura c
 - **[an]** Validação de UI dirigida por agente: 3 bugs corrigidos + folga da borracha (df12a11)
 - **[an]** Demandas do vídeo 0933: mouse visível no laser, paleta móvel, overlay não fica mais presa; ocultar paleta + print na paleta (a501b1a)
 - **[an]** Paleta oculta de verdade — JSX ignorava o estado `palHidden` (botão/atalho mudavam o estado, mas a paleta continuava renderizada) (8b71f73)
+- **[tel]** Bug das métricas inertes: counters/histograms criados no module-load capturavam meter `null` (init é 3s pós-ready) e nunca gravavam — só os spans eram emitidos
 
 ### Removed
 

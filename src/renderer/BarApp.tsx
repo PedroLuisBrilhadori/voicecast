@@ -37,6 +37,8 @@ export function BarApp() {
   const [resultado, setResultado] = useState<{ rota?: string; conf?: number; colado?: boolean } | null>(null);
   const [markers, setMarkers] = useState(0);
   const [paused, setPaused] = useState(false);
+  /** True entre o pedido de start e a captura abrir (main emite com arming). */
+  const [arming, setArming] = useState(false);
   const levels = useRef<number[]>([]);
   const [, forceRender] = useState(0);
 
@@ -45,9 +47,12 @@ export function BarApp() {
       if (e.type === "mic-level") {
         levels.current = [...levels.current.slice(-59), e.level];
         forceRender((n) => n + 1);
-      } else if (e.type === "state" && e.state.startedAt) {
-        setMarkers(e.state.markers.length);
-        setPaused(e.state.paused);
+      } else if (e.type === "state") {
+        setArming(!!e.state.arming);
+        if (e.state.startedAt) {
+          setMarkers(e.state.markers.length);
+          setPaused(e.state.paused);
+        }
       } else if (e.type === "ditado-state") {
         if (e.phase === "done") {
           setTranscribing(false);
@@ -76,7 +81,9 @@ export function BarApp() {
     let alive = true;
     const tick = () =>
       window.voicecast.getState().then((s) => {
-        if (!alive || !s.startedAt) return;
+        if (!alive) return;
+        setArming(!!s.arming);
+        if (!s.startedAt || s.arming) return; // arming: timer só depois do REC real
         setElapsed((Date.now() - s.startedAt) / 1000);
         setMarkers(s.markers.length);
         setPaused(s.paused);
@@ -118,6 +125,8 @@ export function BarApp() {
           </span>
         ) : transcribing ? (
           <span style={{ color: "#f4b942", fontSize: 12.5, fontWeight: 600 }}>⏳ transcrevendo…</span>
+        ) : arming && !isDitado ? (
+          <span style={{ color: "#f4b942", fontSize: 12.5, fontWeight: 600 }}>⏳ preparando captura…</span>
         ) : (
           <>
             <span
@@ -164,7 +173,8 @@ export function BarApp() {
           <button
             title="Marcar momento (Ctrl+M)"
             onClick={() => void window.voicecast.addMarker()}
-            style={{ padding: "4px 10px" }}
+            disabled={arming}
+            style={{ padding: "4px 10px", opacity: arming ? 0.4 : 1 }}
           >
             ◆ {markers}
           </button>
@@ -173,13 +183,15 @@ export function BarApp() {
               setPaused(!paused);
               void window.voicecast.pause(!paused);
             }}
-            style={{ padding: "4px 10px" }}
+            disabled={arming}
+            style={{ padding: "4px 10px", opacity: arming ? 0.4 : 1 }}
           >
             {paused ? "▶" : "❚❚"}
           </button>
           <button
             onClick={() => void window.voicecast.stopRecording()}
-            style={{ background: "#2d1b3d", borderColor: "#7c4dff", padding: "4px 14px", fontWeight: 700 }}
+            disabled={arming}
+            style={{ background: "#2d1b3d", borderColor: "#7c4dff", padding: "4px 14px", fontWeight: 700, opacity: arming ? 0.4 : 1 }}
           >
             ■ Parar
           </button>

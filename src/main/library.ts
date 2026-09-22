@@ -13,7 +13,8 @@ import { sessionDirs, sessionsRoot } from "./storage";
 import { sessionDirName, wslPathQuoted } from "../shared/paths";
 import { counter, histogram, withSpan } from "./telemetry";
 
-const M_SESSIONS = counter("voicecast_sessions_total", "sessões finalizadas por modo");
+// voicecast_sessions_total é do capture.ts (que emite); duplicar aqui criava
+// confusão — com o core lazy cairia no mesmo instrumento, mas fica num lugar só
 const M_TRANSCRIBE = counter("voicecast_transcriptions_total", "transcrições por status");
 const H_TRANSCRIBE = histogram("voicecast_transcribe_seconds", "duração da transcrição ASR");
 

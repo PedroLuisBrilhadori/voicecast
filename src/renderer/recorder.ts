@@ -6,7 +6,14 @@
  */
 export {};
 
-type VCRec = { ok: boolean; error?: string };
+type VCRec = {
+  ok: boolean;
+  error?: string;
+  /** Date.now() do main e do renderer são o mesmo relógio: momento real do recorder.start(). */
+  startedAtReal?: number;
+  /** Breakdown do aquecimento (o delay percebido entre pedido e REC). */
+  timings?: { desktopMs: number; micMs: number | null };
+};
 
 const params = new URLSearchParams(location.search);
 const BLOB_CH = params.get("ch") ?? "";
@@ -79,6 +86,7 @@ window.vcRecord = async (opts: { sourceId: string | null; withMic: boolean; mode
   chunks = [];
   try {
     if (!opts.sourceId) return { ok: false, error: "sourceId ausente no recorder" };
+    const tDesktop = performance.now();
     const video = await navigator.mediaDevices.getUserMedia({
       audio: false,
       video: {
@@ -89,11 +97,15 @@ window.vcRecord = async (opts: { sourceId: string | null; withMic: boolean; mode
         },
       },
     } as unknown as MediaStreamConstraints);
+    const desktopMs = Math.round(performance.now() - tDesktop);
 
     let audio: MediaStream | null = null;
+    let micMs: number | null = null;
     if (opts.withMic) {
+      const tMic = performance.now();
       try {
         audio = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micMs = Math.round(performance.now() - tMic);
       } catch {}
     }
 
@@ -106,7 +118,7 @@ window.vcRecord = async (opts: { sourceId: string | null; withMic: boolean; mode
     await v.play().catch(() => {});
 
     const mime = pickMime();
-    console.info(`[recorder] mime=${mime || "(default)"}`);
+    console.info(`[recorder] mime=${mime || "(default)"} desktop=${desktopMs}ms mic=${micMs ?? "-"}ms`);
     recorder = new MediaRecorder(currentStream, {
       ...(mime ? { mimeType: mime } : {}),
       videoBitsPerSecond: 6_000_000,
@@ -114,7 +126,7 @@ window.vcRecord = async (opts: { sourceId: string | null; withMic: boolean; mode
     recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     recorder.onerror = (e) => console.error("[recorder] error:", String(e));
     recorder.start(1000);
-    return { ok: true };
+    return { ok: true, startedAtReal: Date.now(), timings: { desktopMs, micMs } };
   } catch (e) {
     return { ok: false, error: String((e as Error)?.message ?? e) };
   }
