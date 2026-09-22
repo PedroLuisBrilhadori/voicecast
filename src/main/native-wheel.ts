@@ -33,6 +33,7 @@ interface User32 {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let user32: User32 | null | undefined; // undefined = não tentado; null = falhou
 let lastLogAt = 0; // throttle do log (a roda dispara rajadas de eventos)
+let outTimer: NodeJS.Timeout | null = null; // overlay fora da tela durante a rajada
 
 const GA_ROOT = 2;
 
@@ -123,12 +124,24 @@ export function forwardWheelNative(
     // devolvendo o filho do próprio overlay.)
     const SWP = 0x15; // NOSIZE | NOZORDER | NOACTIVATE
     const OFF = -32000;
-    u32.setWindowPos(hwndSelf, OFF, OFF, SWP);
+    // Move o overlay para fora UMA VEZ POR RAJADA de roda (não por evento):
+    // cada SetWindowPos fullscreen força recomposição do DWM — por evento, o
+    // mouse engasga. Volta 150ms após a última roda (cliques nesse intervalo
+    // vão para o app de baixo — aceitável: quem está rolando não está clicando).
+    if (!outTimer) u32.setWindowPos(hwndSelf, OFF, OFF, SWP);
+    else clearTimeout(outTimer);
+    outTimer = setTimeout(() => {
+      outTimer = null;
+      try {
+        u32.setWindowPos(hwndSelf, origX, origY, SWP);
+      } catch {}
+    }, 150);
+    outTimer.unref?.();
     let target = 0n;
     try {
       target = u32.windowFromPoint({ x, y });
-    } finally {
-      u32.setWindowPos(hwndSelf, origX, origY, SWP);
+    } catch {
+      // WindowFromPoint não costuma falhar; nunca deixa o overlay fora
     }
     // segurança anti-loop: pode vir um HWND FILHO do próprio overlay
     // (Chrome_RenderWidgetHostHWND) — compara pela raiz
