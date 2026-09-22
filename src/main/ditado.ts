@@ -17,6 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Buffer } from "node:buffer";
 import { IPC, type CaptureEvent } from "../shared/ipc";
+import { decidePaste, judgeDictation } from "./jev";
 
 const M_DICTATIONS = counter("voicecast_dictations_total", "ditados por status");
 const H_TRANSCRIBE = histogram("voicecast_transcribe_seconds", "duração da transcrição ASR");
@@ -310,10 +311,16 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
         rmSync(tmpDir, { recursive: true, force: true });
         const text = t.text.trim();
 
+        // Jev (Etapa 2 do PLANO-JEV-CU): roteia a intenção ANTES de colar —
+        // comando pro agente, anotação e conversa não pertencem à janela focada.
+        // Fail-soft: sem julgamento (off/sem key/erro) cola como sempre colou.
+        const j = text ? await judgeDictation(text) : null;
+        const acao = decidePaste(j);
+
         // v2: ditado com fala vira sessão de áudio na biblioteca; silêncio descarta
         if (text) {
           try {
-            saveDictationSession(startedAt, payload.ext, payload.b64, t);
+            saveDictationSession(startedAt, payload.ext, payload.b64, t, j);
           } catch (e) {
             logError("ditado: falhou ao salvar histórico:", e);
           }
@@ -321,8 +328,22 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
           logInfo("ditado: nada reconhecido — não salva histórico");
         }
 
-        if (text) await pasteToFocused(text, ditadoHwnd);
-        M_DICTATIONS?.add(1, { status: text ? "ok" : "vazio" });
+        if (text && acao.paste) {
+          await pasteToFocused(text, ditadoHwnd);
+        } else if (text) {
+          logInfo(`ditado: NÃO colado — rota ${j?.rota} (conf ${j?.confidence?.toFixed(2) ?? "?"})`);
+        }
+        M_DICTATIONS?.add(1, { status: text ? (acao.paste ? "ok" : `rota:${j?.rota ?? "?"}`) : "vazio" });
+        // a barra mostra o desfecho antes de fechar (finally) — quando nada é
+        // colado, o usuário precisa saber POR QUÊ
+        broadcast({
+          type: "ditado-state",
+          phase: "done",
+          rota: j?.rota,
+          conf: j?.confidence,
+          colado: text ? acao.paste : undefined,
+        });
+        if (text) await new Promise((r) => setTimeout(r, acao.paste ? 350 : 2200));
       });
       return { ok: true };
     } catch (e) {

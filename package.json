@@ -32,7 +32,8 @@
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
     "@opentelemetry/sdk-metrics": "^2.11.0",
     "@opentelemetry/sdk-node": "^0.222.0",
+    "@typesafe-ai/sdk": "^0.6.0",
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19.2.7"
   }
 }

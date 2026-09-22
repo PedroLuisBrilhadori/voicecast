@@ -21,10 +21,12 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 | `src/shared/paths.ts` | Helpers puros (WSL path, nomes de sessão) — testáveis |
 | `src/main/` | Processo principal: janelas, atalhos globais, captura, ffmpeg, storage |
 | `src/main/storage.ts` | Único lugar que monta path de dados (`%LOCALAPPDATA%\voicecast`) |
+| `src/main/jev.ts` | Jev (TypeSafe) no app — julgamento fail-soft do F9 e da sessão (Etapa 2 do PLANO-JEV-CU) |
+| `src/main/jev-questions.ts` | Perguntas/limiares Jev — arquivo único revisável; não editar sem rodar o smoke |
 | `src/preload/` | Ponte contextBridge — só expõe o contrato |
 | `src/renderer/` | React 19 (picker, overlay de região, barra REC, editor, biblioteca) |
-| `tests/` | Vitest (contrato, paths, storage) |
-| `scripts/` | sync-to-host.ps1 / run-win.ps1 (dev loop Windows) |
+| `tests/` | Vitest (contrato, paths, storage, jev) |
+| `scripts/` | sync-to-host.ps1 / run-win.ps1 (dev loop Windows; sync reinstala deps quando o package.json muda) |
 | `docs/` | Relatórios de marco (F0, decisões) |
 
 ## Convenções
@@ -39,6 +41,21 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 - Coordenadas de região/janela em **px físicos** (tela está em scale 1.53).
 - ASR: sempre via HTTP `:8701` (failover de URLs, padrão asr_router) — nada de
   embutir whisper aqui.
+- **Jev (Etapa 2)**: F9 roteia a intenção ANTES de colar — comando pro agente,
+  anotação e conversa (conf ≥ 0.9) NÃO são colados na janela focada; a barra
+  mostra o desfecho. Sessão finalizada ganha `meta.json.jev` (rota, relevância,
+  pedido, risco) e o `buildContext` inclui a linha de julgamento. **Fail-soft**:
+  sem key/erro → tudo se comporta como antes. Key: env `TYPESAFE_API_KEY` ou
+  `%APPDATA%\voicecast\jev-key.txt` (1 linha). Kill-switch: `VOICECAST_JEV=0`.
+  Smoke (API real, sob pedido):
+  `VOICECAST_JEV_SMOKE=1 TYPESAFE_API_KEY=<key> pnpm vitest run tests/jev.smoke.test.ts`.
+- Ganchos de teste no app real (sem tecla física): `--ditado-test`
+  (F9 start→6s→stop; determinístico com `VOICECAST_DITADO_FAKE_TEXT`) e
+  `--autotest` (grava 8s e sai) + `--transcribe=DIR/NOME` (transcreve+julga e
+  sai). Rotina de validação no Windows documentada em docs/RELATORIO-E2.md.
+- **React/react-dom devem ficar na MESMA versão exata** (ex.: 19.2.7 +
+  19.2.7) — minors diferentes (^19) resolveram 19.2.7/19.3.0 e quebraram a
+  barra em runtime (React error #527, silencioso no build).
 
 ## Comandos
 

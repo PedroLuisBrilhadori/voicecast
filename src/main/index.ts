@@ -253,6 +253,22 @@ if (!gotLock) {
       });
     }
 
+    // gancho de teste determinístico: ditado F9 start→6s→stop sem tecla física.
+    // Determinístico com VOICECAST_DITADO_FAKE_TEXT (pula o ASR); sem o env,
+    // transcreve o mic de verdade. Sai sozinho no fim.
+    if (process.argv.includes("--ditado-test")) {
+      setTimeout(async () => {
+        logInfo("[ditado-test] start");
+        const a = await toggleDitado();
+        logInfo(`[ditado-test] inicio: ${JSON.stringify(a)}`);
+        setTimeout(async () => {
+          const b = await toggleDitado();
+          logInfo(`[ditado-test] fim: ${JSON.stringify(b)}`);
+          setTimeout(() => app.exit(0), 5000); // margem: Jev + save + barra
+        }, 6000);
+      }, 3000);
+    }
+
     // gancho de teste determinístico: grava 8s fullscreen+mic com um marker e para
     if (process.argv.includes("--autotest")) {
       setTimeout(async () => {

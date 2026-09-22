@@ -12,6 +12,19 @@ function fmt(s: number): string {
   return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
+/** Desfecho do julgamento Jev (ditado-state phase "done"). */
+const ROTA_UI: Record<string, string> = {
+  ditado_texto: "✓ colado",
+  comando_agente: "→ agente (não colado)",
+  anotacao_contexto: "✎ guardado na sessão",
+  conversa_social: "— conversa (ignorada)",
+};
+
+function desfechoDitado(r: { rota?: string; colado?: boolean }): string {
+  if (r.colado) return "✓ colado";
+  return (r.rota && ROTA_UI[r.rota]) || "não colado";
+}
+
 /** Barra compacta frameless: REC + timer + waveform + markers + controles.
  *  Arrastável pela área esquerda (-webkit-app-region: drag).
  *  Modo ditado (query ditado=1): sem foco, só timer + waveform + parar. */
@@ -21,6 +34,7 @@ export function BarApp() {
   const isDitado = qs.get("ditado") === "1";
   const [elapsed, setElapsed] = useState(0);
   const [transcribing, setTranscribing] = useState(false);
+  const [resultado, setResultado] = useState<{ rota?: string; conf?: number; colado?: boolean } | null>(null);
   const [markers, setMarkers] = useState(0);
   const [paused, setPaused] = useState(false);
   const levels = useRef<number[]>([]);
@@ -35,7 +49,12 @@ export function BarApp() {
         setMarkers(e.state.markers.length);
         setPaused(e.state.paused);
       } else if (e.type === "ditado-state") {
-        setTranscribing(e.phase === "transcribing");
+        if (e.phase === "done") {
+          setTranscribing(false);
+          setResultado({ rota: e.rota, conf: e.conf, colado: e.colado });
+        } else {
+          setTranscribing(e.phase === "transcribing");
+        }
       }
     });
     const t = window.setInterval(() => forceRender((n) => n + 1), 500);
@@ -87,7 +106,17 @@ export function BarApp() {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, WebkitAppRegion: "drag" } as React.CSSProperties}>
-        {transcribing ? (
+        {resultado ? (
+          <span
+            style={{
+              color: resultado.colado ? "#3ecf8e" : "#7c4dff",
+              fontSize: 12.5,
+              fontWeight: 600,
+            }}
+          >
+            {desfechoDitado(resultado)}
+          </span>
+        ) : transcribing ? (
           <span style={{ color: "#f4b942", fontSize: 12.5, fontWeight: 600 }}>⏳ transcrevendo…</span>
         ) : (
           <>

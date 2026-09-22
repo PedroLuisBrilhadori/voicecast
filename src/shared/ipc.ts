@@ -122,7 +122,14 @@ export type CaptureEvent =
   | { type: "preview"; dataUrl: string } // miniatura periódica durante REC
   | { type: "session-done"; dir: string; name: string; mp4: string }
   | { type: "session-error"; message: string }
-  | { type: "ditado-state"; phase: "recording" | "transcribing" };
+  | {
+      type: "ditado-state";
+      phase: "recording" | "transcribing" | "done";
+      /** desfecho do julgamento Jev (só no phase "done") */
+      rota?: string;
+      conf?: number;
+      colado?: boolean;
+    };
 
 /** Superfície exposta ao renderer via contextBridge (window.voicecast). */
 export interface VoicecastBridge {

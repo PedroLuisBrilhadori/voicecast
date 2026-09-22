@@ -6,6 +6,7 @@ import { clipboard } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { asrHealth, transcribeSession, type Transcript } from "./asr";
+import { judgeSession, type DictationJudgment } from "./jev";
 import { resolveFfmpeg, runFfmpeg } from "./ffmpeg";
 import { logError, logInfo } from "./logging";
 import { sessionDirs, sessionsRoot } from "./storage";
@@ -38,6 +39,17 @@ export interface SessionSummary {
   preview: string | null;
 }
 
+/** Julgamento Jev gravado no meta.json (Etapa 2 do PLANO-JEV-CU). */
+export interface JevMeta {
+  model: string;
+  judgedAt: string;
+  rota?: string;
+  conf?: number;
+  relevancia?: number;
+  pedido?: number;
+  risco?: number;
+}
+
 interface Meta {
   status?: string;
   startedAt?: string;
@@ -51,6 +63,8 @@ interface Meta {
   transcriptStatus?: string;
   /** Ditado: primeira frase da transcrição (título automático). */
   textPreview?: string;
+  /** Julgamento Jev (fail-soft: ausente quando off/sem key/erro). */
+  jev?: JevMeta;
 }
 
 // ── biblioteca ─────────────────────────────────────────────────
@@ -138,6 +152,7 @@ export function saveDictationSession(
   ext: string,
   audioB64: string,
   transcript: Transcript,
+  jev?: DictationJudgment | null,
 ): { dir: string; name: string } {
   const now = new Date(startedAt);
   const dayDir = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
@@ -161,6 +176,9 @@ export function saveDictationSession(
     textPreview: preview,
     transcriptStatus: "done",
     sizeBytes: fs.statSync(dirs.audio).size,
+    ...(jev
+      ? { jev: { model: jev.model, judgedAt: new Date().toISOString(), rota: jev.rota, conf: jev.confidence } }
+      : {}),
   });
   logInfo(`ditado salvo na biblioteca: ${dayDir}/${name} "${preview}"`);
   return { dir: dayDir, name };
@@ -193,6 +211,31 @@ export async function transcribeAndStore(dir: string, name: string): Promise<boo
     H_TRANSCRIBE?.record((Date.now() - t0) / 1000, { kind: "sessao" });
     M_TRANSCRIBE?.add(1, { status: "ok" });
     logInfo(`transcrição pronta: ${dir}/${name} (${t.words.length} palavras)`);
+
+    // Etapa 2: julgamento Jev da sessão (fail-soft — julgamento é melhoria,
+    // não dependência; falha aqui não afeta a transcrição pronta)
+    try {
+      const m = JSON.parse(fs.readFileSync(dirs.meta, "utf8")) as Meta;
+      const j = await judgeSession(t.text, { mode: m.mode, title: m.title });
+      if (j) {
+        patch({
+          jev: {
+            model: j.model,
+            judgedAt: new Date().toISOString(),
+            rota: j.rota ?? undefined,
+            conf: j.confidence || undefined,
+            relevancia: j.relevancia ?? undefined,
+            pedido: j.pedido ?? undefined,
+            risco: j.risco ?? undefined,
+          },
+        });
+        logInfo(
+          `jev: ${dir}/${name} → rota ${j.rota ?? "?"} · relevância ${j.relevancia?.toFixed(1) ?? "?"}/3 · ${j.latenciaMs.toFixed(0)}ms`,
+        );
+      }
+    } catch (e) {
+      logError("jev: julgamento da sessão falhou (sessão intacta):", e);
+    }
     return true;
   } catch (e) {
     logError("transcrição falhou:", e);
@@ -305,6 +348,16 @@ export async function buildContext(
     }
   } else if (meta.transcriptStatus === "pending") {
     lines.push("Fala: (transcrição em andamento)");
+  }
+
+  // julgamento Jev (Etapa 2) — triagem pronta para o agente consumir
+  if (meta.jev) {
+    const partes: string[] = [];
+    if (meta.jev.rota) partes.push(`rota ${meta.jev.rota}${meta.jev.conf != null ? ` (conf ${meta.jev.conf.toFixed(2)})` : ""}`);
+    if (meta.jev.relevancia != null) partes.push(`relevância ${meta.jev.relevancia.toFixed(1)}/3`);
+    if (meta.jev.pedido != null) partes.push(`pedido-de-ação ${meta.jev.pedido.toFixed(2)}`);
+    if (meta.jev.risco != null) partes.push(`risco ${meta.jev.risco.toFixed(2)}`);
+    if (partes.length) lines.push(`Julgamento (Jev ${meta.jev.model}): ${partes.join(" · ")}`);
   }
 
   // clipes e frames
