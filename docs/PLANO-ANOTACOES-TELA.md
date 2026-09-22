@@ -9,7 +9,9 @@ Trilha nova (AN) — paralela às Etapas Jev (E1–E5 do
 Enquanto grava (ou dita), o usuário **aponta e marca a tela** — laser, pincel,
 borracha, desfazer/refazer — e as marcações viram **contexto consumível pelo
 agente**: vetorial com timestamps + prints queimados nos momentos marcados. No
-modo transcrição (ditado/sessão transcrevendo), um print da tela anexa à sessão.
+modo transcrição (ditado/sessão transcrevendo), um print da tela anexa à sessão
+— e, como no modo somente-transcrição **não há vídeo da tela**, anotar ali
+dispara **print queimado automático** (registro visual do que foi marcado).
 
 ## Decisões de design (recomendações)
 
@@ -59,6 +61,16 @@ capturar o frame naquele instante + **queimar os strokes ativos** (e laser, se
 on) → `frames/marker-N.png` + evento `marker` no jsonl. Hoje marker é só
 timestamp; com isso ele vira o "olhe aqui" do agente (GLM lê PNG nativamente).
 
+**D7 — Anotar em modo somente-transcrição ⇒ print queimado automático**
+(decisão do mantenedor, 2026-09-22). O overlay de anotação também fica
+disponível durante o **ditado (F9)** — mic-only, sem vídeo. Como ali não há
+vídeo que registre a tela, cada **rajada de anotação** dispara um print
+automático: terminou um traço/laser e passou ~2s sem novos eventos → captura
+o frame + queima os strokes acumulados → `frames/print-<t>s.png` na sessão do
+ditado (o mesmo formato do print manual; evento `print` no jsonl com os
+strokes incluídos). Flush pendente no stop do ditado. Sem anotação no ditado,
+nenhum print — o automático só existe quando o usuário marcou algo.
+
 ## Ferramentas v1
 
 | Ferramenta | Comportamento |
@@ -78,10 +90,17 @@ alterna desenho↔pass-through (proposta — ver aberto nº 2).
 ## Print no modo transcrição (AN.5)
 
 Durante **ditado (F9) em recording/transcribing** ou **sessão em REC**:
-`Ctrl+Alt+P` → `desktopCapturer.getSources` full-res no main →
-`frames/print-<t>s.png` na sessão corrente (a do ditado ou a da gravação) →
-listado no buildContext. Sem sessão ativa: ignora com log. (Mesmo mecanismo do
-marker, sem strokes.)
+
+- **Manual** — `Ctrl+Alt+P` → `desktopCapturer.getSources` full-res no main →
+  `frames/print-<t>s.png` na sessão corrente (a do ditado ou a da gravação) →
+  listado no buildContext. Sem sessão ativa: ignora com log. (Mesmo mecanismo
+  do marker, sem strokes.)
+- **Automático no ditado** (D7) — anotação usada durante o modo
+  somente-transcrição → print queimado da rajada (debounce ~2s) + flush no
+  stop; um registro visual por momento marcado, não por traço.
+
+No REC de tela o automático NÃO dispara (o vídeo WYSIWYG já registra as
+marcações; print lá continua por marker ou manual).
 
 ## Contexto para agentes (AN.4)
 
@@ -109,7 +128,9 @@ semântico das marcações via Jev (score de relevância por trecho).
   visíveis listado no buildContext.
 - **AN.4 — Contexto**: linhas no buildContext + campo no MCP (com E3).
 - **AN.5 — Print na transcrição**: `Ctrl+Alt+P` durante ditado/REC →
-  `frames/print-*.png`. Aceite: print aparece no contexto da sessão do ditado.
+  `frames/print-*.png`; **auto-print queimado** quando anota em modo
+  somente-transcrição (D7). Aceite: print aparece no contexto da sessão do
+  ditado; anotar no ditado sem print manual produz ao menos 1 print queimado.
 
 Sequência: AN.1 → AN.2 → AN.3 → (AN.4 com E3) → AN.5. AN.1/AN.2 são a base
 de tudo; AN.5 é independente e barato (pode andar junto com AN.3).
