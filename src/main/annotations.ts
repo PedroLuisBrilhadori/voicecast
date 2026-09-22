@@ -40,7 +40,7 @@ const M_PRINTS = counter("voicecast_annotation_prints_total", "prints queimados 
 
 const AUTO_PRINT_DEBOUNCE_MS = 2000;
 const LASER_RECENT_MS = 1500; // lasers recentes entram no print queimado
-const HOTKEYS = ["Control+Alt+L", "Control+Alt+B", "Control+Alt+E", "Control+Alt+C", "Control+Alt+Space", "Control+Alt+P"];
+const HOTKEYS = ["Control+Alt+L", "Control+Alt+B", "Control+Alt+E", "Control+Alt+C", "Control+Alt+Space", "Control+Alt+P", "Control+Alt+H"];
 
 /** Engine de anotações — uma instância por processo (sessão corrente). */
 class AnnotationEngine {
@@ -64,6 +64,10 @@ class AnnotationEngine {
   private paletteBounds: { x: number; y: number; w: number; h: number } | null = null;
   private cursorPoll: NodeJS.Timeout | null = null;
   private mouseOnWindow = false;
+  /** Drag da paleta em curso: congela o poll e mantém o mouse da janela. */
+  private dragging = false;
+  /** Paleta visível (mantenedor 2026-09-22: ocultar sem encerrar a sessão). */
+  private paletteOn = true;
 
   get active(): boolean {
     return this.overlay !== null;
@@ -81,6 +85,7 @@ class AnnotationEngine {
     this.seq = 0;
     this.bufferedPrints = [];
     this.recentLasers = [];
+    this.paletteOn = true;
     this.createOverlay();
     this.registerHotkeys();
     logInfo(`anotações: attach (${kind}${dirs ? "" : ", dir no stop"})`);
@@ -100,6 +105,7 @@ class AnnotationEngine {
     if (this.overlay && !this.overlay.isDestroyed()) this.overlay.destroy();
     this.overlay = null;
     this.mouseOnWindow = false;
+    this.dragging = false;
     if (this.dirs) {
       this.flushJsonl();
       this.flushBufferedPrints();
@@ -178,7 +184,7 @@ class AnnotationEngine {
     if (this.cursorPoll) clearInterval(this.cursorPoll);
     this.cursorPoll = setInterval(() => {
       const w = this.overlay;
-      if (!w || w.isDestroyed() || this.drawMode) return;
+      if (!w || w.isDestroyed() || this.drawMode || this.dragging) return;
       try {
         const c = screen.getCursorScreenPoint();
         const b = w.getBounds();
@@ -236,6 +242,15 @@ class AnnotationEngine {
     }
   }
 
+  /** Drag da paleta (pass-through): mouse da janela travado ON até soltar. */
+  setPaletteDragging(dragging: boolean): void {
+    const w = this.overlay;
+    if (!w || w.isDestroyed() || this.drawMode) return;
+    this.dragging = dragging;
+    this.mouseOnWindow = dragging; // poll não briga no meio do drag
+    w.setIgnoreMouseEvents(!dragging, { forward: true });
+  }
+
   /** Entrar no modo desenho pela PALETA (sem hotkey) — ativa a ferramenta. */
   enterDrawMode(tool?: AnnotationTool): void {
     this.cmdTool(tool ?? this.tool);
@@ -251,6 +266,19 @@ class AnnotationEngine {
     reg("Control+Alt+C", () => void this.record({ kind: "clear" }));
     reg("Control+Alt+Space", () => this.setPassThrough(this.drawMode));
     reg("Control+Alt+P", () => void this.captureComposite("manual", false));
+    reg("Control+Alt+H", () => this.togglePalette());
+  }
+
+  /** Paleta visível/oculta — botão da própria paleta e Ctrl+Alt+H. */
+  togglePalette(): void {
+    this.setPaletteVisible(!this.paletteOn);
+  }
+
+  setPaletteVisible(on: boolean): void {
+    this.paletteOn = on;
+    const w = this.overlay;
+    if (!w || w.isDestroyed()) return;
+    w.webContents.send(IPC.annotationCmd, { type: "palette", on } satisfies AnnotationCmd);
   }
 
   // ── eventos ─────────────────────────────────────────────────────────
@@ -411,6 +439,13 @@ class AnnotationEngine {
       r(b64);
     }
   }
+
+  /** Print manual pela paleta (mesmo caminho do Ctrl+Alt+P). */
+  manualPrint(): void {
+    void this.captureComposite("manual", false).then((ok) => {
+      if (ok) M_PRINTS?.add(1, { kind: "manual" });
+    });
+  }
 }
 
 // ── singleton + IPC ────────────────────────────────────────────────────────
@@ -422,8 +457,9 @@ export function registerAnnotationIpc(): void {
   ipcMain.handle(IPC.annotationEvent, (_e, req: AnnotationEventRequest) => annotations.record(req));
   ipcMain.handle(
     IPC.annotationMouse,
-    (_e, req: { mouse: boolean; from: "palette" | "esc" | "draw"; tool?: AnnotationTool }) => {
+    (_e, req: { mouse: boolean; from: "palette" | "esc" | "draw" | "drag"; tool?: AnnotationTool }) => {
       if (req.from === "esc" && !req.mouse) annotations.setPassThrough(true);
+      else if (req.from === "drag") annotations.setPaletteDragging(req.mouse);
       else if (req.from === "draw") annotations.enterDrawMode(req.tool);
       else annotations.setWindowMouse(req.mouse);
       return { ok: true };
@@ -436,7 +472,15 @@ export function registerAnnotationIpc(): void {
   ipcMain.on(IPC.annotationContext, (e) => {
     e.returnValue = annotations.overlayContext();
   });
-  ipcMain.on(IPC.annotationPalette, (_e, rect: { x: number; y: number; w: number; h: number }) => {
+  ipcMain.on(IPC.annotationPalette, (_e, rect: { x: number; y: number; w: number; h: number } | null) => {
     annotations.setPaletteBounds(rect);
+  });
+  ipcMain.handle(IPC.annotationPrint, () => {
+    void annotations.manualPrint();
+    return { ok: true };
+  });
+  ipcMain.handle(IPC.annotationPaletteToggle, () => {
+    annotations.togglePalette();
+    return { ok: true };
   });
 }

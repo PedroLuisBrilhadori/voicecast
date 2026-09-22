@@ -373,6 +373,9 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
     } catch (e) {
       M_DICTATIONS?.add(1, { status: "erro" });
       logError("ditado: transcrição/colagem falhou:", e);
+      // a overlay de anotações (attach no start) não pode ficar presa na tela
+      // quando a transcrição falha — mesmo descarte do cancelamento
+      if (annotations.active) await annotations.detach();
       return { ok: false, error: String(e) };
     } finally {
       await daemonHold(false);

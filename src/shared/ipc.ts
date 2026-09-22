@@ -73,6 +73,10 @@ export const IPC = {
   annotationContext: "annotation:context",
   /** Overlay → main: retângulo CSS da paleta (p/ polling de cursor no main). */
   annotationPalette: "annotation:palette",
+  /** Overlay → main: print manual (mesmo caminho do Ctrl+Alt+P). */
+  annotationPrint: "annotation:print",
+  /** Overlay → main: alterna paleta visível/oculta (botão ↔ Ctrl+Alt+H). */
+  annotationPaletteToggle: "annotation:palette-toggle",
 } as const;
 
 export interface PingRequest {
@@ -171,6 +175,7 @@ export type AnnotationEventRequest =
 export type AnnotationCmd =
   | { type: "tool"; tool: AnnotationTool; eraserMode?: EraserMode }
   | { type: "pass-through"; on: boolean }
+  | { type: "palette"; on: boolean }
   /** main capturou o frame (dataURL) — overlay compõe strokes/laser e devolve o PNG */
   | { type: "capture"; id: string; frame: string; label: string };
 
@@ -183,9 +188,11 @@ export interface VcInternalBridge {
   annotationEvent: (req: AnnotationEventRequest) => Promise<AnnotationEvent | null>;
   onAnnotationCmd: (cb: (cmd: AnnotationCmd) => void) => () => void;
   sendComposite: (id: string, b64: string | null) => void;
-  annotationMouse: (req: { mouse: boolean; from: "palette" | "esc" | "draw"; tool?: AnnotationTool }) => Promise<{ ok: boolean }>;
+  annotationMouse: (req: { mouse: boolean; from: "palette" | "esc" | "draw" | "drag"; tool?: AnnotationTool }) => Promise<{ ok: boolean }>;
   annotationContext: () => { strokes: StrokeSnapshot[]; lasers: { at: number; points: Pt[] }[] };
-  annotationPaletteBounds: (rect: { x: number; y: number; w: number; h: number }) => void;
+  annotationPaletteBounds: (rect: { x: number; y: number; w: number; h: number } | null) => void;
+  annotationPrint: () => Promise<{ ok: boolean }>;
+  annotationPaletteToggle: () => Promise<{ ok: boolean }>;
 }
 
 /** Superfície exposta ao renderer via contextBridge (window.voicecast). */

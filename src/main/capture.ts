@@ -267,6 +267,15 @@ export async function stopRecording(): Promise<{ ok: boolean; error?: string }> 
   await recorderWin.webContents.executeJavaScript("window.vcStop()", true).catch((e) => {
     logError("vcStop falhou:", String(e));
   });
+  // o blob tem que chegar em 20s — sem ele o finalizeSession (e o detach das
+  // anotações dentro dele) nunca roda e a janela de pintura fica na tela
+  setTimeout(() => {
+    if (state.phase !== "processing") return;
+    logError("stop: blob do recorder não chegou em 20s — descarto a sessão");
+    void annotations.detach();
+    cleanupAfterStop();
+    emit({ type: "session-error", message: "gravador não entregou o vídeo — sessão descartada" });
+  }, 20_000).unref?.();
   return { ok: true };
 }
 

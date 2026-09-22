@@ -46,6 +46,11 @@ export function AnnotationApp() {
   const [tool, setToolS] = useState<Tool>(toolRef.current);
   const paletaRef = useRef<HTMLDivElement>(null);
   const [, forceRender] = useState(0);
+  // paleta móvel (mantenedor 2026-09-22: mover como o indicador de gravação);
+  // null = posição default (centro, bottom 48)
+  const [palPos, setPalPos] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{ dx: number; dy: number } | null>(null);
+  const [palHidden, setPalHiddenS] = useState(false);
 
   const setTool = (patch: Partial<Tool>) => {
     toolRef.current = { ...toolRef.current, ...patch };
@@ -54,14 +59,20 @@ export function AnnotationApp() {
   const setPassThrough = (on: boolean) => {
     passThroughRef.current = on;
     setPassThroughS(on);
-    document.body.style.cursor = on ? "default" : toolRef.current.tool === "laser" ? "none" : "crosshair";
+    // laser mostra o cursor real (mantenedor 2026-09-22: "quando eu clico no
+    // laser, meu mouse some") — nenhuma ferramenta esconde o mouse
+    document.body.style.cursor = on ? "default" : "crosshair";
   };
 
   // main faz polling do cursor sobre este retângulo p/ habilitar o mouse
   useEffect(() => {
     const report = () => {
       const el = paletaRef.current;
-      if (!el) return;
+      if (!el) {
+        // paleta oculta: limpa o retângulo (hover do poll não deve ligar o mouse)
+        window.vcInternal.annotationPaletteBounds(null);
+        return;
+      }
       const r = el.getBoundingClientRect();
       window.vcInternal.annotationPaletteBounds({ x: r.left, y: r.top, w: r.width, h: r.height });
     };
@@ -71,7 +82,32 @@ export function AnnotationApp() {
       clearTimeout(t);
       window.removeEventListener("resize", report);
     };
-  }, []);
+  }, [palPos, palHidden]);
+
+  // ── drag da paleta (fundo/grip; botões e controles não arrastam) ──────
+  const onPalPointerDown = (e: React.PointerEvent) => {
+    const t = e.target as HTMLElement;
+    if (t !== e.currentTarget && !t.dataset.grip) return;
+    const r = paletaRef.current?.getBoundingClientRect();
+    if (!r) return;
+    dragRef.current = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    // pass-through: mantém o mouse da janela ligado mesmo saindo do retângulo
+    void window.vcInternal.annotationMouse({ mouse: true, from: "drag" });
+  };
+  const onPalPointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    const r = paletaRef.current?.getBoundingClientRect();
+    if (!d || !r) return;
+    const x = Math.min(Math.max(8, e.clientX - d.dx), window.innerWidth - r.width - 8);
+    const y = Math.min(Math.max(8, e.clientY - d.dy), window.innerHeight - r.height - 8);
+    setPalPos({ x, y });
+  };
+  const onPalPointerUp = () => {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    void window.vcInternal.annotationMouse({ mouse: false, from: "drag" });
+  };
 
   const refold = () => {
     strokesRef.current = foldEvents(logRef.current).strokes;
@@ -159,6 +195,8 @@ export function AnnotationApp() {
         setPassThrough(false);
       } else if (cmd.type === "pass-through") {
         setPassThrough(cmd.on);
+      } else if (cmd.type === "palette") {
+        setPalHiddenS(!cmd.on);
       } else if (cmd.type === "capture") {
         void composite(cmd.id, cmd.frame);
       }
@@ -335,13 +373,15 @@ export function AnnotationApp() {
   const paleta = (
     <div
       ref={paletaRef}
+      onPointerDown={onPalPointerDown}
+      onPointerMove={onPalPointerMove}
+      onPointerUp={onPalPointerUp}
+      onPointerCancel={onPalPointerUp}
       onMouseEnter={() => void window.vcInternal.annotationMouse({ mouse: true, from: "palette" })}
       onMouseLeave={() => void window.vcInternal.annotationMouse({ mouse: false, from: "palette" })}
       style={{
         position: "fixed",
-        bottom: 48,
-        left: "50%",
-        transform: "translateX(-50%)",
+        ...(palPos ? { left: palPos.x, top: palPos.y } : { bottom: 48, left: "50%", transform: "translateX(-50%)" }),
         display: "flex",
         gap: 8,
         alignItems: "center",
@@ -352,6 +392,13 @@ export function AnnotationApp() {
         userSelect: "none",
       }}
     >
+      <div
+        data-grip="1"
+        title="segure para mover a paleta"
+        style={{ cursor: dragRef.current ? "grabbing" : "grab", font: "700 14px system-ui", color: "#6a6a78", padding: "0 2px" }}
+      >
+        ⠿
+      </div>
       <button style={btn(tool.tool === "laser" && !passThrough)} onClick={() => { setTool({ tool: "laser" }); void window.vcInternal.annotationMouse({ mouse: true, from: "draw", tool: "laser" }); }} title="Laser (Ctrl+Alt+L)">
         Laser
       </button>
@@ -416,6 +463,12 @@ export function AnnotationApp() {
       </button>
       <button style={btn(false)} onClick={() => void window.vcInternal.annotationEvent({ kind: "clear" }).then((ev) => { if (ev) { logRef.current.push(ev); refold(); } })} title="Limpar tudo (Ctrl+Alt+C)">
         Limpar
+      </button>
+      <button style={btn(false)} onClick={() => void window.vcInternal.annotationPrint()} title="Print da tela para frames/ (Ctrl+Alt+P)">
+        📷 Print
+      </button>
+      <button style={btn(false)} onClick={() => void window.vcInternal.annotationPaletteToggle()} title="Ocultar a paleta (Ctrl+Alt+H traz de volta)">
+        ⏷ ocultar
       </button>
       {!passThrough ? (
         <span style={{ color: "#7c4dff", font: "600 11px system-ui" }}>desenhando · Esc solta o mouse</span>

@@ -103,3 +103,38 @@ atalhos em uso real) só o mantenedor avalia — o resto está validado.
 - Paleta sempre-visível durante REC (WYSIWYG D2) — a paleta NÃO entra nos
   prints queimados (só frame+marcações), mas ENTRA no vídeo gravado (é janela
   na tela). Se incomodar no vídeo: esconder a paleta fora do hover (evolução).
+
+## Demandas do vídeo 2026-09-22 0933 + follow-up do mantenedor (implementado)
+
+A sessão `2026-09-22/0933-7329b0fb` (transcrita após o ASR hosted — ver
+RELATORIO-ASR-HOST.md) registrou 3 demandas; o mantenedor pediu 2 extras no
+mesmo dia. Tudo implementado e validado (fix 3 com E2E por log; 1, 2 e extras
+com build+suíte verdes e pass de uso a cargo do mantenedor):
+
+1. **"Quando eu clico no laser, meu mouse some"** — o renderer escondia o
+   cursor (`cursor:none`) no modo desenho com laser. Agora nenhuma ferramenta
+   esconde o mouse (crosshair em todas).
+2. **"Movimentar a janela de pintura como o indicativo de gravação"** — a
+   paleta ganhou grip `⠿` + drag por pointer events (clamp na tela). Como a
+   overlay é fullscreen, `-webkit-app-region` não serve (moveria a janela);
+   em pass-through o drag travou o mouse da janela ON via
+   `annotation:mouse from:"drag"` (poll do cursor congelado durante o arrasto)
+   e os bounds são re-reportados a cada movimento.
+3. **"Ao parar o vídeo ou a transcrição, a janela de pintura não sai"** —
+   vazamento REAL confirmado no log de 09:33: o `catch` do `toggleDitado`
+   (falha de ASR) não fazia detach — a overlay ficava presa. Fix: detach no
+   catch. No vídeo, blindagem extra: stop sem blob do recorder em 20s →
+   descarte + cleanup (senão `finalizeSession` nunca roda e o detach tampouco).
+   E2E: `--ditado-test` com `VOICECAST_ASR_URLS` morto → erro e `detach` 3ms
+   depois (13:26:50.381 → .384).
+4. **Ocultar a paleta (pedido do mantenedor)** — botão `⏷ ocultar` na paleta e
+   hotkey `Ctrl+Alt+H` (toggle pelo engine, estado único no main). Oculta,
+   reporta bounds `null` (hover do poll não liga o mouse) e o desenho segue
+   funcionando pelas hotkeys. Volta no próximo attach.
+5. **Print embutido na paleta (pedido do mantenedor)** — botão `📷 Print`
+   chama o mesmo caminho do `Ctrl+Alt+P` (frame sem marcações → `frames/`,
+   contagem `manual`).
+
+Validação de uso (drag, ocultar/mostrar, print, laser com mouse visível):
+pass de ~2 min do mantenedor — input sintético foi descartado nesse round
+(máquina em uso).
