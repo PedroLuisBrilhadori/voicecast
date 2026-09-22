@@ -464,7 +464,7 @@ export function AnnotationApp() {
       <button style={btn(false)} onClick={() => void window.vcInternal.annotationEvent({ kind: "redo" }).then((ev) => { if (ev) { logRef.current.push(ev); refold(); } })} title="Refazer (Ctrl+Shift+Z)">
         ↷
       </button>
-      <button style={btn(false)} onClick={() => void window.vcInternal.annotationEvent({ kind: "clear" }).then((ev) => { if (ev) { logRef.current.push(ev); refold(); } })} title="Limpar tudo (Ctrl+Alt+C)">
+      <button style={btn(false)} onClick={() => void window.vcInternal.annotationEvent({ kind: "clear" }).then((ev) => { if (ev) { logRef.current.push(ev); refold(); } })} title="Limpar tudo (Ctrl+Alt+C ou Ctrl+Alt+X)">
         Limpar
       </button>
       <button style={btn(false)} onClick={() => void window.vcInternal.annotationPrint()} title="Print da tela para frames/ (Ctrl+Alt+P)">

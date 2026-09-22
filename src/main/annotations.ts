@@ -40,7 +40,7 @@ const M_PRINTS = counter("voicecast_annotation_prints_total", "prints queimados 
 
 const AUTO_PRINT_DEBOUNCE_MS = 2000;
 const LASER_RECENT_MS = 1500; // lasers recentes entram no print queimado
-const HOTKEYS = ["Control+Alt+L", "Control+Alt+B", "Control+Alt+E", "Control+Alt+C", "Control+Alt+Space", "Control+Alt+P"];
+const HOTKEYS = ["Control+Alt+L", "Control+Alt+B", "Control+Alt+E", "Control+Alt+C", "Control+Alt+X", "Control+Alt+Space", "Control+Alt+P"];
 
 /** Engine de anotações — uma instância por processo (sessão corrente). */
 class AnnotationEngine {
@@ -332,6 +332,7 @@ class AnnotationEngine {
     reg("Control+Alt+B", () => this.cmdTool("brush"));
     reg("Control+Alt+E", () => this.cmdTool("eraser"));
     reg("Control+Alt+C", () => void this.record({ kind: "clear" }));
+    reg("Control+Alt+X", () => void this.record({ kind: "clear" })); // atalho extra (pedido do mantenedor)
     reg("Control+Alt+Space", () => this.setPassThrough(this.drawMode));
     reg("Control+Alt+P", () => void this.captureComposite("manual", false));
     reg("Control+Alt+H", () => this.togglePalette());

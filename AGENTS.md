@@ -66,7 +66,7 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
   overlay transparente com laser/pincel/borracha. Log vetorial
   `annotations.jsonl` por sessão (px físicos, t relativo — fonte da verdade;
   motor puro em `src/shared/annotations.ts`). Hotkeys `Ctrl+Alt+L/B/E/C`
-  ferramentas, `Ctrl+Alt+Espaço` desenho↔pass-through, `Ctrl+Alt+P` print.
+  ferramentas, `Ctrl+Alt+C` ou `Ctrl+Alt+X` limpar tudo, `Ctrl+Alt+Espaço` desenho↔pass-through, `Ctrl+Alt+P` print.
   `Ctrl+Alt+H` é global do app: sem painel aberto, abre o painel standalone
   (fora de sessão, com botão `✕ fechar` que descarta o rascunho); com painel,
   oculta/mostra a paleta. Gravação/ditado iniciados com o painel standalone
