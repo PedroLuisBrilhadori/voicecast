@@ -126,7 +126,7 @@ de tudo; AN.5 é independente e barato (pode andar junto com AN.3).
 - **Roubo de foco**: overlay nunca toma foco salvo em modo desenho ativo;
   atalhos globais, não locais.
 
-## Decisões (questionadas em 2026-09-22 — sem resposta; recomendações adotadas provisoriamente, trocáveis até o AN.1 começar)
+## Decisões FECHADAS pelo mantenedor (2026-09-22, confirmadas em questionário)
 
 1. **Marcações no vídeo: WYSIWYG** — saem no vídeo (D2 como escrito). Cursor do
    sistema não sai no capture; laser é o apontador. Queima em pós fica como
