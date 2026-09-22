@@ -7,6 +7,7 @@ import {
   type AnnotationCmd,
   type AnnotationEvent,
   type AnnotationEventRequest,
+  type AnnotationWheelRequest,
   type Bootstrap,
   type CaptureEvent,
   type PingRequest,
@@ -98,4 +99,6 @@ contextBridge.exposeInMainWorld("vcInternal", {
   annotationPrint: () => ipcRenderer.invoke(IPC.annotationPrint),
   annotationPaletteToggle: () => ipcRenderer.invoke(IPC.annotationPaletteToggle),
   annotationClose: () => ipcRenderer.invoke(IPC.annotationClose),
+  /** AN.6: roda no modo desenho — one-way (não há resposta esperada). */
+  annotationWheel: (req: AnnotationWheelRequest) => ipcRenderer.send(IPC.annotationWheel, req),
 });

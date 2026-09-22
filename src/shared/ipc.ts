@@ -79,6 +79,8 @@ export const IPC = {
   annotationPaletteToggle: "annotation:palette-toggle",
   /** Overlay standalone → main: fecha o painel (descarta o rascunho). */
   annotationClose: "annotation:close",
+  /** Overlay → main: roda do mouse em modo desenho (main repassa à janela de baixo — AN.6). */
+  annotationWheel: "annotation:wheel",
 } as const;
 
 export interface PingRequest {
@@ -182,6 +184,21 @@ export type AnnotationCmd =
   /** main capturou o frame (dataURL) — overlay compõe strokes/laser e devolve o PNG */
   | { type: "capture"; id: string; frame: string; label: string };
 
+/**
+ * Overlay → main: roda do mouse em modo desenho (AN.6). cx/cy são px FÍSICOS
+ * dentro do overlay (client × dpr, como os pontos de stroke); o resto é o
+ * WheelEvent DOM cru para o main mapear em WM_MOUSEWHEEL (shared/wheel).
+ */
+export interface AnnotationWheelRequest {
+  cx: number;
+  cy: number;
+  deltaY: number;
+  deltaMode: number;
+  ctrl: boolean;
+  shift: boolean;
+  buttons: number;
+}
+
 /** vcInternal completo (cada página interna usa o que precisa — um tipo só,
  *  declarado UMA vez aqui, senão os `declare global` de cada renderer colidem). */
 export interface VcInternalBridge {
@@ -197,6 +214,8 @@ export interface VcInternalBridge {
   annotationPrint: () => Promise<{ ok: boolean }>;
   annotationPaletteToggle: () => Promise<{ ok: boolean }>;
   annotationClose: () => Promise<{ ok: boolean }>;
+  /** AN.6: roda no modo desenho (fire-and-forget — main injeta WM_MOUSEWHEEL na janela de baixo). */
+  annotationWheel: (req: AnnotationWheelRequest) => void;
 }
 
 /** Superfície exposta ao renderer via contextBridge (window.voicecast). */

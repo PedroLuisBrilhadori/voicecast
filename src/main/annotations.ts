@@ -23,6 +23,13 @@ import { logError, logInfo } from "./logging";
 import type { SessionDirs } from "./storage";
 import { counter } from "./telemetry";
 import { dist, wireLogging } from "./windows";
+import { forwardWheelNative, hwndFromWindow, windowExStyle } from "./native-wheel";
+import {
+  osWheelDelta,
+  packWheelLParam,
+  packWheelWParam,
+  screenPointFromOverlay,
+} from "../shared/wheel";
 import {
   applyEvent,
   emptyState,
@@ -33,14 +40,14 @@ import {
   type Pt,
   type StrokeSnapshot,
 } from "../shared/annotations";
-import { IPC, type AnnotationCmd, type AnnotationEventRequest } from "../shared/ipc";
+import { IPC, type AnnotationCmd, type AnnotationEventRequest, type AnnotationWheelRequest } from "../shared/ipc";
 
 const M_EVENTS = counter("voicecast_annotation_events_total", "eventos de anotação por tipo");
 const M_PRINTS = counter("voicecast_annotation_prints_total", "prints queimados por kind");
 
 const AUTO_PRINT_DEBOUNCE_MS = 2000;
 const LASER_RECENT_MS = 1500; // lasers recentes entram no print queimado
-const HOTKEYS = ["Control+Alt+L", "Control+Alt+B", "Control+Alt+E", "Control+Alt+C", "Control+Alt+X", "Control+Alt+Space", "Control+Alt+P"];
+const HOTKEYS = ["Control+Alt+G", "Control+Alt+B", "Control+Alt+E", "Control+Alt+C", "Control+Alt+X", "Control+Alt+Space", "Control+Alt+P"];
 
 /** Engine de anotações — uma instância por processo (sessão corrente). */
 class AnnotationEngine {
@@ -289,6 +296,10 @@ class AnnotationEngine {
     w.setIgnoreMouseEvents(passThrough, { forward: true });
     w.setFocusable(!passThrough);
     if (!passThrough) w.focus();
+    // pista do "congelamento": exstyle por modo (LAYERED derrubado no desenho
+    // pode fazer apps de baixo serem tratados como ocluídos)
+    const ex = process.platform === "win32" ? windowExStyle(w) : null;
+    logInfo(`anotações: exstyle=0x${ex === null ? "?" : ex.toString(16)} (${passThrough ? "pass-through" : "desenho"})`);
     const cmd: AnnotationCmd = { type: "pass-through", on: passThrough };
     w.webContents.send(IPC.annotationCmd, cmd);
   }
@@ -322,13 +333,39 @@ class AnnotationEngine {
     this.cmdTool(tool ?? this.tool);
   }
 
+  /**
+   * AN.6 — roda do mouse em modo desenho: injeta WM_MOUSEWHEEL na janela DE
+   * BAIXO do cursor (o overlay engole o wheel e o Electron não repassa).
+   * Ativo em todo o modo desenho (qualquer ferramenta); em pass-through a roda
+   * já é do app de baixo (janela fora do hit-test) — nada a fazer aqui.
+   */
+  forwardWheel(req: AnnotationWheelRequest): void {
+    const w = this.overlay;
+    if (!w || w.isDestroyed() || !this.drawMode || process.platform !== "win32") return;
+    const hwnd = hwndFromWindow(w);
+    if (hwnd === null) return;
+    const b = w.getContentBounds();
+    const sf = screen.getDisplayMatching(b).scaleFactor;
+    const pt = screenPointFromOverlay(b, sf, req.cx, req.cy);
+    const orig = screenPointFromOverlay(b, sf, 0, 0); // posição física p/ restaurar
+    const wparam = packWheelWParam({
+      delta: osWheelDelta(req),
+      ctrl: req.ctrl,
+      shift: req.shift,
+      buttons: req.buttons,
+    });
+    forwardWheelNative(hwnd, pt.x, pt.y, orig.x, orig.y, wparam, packWheelLParam(pt.x, pt.y));
+  }
+
   private registerHotkeys(): void {
     if (this.hotkeysOn) return; // painel standalone adotado: já registradas
     this.hotkeysOn = true;
     const reg = (accel: string, fn: () => void) => {
       if (!globalShortcut.register(accel, fn)) logError(`anotações: hotkey ${accel} indisponível`);
     };
-    reg("Control+Alt+L", () => this.cmdTool("laser"));
+    // laser no G (decisão do mantenedor 2026-09-22: cluster todo na metade
+    // esquerda — mão direita fora do teclado)
+    reg("Control+Alt+G", () => this.cmdTool("laser"));
     reg("Control+Alt+B", () => this.cmdTool("brush"));
     reg("Control+Alt+E", () => this.cmdTool("eraser"));
     reg("Control+Alt+C", () => void this.record({ kind: "clear" }));
@@ -555,5 +592,9 @@ export function registerAnnotationIpc(): void {
   ipcMain.handle(IPC.annotationClose, () => {
     annotations.closeStandalone();
     return { ok: true };
+  });
+  /** AN.6: roda em modo desenho → WM_MOUSEWHEEL na janela de baixo (one-way). */
+  ipcMain.on(IPC.annotationWheel, (_e, req: AnnotationWheelRequest) => {
+    annotations.forwardWheel(req);
   });
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { IPC, type Bootstrap, type PingRequest, type PingResponse } from "../src/shared/ipc";
+import {
+  IPC,
+  type AnnotationWheelRequest,
+  type Bootstrap,
+  type PingRequest,
+  type PingResponse,
+} from "../src/shared/ipc";
 
 /**
  * O contrato é a superfície entre main/preload/renderer. Se alguém renomear
@@ -11,6 +17,7 @@ describe("contrato IPC", () => {
     expect(IPC.ping).toBe("app:ping");
     expect(IPC.getBootstrap).toBe("app:get-bootstrap");
     expect(IPC.getVersion).toBe("app:get-version");
+    expect(IPC.annotationWheel).toBe("annotation:wheel"); // AN.6 scroll-through
   });
 
   it("payloads serializáveis (sem funções nos tipos de dados)", () => {
@@ -18,6 +25,28 @@ describe("contrato IPC", () => {
     const res: PingResponse = { nonce: 1, at: Date.now() };
     expect(JSON.parse(JSON.stringify(req))).toEqual(req);
     expect(JSON.parse(JSON.stringify(res))).toEqual(res);
+  });
+
+  it("AnnotationWheelRequest serializável e completo (AN.6)", () => {
+    const wheel: AnnotationWheelRequest = {
+      cx: 612,
+      cy: 459,
+      deltaY: 100,
+      deltaMode: 0,
+      ctrl: false,
+      shift: false,
+      buttons: 0,
+    };
+    expect(JSON.parse(JSON.stringify(wheel))).toEqual(wheel);
+    expect(Object.keys(wheel).sort()).toEqual([
+      "buttons",
+      "ctrl",
+      "cx",
+      "cy",
+      "deltaMode",
+      "deltaY",
+      "shift",
+    ]);
   });
 
   it("Bootstrap bem formado", () => {

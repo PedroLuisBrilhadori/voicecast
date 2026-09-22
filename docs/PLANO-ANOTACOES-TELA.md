@@ -75,7 +75,7 @@ nenhum print — o automático só existe quando o usuário marcou algo.
 
 | Ferramenta | Comportamento |
 |---|---|
-| **Laser** (L) | Ponteiro com rastro que some (~600ms) para apontar no vídeo; caminho persistido no log como evento próprio (contexto de atenção) |
+| **Laser** (G) | Ponteiro com rastro que some (~600ms) para apontar no vídeo; caminho persistido no log como evento próprio (contexto de atenção) |
 | **Pincel** (B) | Freehand; 4 cores (vermelho, amarelo, verde, ciano) × 3 espessuras; stroke vetorial |
 | **Borracha — modo traço** (E) | Remove o stroke inteiro tocado (hit-test no log) |
 | **Borracha — modo normal** (E·duplo) | Apaga por proximidade: divide/remove segmentos dentro do raio |
@@ -84,8 +84,10 @@ nenhum print — o automático só existe quando o usuário marcou algo.
 
 Paleta compacta sempre-visível durante REC (irmã da barra REC, canto):
 tools, cores, espessura, undo/redo, indicador do modo (desenho/pass-through).
-Atalhos globais durante REC: `Ctrl+Alt+L/B/E/C` ferramentas, `Ctrl+Alt+Espaço`
-alterna desenho↔pass-through (proposta — ver aberto nº 2).
+Atalhos globais durante REC: `Ctrl+Alt+G/B/E/C` ferramentas, `Ctrl+Alt+Espaço`
+alterna desenho↔pass-through (proposta — ver aberto nº 2). Laser mudou de
+`Ctrl+Alt+L` para `Ctrl+Alt+G` (mantenedor, 2026-09-22: cluster inteiro na
+metade esquerda — mão direita fora do teclado).
 
 ## Print no modo transcrição (AN.5)
 
@@ -131,9 +133,14 @@ semântico das marcações via Jev (score de relevância por trecho).
   `frames/print-*.png`; **auto-print queimado** quando anota em modo
   somente-transcrição (D7). Aceite: print aparece no contexto da sessão do
   ditado; anotar no ditado sem print manual produz ao menos 1 print queimado.
+- **AN.6 — Scroll-through**: no modo desenho a roda do mouse é repassada à
+  janela de baixo (koffi/user32: `WM_MOUSEWHEEL` na `WindowFromPoint` do
+  ponto, overlay desviado via `SetWindowPos` off-screen no instante da
+  consulta). Aceite: página real rola com o laser ativo; Ctrl+roda mantém
+  zoom; pass-through inalterado.
 
-Sequência: AN.1 → AN.2 → AN.3 → (AN.4 com E3) → AN.5. AN.1/AN.2 são a base
-de tudo; AN.5 é independente e barato (pode andar junto com AN.3).
+Sequência: AN.1 → AN.2 → AN.3 → (AN.4 com E3) → AN.5 → AN.6. AN.1/AN.2 são a
+base de tudo; AN.5 é independente e barato (pode andar junto com AN.3).
 
 ## Riscos e contramedidas
 
@@ -152,7 +159,8 @@ de tudo; AN.5 é independente e barato (pode andar junto com AN.3).
 1. **Marcações no vídeo: WYSIWYG** — saem no vídeo (D2 como escrito). Cursor do
    sistema não sai no capture; laser é o apontador. Queima em pós fica como
    evolução futura via log vetorial.
-2. **Atalhos: os propostos** — `Ctrl+Alt+L/B/E/C` ferramentas,
+2. **Atalhos: os propostos** — `Ctrl+Alt+G/B/E/C` ferramentas (laser mudou de
+   L para G em 2026-09-22, mão esquerda),
    `Ctrl+Alt+Espaço` desenho↔pass-through, `Ctrl+Alt+P` print,
    `Ctrl+Z`/`Ctrl+Shift+Z` histórico.
 3. **Paleta fixa** — 4 cores (vermelho, amarelo, verde, ciano) × 3 espessuras;

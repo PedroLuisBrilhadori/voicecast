@@ -158,3 +158,44 @@ de ocultar/exibir funcionar fora de transcrição/gravação":
 - Detalhe de TS: `open()` não pode referenciar `this.overlay` depois do
   early-return (narrowing para `null` ignora a mutação de `createOverlay()`)
   — send do cmd de modo isolado em `sendMode()`.
+
+## AN.6 — Scroll-through (roda do mouse no modo desenho) + laser Ctrl+Alt+G (2026-09-22)
+
+Pedidos do mantenedor: no modo desenho (laser/pincel/borracha) a roda do mouse
+morria no overlay (a página embaixo não rolava) e, ao rolar, a tela "parecia
+congelar". E o laser `Ctrl+Alt+L` fica na metade direita do teclado.
+
+**Causa raiz (duas, descobertas no wheeltest)**:
+
+1. Em modo desenho o overlay é uma janela OS normal cobrindo a tela — o
+   hit-test do Windows entrega a roda a ele e ninguém tratava
+   (`forward:true` do Electron só cobre mousemove). Fix: renderer escuta
+   `wheel` → IPC `annotation:wheel` → main injeta `WM_MOUSEWHEEL` via
+   **koffi/user32** na janela DE BAIXO do ponto.
+2. O repost inicial caía **no próprio overlay**: `WindowFromPoint` devolvia o
+   HWND **filho** do overlay (Chrome_RenderWidgetHostHWND), e o toggle de
+   `WS_EX_TRANSPARENT` não o exclui do hit-test — janela Electron é
+   `WS_EX_NOREDIRECTIONBITMAP`, **não layered** (skip por estilo exige
+   `WS_EX_LAYERED`). Cada roda voltava ao overlay → rajada de eventos =
+   "congelamento". Fix definitivo: `SetWindowPos` empurra o overlay para fora
+   da tela por um instante (sem tocar em foco/z/estilo), `WindowFromPoint`
+   acha a janela real, e volta — tudo síncrono na mesma chamada. Segurança
+   anti-loop: compara `GetAncestor(GA_ROOT)` do alvo com a raiz do overlay.
+   `Ctrl+roda`/`Shift+roda` seguem (MK_* no wParam); janela elevada (UIPI)
+   ignora o post silenciosamente (fail-soft).
+
+**Atalho**: laser `Ctrl+Alt+L` → **`Ctrl+Alt+G`** (decisão do mantenedor:
+cluster todo na metade esquerda — mão direita fora do teclado). Demais
+atalhos inalterados (B/E/C/X/Espaço/P/H já são da esquerda).
+
+**Arquivos**: `src/shared/wheel.ts` (motor puro: delta/wParam/lParam, 9
+testes), `src/main/native-wheel.ts` (koffi lazy, fail-soft fora do Windows),
+canal `annotation:wheel` (ipc + preload), listener no `AnnotationApp`
+(fora do React onWheel — passive), smoke `--wheeltest` (invisível).
+
+**Validação**: ci local (typecheck + 55 testes + build); cadeia IPC→user32
+exercitada no host (post=true, alvo confirmado por log). **Pass humano
+pendente**: rolar uma página real com o laser ativo. Rodadas de teste que
+congelaram/deram `TypeError 7 vs 4 args` no host foram builds intermediários
+misturados pelo robocopy durante boot — resolvido com restart; se voltar,
+sempre reiniciar o app APÓS o `dev:win` (scripts/ensure-app-win.ps1).

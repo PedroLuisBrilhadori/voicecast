@@ -284,6 +284,26 @@ export function AnnotationApp() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // ── AN.6: roda no modo desenho → main repassa à janela de baixo ───────
+  // Fora do React (onWheel do root é passive): precisa de preventDefault.
+  useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      if (passThroughRef.current) return; // pass-through: a roda já é do app de baixo
+      e.preventDefault();
+      window.vcInternal.annotationWheel({
+        cx: Math.round(e.clientX * DPR),
+        cy: Math.round(e.clientY * DPR),
+        deltaY: e.deltaY,
+        deltaMode: e.deltaMode,
+        ctrl: e.ctrlKey,
+        shift: e.shiftKey,
+        buttons: e.buttons,
+      });
+    };
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => window.removeEventListener("wheel", onWheel);
+  }, []);
+
   // ── pointer (modo desenho) ────────────────────────────────────────────
   const toPhysical = (e: React.PointerEvent): Pt => ({
     x: Math.round(e.clientX * DPR),
@@ -402,7 +422,7 @@ export function AnnotationApp() {
       >
         ⠿
       </div>
-      <button style={btn(tool.tool === "laser" && !passThrough)} onClick={() => { setTool({ tool: "laser" }); void window.vcInternal.annotationMouse({ mouse: true, from: "draw", tool: "laser" }); }} title="Laser (Ctrl+Alt+L)">
+      <button style={btn(tool.tool === "laser" && !passThrough)} onClick={() => { setTool({ tool: "laser" }); void window.vcInternal.annotationMouse({ mouse: true, from: "draw", tool: "laser" }); }} title="Laser (Ctrl+Alt+G)">
         Laser
       </button>
       <button style={btn(tool.tool === "brush" && !passThrough)} onClick={() => { setTool({ tool: "brush" }); void window.vcInternal.annotationMouse({ mouse: true, from: "draw", tool: "brush" }); }} title="Pincel (Ctrl+Alt+B)">

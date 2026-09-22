@@ -3,7 +3,7 @@
  *
  * Atalhos: Ctrl+F9 painel · Ctrl+Shift+F9 gravar tela cheia · Ctrl+M marker (só durante REC)
  */
-import { app, BrowserWindow, globalShortcut, ipcMain } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, screen } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { registerAnnotationIpc, annotations } from "./annotations";
@@ -325,6 +325,58 @@ if (!gotLock) {
         }, 90_000);
       }, 3000);
     }
+
+    // AN.6 — scroll-through (INVISÍVEL: sem janelas novas). O alvo da roda é
+    // o próprio picker visível. Valida: bridge no renderer → IPC → user32
+    // (WindowFromPoint acha alvo != overlay, PostMessage ok). O efeito final
+    // (app de baixo rolar) é verificado no pass humano.
+    if (process.argv.includes("--wheeltest")) {
+      setTimeout(async () => {
+        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+        const { annotations } = await import("./annotations.js");
+        annotations.attach("session", Date.now(), null);
+        await sleep(2500); // overlay carregar (inicia em pass-through)
+        annotations.enterDrawMode("brush"); // modo desenho: overlay captura a roda
+        await sleep(500);
+        const overlay = BrowserWindow.getAllWindows().find((w) =>
+          w.webContents.getURL().includes("annotation.html"),
+        );
+        if (!overlay) {
+          logError("[wheeltest] overlay não encontrada");
+          app.exit(1);
+          return;
+        }
+        const bridge = await overlay.webContents.executeJavaScript(
+          "typeof window.vcInternal?.annotationWheel",
+        );
+        // contador de wheels que CHEGAM no renderer (cresce sem envio = repost loop)
+        await overlay.webContents.executeJavaScript(
+          "window.__wheelN = 0; window.addEventListener('wheel', () => window.__wheelN++, {passive: false}); 0",
+        );
+        const wheelCount = () => overlay.webContents.executeJavaScript("window.__wheelN");
+        const wins = BrowserWindow.getAllWindows().map((w) => ({
+          hwnd: w.getNativeWindowHandle().readBigUInt64LE(0),
+          page: (w.webContents.getURL().split("/").pop() ?? "?").slice(0, 30),
+          visivel: w.isVisible(),
+        }));
+        logInfo(`[wheeltest] bridge=${bridge} janelas=${JSON.stringify(wins)}`);
+        // 3 rajadas p/ baixo no centro da tela (sendInputEvent inverte o sinal)
+        overlay.webContents.sendInputEvent({ type: "mouseWheel", x: 450, y: 400, deltaX: 0, deltaY: -200 });
+        await sleep(300);
+        overlay.webContents.sendInputEvent({ type: "mouseWheel", x: 450, y: 400, deltaX: 0, deltaY: -200 });
+        await sleep(300);
+        overlay.webContents.sendInputEvent({ type: "mouseWheel", x: 450, y: 400, deltaX: 0, deltaY: -200 });
+        await sleep(400);
+        const n1 = await wheelCount(); // fim das rajadas
+        await sleep(1000);
+        const n2 = await wheelCount(); // 1s depois: se cresceu sem envio → loop
+        logInfo(`[wheeltest] wheelsDOM fim=${n1} +1s=${n2} (loop se n2 >> n1)`);
+        await annotations.detach(null);
+        app.exit(bridge === "function" && n1 > 0 && n2 <= n1 + 5 ? 0 : 1);
+      }, 3000);
+    }
+
+    // gancho de teste determinístico: ditado F9 start→6s→stop sem tecla física.
 
     // gancho de teste determinístico: ditado F9 start→6s→stop sem tecla física.
     // Determinístico com VOICECAST_DITADO_FAKE_TEXT (pula o ASR); sem o env,
