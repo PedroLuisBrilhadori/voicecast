@@ -196,7 +196,9 @@ export async function transcribeAndStore(dir: string, name: string): Promise<boo
     writeMeta(dirs.meta, { ...m, ...p });
   };
   patch({ transcriptStatus: "pending" });
-  const health = await asrHealth();
+  // espera o host do ASR abrir a porta (spawn no boot do app leva segundos —
+  // sem isso, --transcribe na cold start perde a corrida e marca sem-asr)
+  const health = await asrHealth({ waitMs: 30_000 });
   if (!health.ok) {
     logError("ASR fora do ar — transcrição ficará pendente (retranscreva depois)");
     patch({ transcriptStatus: "sem-asr" });

@@ -32,6 +32,7 @@ import { ensureLayout } from "./storage";
 import { initLogging, logError, logInfo } from "./logging";
 import { registerDitadoHotkey, claimHotkey, toggleDitado } from "./ditado";
 import { initTelemetry } from "./telemetry";
+import { ensureAsrHost, stopAsrHost } from "./asr-host";
 import {
   asrHealth,
 } from "./asr";
@@ -185,6 +186,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     logInfo("whenReady: registrando IPC/atalhos…");
+    void ensureAsrHost(); // backend de transcrição (spawn+supervisão) — o modelo carrega em background
     registerAnnotationIpc();
     // telemetria DEPOIS do probe do daemon: o import do SDK OTel bloqueia o
     // event loop por alguns segundos e faria o probe de 2s expirar à toa
@@ -374,6 +376,7 @@ if (!gotLock) {
   app.on("will-quit", () => {
     globalShortcut.unregisterAll();
     void claimHotkey(false); // devolve o F9 ao daemon
+    stopAsrHost(); // derruba o serviço python que subimos
   });
 
   // fechar janela ≠ sair (o app vive nos atalhos globais)

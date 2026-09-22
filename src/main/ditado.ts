@@ -171,22 +171,37 @@ async function stopCaptureWindow(): Promise<void> {
 // unicode. Mesmo comportamento do F9 antigo, literalmente o mesmo código.
 
 function voicePython(): string | null {
-  const py = path.join(
-    process.env.LOCALAPPDATA ?? "",
-    "voice-dictation",
-    ".venv",
-    "Scripts",
-    "python.exe",
-  );
-  return fs.existsSync(py) ? py : null;
+  // backend do voicecast primeiro; legado voice-dictation como fallback
+  const local = process.env.LOCALAPPDATA ?? "";
+  const candidates = [
+    path.join(local, "voicecast", "asr-backend", ".venv", "Scripts", "python.exe"),
+    path.join(local, "voice-dictation", ".venv", "Scripts", "python.exe"),
+  ];
+  return candidates.find((p) => fs.existsSync(p)) ?? null;
 }
 
 function voiceSrc(): string {
-  return path.join(process.env.LOCALAPPDATA ?? "", "voice-dictation", "src");
+  const local = process.env.LOCALAPPDATA ?? "";
+  const backend = path.join(local, "voicecast", "asr-backend", "src");
+  return fs.existsSync(backend)
+    ? backend
+    : path.join(local, "voice-dictation", "src");
+}
+
+function pythonEnv(): NodeJS.ProcessEnv {
+  // VOICE_APP_DIR alinha app_dir() do python à raiz de dados do backend
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  const backendDir = path.join(process.env.LOCALAPPDATA ?? "", "voicecast", "asr-backend");
+  if (fs.existsSync(backendDir)) env.VOICE_APP_DIR = backendDir;
+  return env;
 }
 
 function spawnHidden(cmd: string, args: string[]) {
-  return spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+  return spawn(cmd, args, {
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+    env: pythonEnv(),
+  });
 }
 
 async function captureForegroundHwnd(): Promise<number> {

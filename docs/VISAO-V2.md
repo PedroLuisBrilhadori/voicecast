@@ -13,7 +13,7 @@ conhecerem.
 |---|---|
 | Daemon Python + painel :8700 | **Aposentado gradualmente** — o app Electron assume a UI e a captura |
 | F9 ditado → ASR → cola na janela focada | **F9 vira atalho do voicecast**: ditado é um modo de captura (mic-only, sem vídeo) — mesma barra, mesma biblioteca, colagem na janela focada mantida |
-| ASR :8701 (faster-whisper local) | **Permanece como serviço compartilhado** — o voicecast só consome a API (nada de whisper embutido) |
+| ASR :8701 (faster-whisper local) | **Hosted pelo voicecast** (desde 2026-09-22): o app spawna e supervisiona o serviço python vendorizado (`asr-backend/`) — o acesso continua via HTTP `:8701`, mas o runtime agora é nosso. Aposentado o serviço compartilhado do voice-dictation. |
 | Dataset de treino (`datasets/raw` + `transcriptions`, correções no painel, export JSONL) | **Evolução natural**: o voicecast passa a ler/escrever o mesmo layout de dataset (mesmo schema de `words`/`corrections`) — correções e histórico de treino continuam valendo; ditados e sessões convergem num único corpo de dados |
 
 ### Por quê

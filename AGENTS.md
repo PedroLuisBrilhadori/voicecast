@@ -21,6 +21,8 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 | `src/shared/paths.ts` | Helpers puros (WSL path, nomes de sessão) — testáveis |
 | `src/main/` | Processo principal: janelas, atalhos globais, captura, ffmpeg, storage |
 | `src/main/storage.ts` | Único lugar que monta path de dados (`%LOCALAPPDATA%\voicecast`) |
+| `asr-backend/` | Serviço ASR python vendorizado (faster-whisper/FastAPI) — subset do voice; patch `VOICE_APP_DIR` no `platform/common.py` |
+| `src/main/asr-host.ts` | Supervisor do backend: spawn + health + respawn (lógica pura em `src/shared/asr-host-logic.ts`) |
 | `src/main/jev.ts` | Jev (TypeSafe) no app — julgamento fail-soft do F9 e da sessão (Etapa 2 do PLANO-JEV-CU) |
 | `src/main/jev-questions.ts` | Perguntas/limiares Jev — arquivo único revisável; não editar sem rodar o smoke |
 | `src/shared/annotations.ts` | Motor PURO das anotações (fold do log, undo/redo, borracha 2 modos) — sem electron |
@@ -41,8 +43,13 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 - Handoff para agentes: prints + clipes + transcript (o `Read` do agente tem
   limite de 30MB — vídeo cru longo não é entregável).
 - Coordenadas de região/janela em **px físicos** (tela está em scale 1.53).
-- ASR: sempre via HTTP `:8701` (failover de URLs, padrão asr_router) — nada de
-  embutir whisper aqui.
+- ASR: cliente HTTP `:8701` com failover de URLs (src/main/asr.ts) **e host do
+  serviço** — `src/main/asr-host.ts` spawna/supervisiona o python vendorizado
+  em `asr-backend/` (instalação: `scripts/setup-asr-backend.ps1`, dados em
+  `%LOCALAPPDATA%\voicecast\asr-backend`, log em `logs/asr-backend.log`).
+  Nunca duplica serviço que já responde na porta. Kill-switch:
+  `VOICECAST_ASR_HOST=0`; com `VOICECAST_ASR_URLS`/`VOICE_ASR_URLS`
+  configurado, usa o externo e não hospeda.
 - **Jev (Etapa 2)**: F9 roteia a intenção ANTES de colar — comando pro agente,
   anotação e conversa (conf ≥ 0.9) NÃO são colados na janela focada; a barra
   mostra o desfecho. Sessão finalizada ganha `meta.json.jev` (rota, relevância,

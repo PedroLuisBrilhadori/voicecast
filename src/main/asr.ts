@@ -44,14 +44,22 @@ function asrUrls(): { name: string; url: string }[] {
     });
 }
 
-export async function asrHealth(): Promise<{ ok: boolean; source?: string }> {
-  for (const ep of asrUrls()) {
-    try {
-      const r = await fetch(`${ep.url}/health`, { signal: AbortSignal.timeout(3000) });
-      if (r.ok) return { ok: true, source: ep.name };
-    } catch {}
+export async function asrHealth(opts?: {
+  /** Espera o host subir antes de desistir (warmup do spawn: a porta abre
+   *  em segundos; o load do modelo continua em background no serviço). */
+  waitMs?: number;
+}): Promise<{ ok: boolean; source?: string }> {
+  const deadline = Date.now() + (opts?.waitMs ?? 0);
+  for (;;) {
+    for (const ep of asrUrls()) {
+      try {
+        const r = await fetch(`${ep.url}/health`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok) return { ok: true, source: ep.name };
+      } catch {}
+    }
+    if (Date.now() >= deadline) return { ok: false };
+    await new Promise((res) => setTimeout(res, 1000));
   }
-  return { ok: false };
 }
 
 /** Extrai o áudio do mp4 da sessão para wav 16k mono (padrão do uniscraper/asr.ts). */
