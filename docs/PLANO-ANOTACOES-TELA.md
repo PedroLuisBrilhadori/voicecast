@@ -20,11 +20,12 @@ estado, undo/redo, render de PNG queimado, resumo para o agente.
 
 ```jsonl
 {"t":132.4,"seq":18,"type":"stroke","tool":"brush","color":"#ff4444","width":4,"points":[[x,y,ms],…]}
-{"t":140.1,"seq":19,"type":"erase","mode":"stroke","target":17}
-{"t":141.0,"seq":20,"type":"erase","mode":"area","points":[[x,y],…],"radius":12}
-{"t":150.0,"seq":21,"type":"clear"}
-{"t":152.2,"seq":22,"type":"undo"}
-{"t":155.0,"seq":23,"type":"redo"}
+{"t":133.9,"seq":19,"type":"laser","points":[[x,y,ms],…]}   // rastro visual efêmero, CAMINHO persistido (decisão do mantenedor)
+{"t":140.1,"seq":20,"type":"erase","mode":"stroke","target":17}
+{"t":141.0,"seq":21,"type":"erase","mode":"area","points":[[x,y],…],"radius":12}
+{"t":150.0,"seq":22,"type":"clear"}
+{"t":152.2,"seq":23,"type":"undo"}
+{"t":155.0,"seq":24,"type":"redo"}
 {"t":160.0,"type":"marker","id":3,"frame":"frames/marker-3.png","strokes":[15,17,18]}
 ```
 
@@ -35,9 +36,13 @@ sistema NÃO sai no capture do desktopCapturer — o **laser é O jeito de apont
 no vídeo**. Alternativa (vídeo limpo + marcação só para o usuário) exige
 queimar em pós via log vetorial — fica como evolução, não v1 (ver aberto nº 1).
 
-**D3 — Laser é efêmero.** Rastro com fade (~600ms), não entra no `annotations.jsonl`
-(por padrão; flag `VOICECAST_LASER_LOG` futura p/ dataset de atenção). O que
-fica do laser é o print queimado do marker, se estiver ativo no momento.
+**D3 — Laser: visual efêmero, histórico persistido** (decisão do mantenedor,
+2026-09-22). O rastro some da tela (~600ms de fade), mas o **caminho fica no
+`annotations.jsonl` como qualquer ferramenta** — o contexto sabe QUE a
+atenção foi apontada e ONDE: `{"type":"laser","points":[…]}`. Cada "passada"
+de laser = 1 evento com o caminho simplificado (decimação de pontos para não
+inflar o log). No print queimado do marker, o laser entra se estiver ativo no
+instante.
 
 **D4 — Overlay desenha OU deixa passar; nunca os dois.** Dois modos:
 **desenho** (overlay captura o mouse e desenha) e **pass-through**
@@ -58,7 +63,7 @@ timestamp; com isso ele vira o "olhe aqui" do agente (GLM lê PNG nativamente).
 
 | Ferramenta | Comportamento |
 |---|---|
-| **Laser** (L) | Ponteiro com rastro que some (~600ms); para apontar no vídeo; efêmero |
+| **Laser** (L) | Ponteiro com rastro que some (~600ms) para apontar no vídeo; caminho persistido no log como evento próprio (contexto de atenção) |
 | **Pincel** (B) | Freehand; 4 cores (vermelho, amarelo, verde, ciano) × 3 espessuras; stroke vetorial |
 | **Borracha — modo traço** (E) | Remove o stroke inteiro tocado (hit-test no log) |
 | **Borracha — modo normal** (E·duplo) | Apaga por proximidade: divide/remove segmentos dentro do raio |
@@ -83,7 +88,7 @@ marker, sem strokes.)
 `buildContext` passa a incluir:
 
 ```
-Marcações: 4 (pincel 02:13, borracha 02:20, pincel 04:51, clear 05:02) — vetoriais com timestamps em annotations.jsonl
+Marcações: 6 (laser 01:40 · pincel 02:13 · borracha 02:20 · laser 04:30 · pincel 04:51 · clear 05:02) — vetoriais com timestamps em annotations.jsonl
 Prints c/ marcação: frames/marker-2.png · frames/marker-3.png
 ```
 
@@ -121,13 +126,15 @@ de tudo; AN.5 é independente e barato (pode andar junto com AN.3).
 - **Roubo de foco**: overlay nunca toma foco salvo em modo desenho ativo;
   atalhos globais, não locais.
 
-## Decisões em aberto (mantenedor)
+## Decisões (questionadas em 2026-09-22 — sem resposta; recomendações adotadas provisoriamente, trocáveis até o AN.1 começar)
 
-1. **Marcações no vídeo** — WYSIWYG (recomendo; simples e o vídeo conta a
-   história) vs. vídeo limpo + queima em pós via log (mais trabalho, mais
-   "produção").
-2. **Atalhos** — `Ctrl+Alt+L/B/E/C/P` + `Ctrl+Z/Y` batem com algo no seu uso?
-   Alternativa: segurar tecla modificadora para desenhar (momentâneo).
-3. **Paleta** — 4 cores × 3 espessuras fixas bastam? (customização fica p/ v2)
-4. **Print na transcrição** — confirme o escopo: no F9 (ditado) E na sessão
-   REC, certo? Ou só no ditado?
+1. **Marcações no vídeo: WYSIWYG** — saem no vídeo (D2 como escrito). Cursor do
+   sistema não sai no capture; laser é o apontador. Queima em pós fica como
+   evolução futura via log vetorial.
+2. **Atalhos: os propostos** — `Ctrl+Alt+L/B/E/C` ferramentas,
+   `Ctrl+Alt+Espaço` desenho↔pass-through, `Ctrl+Alt+P` print,
+   `Ctrl+Z`/`Ctrl+Shift+Z` histórico.
+3. **Paleta fixa** — 4 cores (vermelho, amarelo, verde, ciano) × 3 espessuras;
+   customização fica para v2.
+4. **Print: ditado E sessão em REC** — `Ctrl+Alt+P` anexa à sessão corrente em
+   ambos os modos.
