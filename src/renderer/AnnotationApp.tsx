@@ -488,7 +488,7 @@ export function AnnotationApp() {
         onPointerUp={() => void onUp()}
         onPointerCancel={() => void onUp()}
       />
-      {paleta}
+      {!palHidden && paleta}
     </div>
   );
 }
