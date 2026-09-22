@@ -52,16 +52,26 @@ export function App() {
     return off;
   }, []);
 
-  const refreshSources = useCallback(() => {
+  const refreshScreens = useCallback(() => {
     window.voicecast.listSources("screen").then(setScreens).catch(console.error);
+  }, []);
+  const refreshWindows = useCallback(() => {
     window.voicecast.listSources("window").then(setWindows).catch(console.error);
   }, []);
 
   useEffect(() => {
-    refreshSources();
-    const iv = setInterval(refreshSources, 2500);
+    refreshScreens();
+  }, [refreshScreens]);
+
+  // Janelas: previews ao vivo SÓ com a tab delas aberta — cada tick de
+  // getSources captura TODAS as janelas do desktop (main a ~25% de CPU com o
+  // app parado quando isso rodava a cada 2.5s incondicionalmente).
+  useEffect(() => {
+    if (tab !== "window") return;
+    refreshWindows();
+    const iv = setInterval(refreshWindows, 2500);
     return () => clearInterval(iv);
-  }, [refreshSources]);
+  }, [tab, refreshWindows]);
 
   const start = useCallback(
     async (req: Omit<StartRecordingRequest, "withMic">) => {

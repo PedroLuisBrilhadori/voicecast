@@ -112,13 +112,21 @@ export function AnnotationApp() {
 
   const refold = () => {
     strokesRef.current = foldEvents(logRef.current).strokes;
+    kickRef.current();
   };
 
-  // ── render loop (strokes + em-andamento + lasers com fade) ────────────
+  // ── render loop (SOB DEMANDA — overlay parado custa ~0% CPU) ──────────
+  // rAF só fica agendado enquanto há o que animar (laser com fade, traço/
+  // borracha em andamento). Mudanças pontuais (stroke commitado, undo,
+  // sync do main, resize) pedem UM frame via kick().
+  const kickRef = useRef<() => void>(() => {});
   useEffect(() => {
     let raf = 0;
+    let scheduled = false;
     const draw = () => {
+      scheduled = false;
       const cv = canvasRef.current;
+      let animated = false;
       if (cv) {
         const ctx = cv.getContext("2d")!;
         ctx.clearRect(0, 0, cv.width, cv.height);
@@ -155,6 +163,7 @@ export function AnnotationApp() {
         // lasers: trail com fade (rastro: segmentos com alpha decrescente)
         lasersRef.current = lasersRef.current.filter((l) => now - l.at < LASER_FADE_MS);
         for (const l of lasersRef.current) {
+          animated = true; // fade em curso → próxima frame
           const age = (now - l.at) / LASER_FADE_MS;
           if (l.points.length >= 2) {
             drawStroke({ points: l.points }, Math.max(0, 1 - age), "#ff2d2d", 5);
@@ -169,10 +178,24 @@ export function AnnotationApp() {
         }
         ctx.globalAlpha = 1;
       }
-      raf = requestAnimationFrame(draw);
+      if (drawingRef.current) animated = true;
+      if (animated) {
+        scheduled = true;
+        raf = requestAnimationFrame(draw);
+      }
     };
-    raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
+    kickRef.current = () => {
+      if (!scheduled) {
+        scheduled = true;
+        raf = requestAnimationFrame(draw);
+      }
+    };
+    kickRef.current();
+    return () => {
+      if (scheduled) cancelAnimationFrame(raf);
+      scheduled = false;
+      kickRef.current = () => {};
+    };
   }, []);
 
   // ── canvas sizing (px físicos — CSS cobre a tela inteira) ─────────────
@@ -182,6 +205,7 @@ export function AnnotationApp() {
       if (!cv) return;
       cv.width = Math.round(window.innerWidth * DPR);
       cv.height = Math.round(window.innerHeight * DPR);
+      kickRef.current(); // resize limpa o canvas — repinta o estado
     };
     fit();
     window.addEventListener("resize", fit);
@@ -320,6 +344,7 @@ export function AnnotationApp() {
     e.preventDefault();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     drawingRef.current = [toPhysical(e)];
+    kickRef.current();
   };
 
   const onMove = (e: React.PointerEvent) => {
@@ -330,6 +355,7 @@ export function AnnotationApp() {
     const last = cur[cur.length - 1]!;
     if (Math.hypot(p.x - last.x, p.y - last.y) < 2) return; // throttle 2px
     cur.push(p);
+    kickRef.current();
     if (toolRef.current.tool === "laser") {
       // trail vivo: renasce a cada movimento (fade conta desde o último ponto)
       const alive = lasersRef.current[lasersRef.current.length - 1];
@@ -342,6 +368,7 @@ export function AnnotationApp() {
   const onUp = async () => {
     const cur = drawingRef.current;
     drawingRef.current = null;
+    kickRef.current();
     if (!cur || cur.length < 2) return;
     const t = toolRef.current;
     if (t.tool === "brush") {
