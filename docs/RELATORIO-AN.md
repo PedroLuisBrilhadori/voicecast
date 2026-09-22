@@ -179,7 +179,7 @@ congelar". E o laser `Ctrl+Alt+L` fica na metade direita do teclado.
    `WS_EX_LAYERED`). Cada roda voltava ao overlay → rajada de eventos =
    "congelamento". Fix definitivo: `SetWindowPos` empurra o overlay para fora
    da tela por um instante (sem tocar em foco/z/estilo), `WindowFromPoint`
-   acha a janela real, e volta — tudo síncrono na mesma chamada. Segurança
+   acha a janela real, e volta — tudo síncrono; **uma vez por RAJADA de roda** (volta 150ms após a última — mover por evento forçava recomposição do DWM dezenas de vezes/s e engasgava o mouse; confirmado pelo mantenedor). Segurança
    anti-loop: compara `GetAncestor(GA_ROOT)` do alvo com a raiz do overlay.
    `Ctrl+roda`/`Shift+roda` seguem (MK_* no wParam); janela elevada (UIPI)
    ignora o post silenciosamente (fail-soft).
