@@ -182,7 +182,10 @@ export type AnnotationCmd =
   | { type: "palette"; on: boolean }
   | { type: "mode"; standalone: boolean }
   /** main capturou o frame (dataURL) — overlay compõe strokes/laser e devolve o PNG */
-  | { type: "capture"; id: string; frame: string; label: string };
+  | { type: "capture"; id: string; frame: string; label: string }
+  /** evento gravado direto no main (ex.: limpar via Ctrl+Alt+C/X) — o overlay
+   *  replica no fold local (sem isso, canvas e main desincronizam). */
+  | { type: "sync"; ev: AnnotationEvent };
 
 /**
  * Overlay → main: roda do mouse em modo desenho (AN.6). cx/cy são px FÍSICOS

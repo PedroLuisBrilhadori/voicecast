@@ -389,7 +389,7 @@ class AnnotationEngine {
 
   // ── eventos ─────────────────────────────────────────────────────────
 
-  record(req: AnnotationEventRequest): AnnotationEvent | null {
+  record(req: AnnotationEventRequest, fromRenderer = false): AnnotationEvent | null {
     if (!this.overlay) return null;
     this.seq += 1;
     const t = +((Date.now() - this.startedAt) / 1000).toFixed(2);
@@ -427,6 +427,12 @@ class AnnotationEngine {
     this.events.push(ev);
     applyEvent(this.state, ev);
     if (this.dirs) this.appendJsonl(ev);
+    // Evento que NÃO veio do overlay (ex.: limpar via Ctrl+Alt+C/X) precisa
+    // chegar ao fold do renderer — sem isso o canvas continua desenhando o
+    // que o main já limpou, e o clear seguinte sai com snapshots vazio.
+    if (!fromRenderer) {
+      this.overlay.webContents.send(IPC.annotationCmd, { type: "sync", ev } satisfies AnnotationCmd);
+    }
     M_EVENTS?.add(1, { tipo: ev.type });
     // D7: rajada de anotação no modo somente-transcrição agenda print
     if (this.kind === "ditado" && (ev.type === "stroke" || ev.type === "laser")) {
@@ -560,7 +566,7 @@ export const annotations = new AnnotationEngine();
 
 /** Contexto do overlay precisa vir pelo IPC (main é a fonte do estado). */
 export function registerAnnotationIpc(): void {
-  ipcMain.handle(IPC.annotationEvent, (_e, req: AnnotationEventRequest) => annotations.record(req));
+  ipcMain.handle(IPC.annotationEvent, (_e, req: AnnotationEventRequest) => annotations.record(req, true));
   ipcMain.handle(
     IPC.annotationMouse,
     (_e, req: { mouse: boolean; from: "palette" | "esc" | "draw" | "drag"; tool?: AnnotationTool }) => {

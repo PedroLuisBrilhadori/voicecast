@@ -186,3 +186,36 @@ describe("determinismo do replay", () => {
     expect(incremental).toEqual(foldEvents(events));
   });
 });
+
+describe("clear (AN: desync main↔overlay)", () => {
+  it("clear com snapshots corretos limpa tudo", () => {
+    const strokes = [
+      { id: "1", color: "#ff4444", width: 4, points: [pt(0, 0), pt(10, 0)] },
+      { id: "2", color: "#ffd60a", width: 4, points: [pt(0, 10), pt(10, 10)] },
+    ];
+    const s = foldEvents([
+      strokeEvent(1, "1", [pt(0, 0), pt(10, 0)]),
+      strokeEvent(2, "2", [pt(0, 10), pt(10, 10)]),
+      { t: 3, seq: 3, type: "clear", snapshots: strokes },
+    ]);
+    expect(s.strokes).toEqual([]);
+  });
+
+  it("clear com snapshots VAZIO não limpa (assinatura do desync: main limpou antes e devolveu snapshots=[])", () => {
+    const s = foldEvents([
+      strokeEvent(1, "1", [pt(0, 0), pt(10, 0)]),
+      { t: 2, seq: 2, type: "clear", snapshots: [] },
+    ]);
+    expect(s.strokes).toHaveLength(1);
+  });
+
+  it("undo após clear restaura os strokes (snapshots são o histórico)", () => {
+    const strokes = [{ id: "1", color: "#ff4444", width: 4, points: [pt(0, 0), pt(10, 0)] }];
+    const s = foldEvents([
+      strokeEvent(1, "1", [pt(0, 0), pt(10, 0)]),
+      { t: 2, seq: 2, type: "clear", snapshots: strokes },
+      { t: 3, seq: 3, type: "undo" },
+    ]);
+    expect(s.strokes).toHaveLength(1);
+  });
+});

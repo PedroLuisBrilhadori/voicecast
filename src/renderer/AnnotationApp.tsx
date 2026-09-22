@@ -202,6 +202,10 @@ export function AnnotationApp() {
         setStandaloneS(cmd.standalone);
       } else if (cmd.type === "capture") {
         void composite(cmd.id, cmd.frame);
+      } else if (cmd.type === "sync") {
+        // evento gravado direto no main (limpar via hotkey) — replica no fold
+        logRef.current.push(cmd.ev);
+        refold();
       }
     });
     return off;
