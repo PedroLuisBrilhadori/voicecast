@@ -66,10 +66,14 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
   overlay transparente com laser/pincel/borracha. Log vetorial
   `annotations.jsonl` por sessão (px físicos, t relativo — fonte da verdade;
   motor puro em `src/shared/annotations.ts`). Hotkeys `Ctrl+Alt+L/B/E/C`
-  ferramentas, `Ctrl+Alt+Espaço` desenho↔pass-through, `Ctrl+Alt+P` print,
-  `Ctrl+Alt+H` oculta/mostra a paleta. Paleta móvel pelo grip `⠿` (funciona
+  ferramentas, `Ctrl+Alt+Espaço` desenho↔pass-through, `Ctrl+Alt+P` print.
+  `Ctrl+Alt+H` é global do app: sem painel aberto, abre o painel standalone
+  (fora de sessão, com botão `✕ fechar` que descarta o rascunho); com painel,
+  oculta/mostra a paleta. Gravação/ditado iniciados com o painel standalone
+  aberto o ADOTAM (overlay e traços preservados — entram no jsonl da sessão).
+  Paleta móvel pelo grip `⠿` (funciona
   até em pass-through — IPC `annotation:mouse from:"drag"` congela o poll do
-  cursor); botões `📷 Print` (mesmo caminho do Ctrl+Alt+P) e `⏷ ocultar`;
+  cursor); botão `📷 Print` (mesmo caminho do Ctrl+Alt+P);
   nenhuma ferramenta esconde o cursor do mouse (laser inclusive).
   `Ctrl+Z`/`Ctrl+Shift+Z` só com a overlay em modo desenho (nunca global).
   Marker (`Ctrl+M`) e rajada de anotação no ditado geram prints queimados em

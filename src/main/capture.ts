@@ -239,8 +239,9 @@ export async function startRecording(req: StartRecordingRequest): Promise<{ ok: 
     registerMarkerShortcut();
 
     // AN.1: overlay de anotações junto com a barra (WYSIWYG — D2); o dir só
-    // existe no stop → log/prints em buffer até o detach
-    annotations.attach("session", startedAt, null);
+    // existe no stop → log/prints em buffer até o detach. Painel standalone
+    // aberto antes? É adotado (traços pré-REC entram na sessão).
+    annotations.beginSession("session", startedAt);
 
     // preview periódico p/ a barra (thumb leve da tela ativa)
     previewTimer = setInterval(async () => {

@@ -40,7 +40,7 @@ const M_PRINTS = counter("voicecast_annotation_prints_total", "prints queimados 
 
 const AUTO_PRINT_DEBOUNCE_MS = 2000;
 const LASER_RECENT_MS = 1500; // lasers recentes entram no print queimado
-const HOTKEYS = ["Control+Alt+L", "Control+Alt+B", "Control+Alt+E", "Control+Alt+C", "Control+Alt+Space", "Control+Alt+P", "Control+Alt+H"];
+const HOTKEYS = ["Control+Alt+L", "Control+Alt+B", "Control+Alt+E", "Control+Alt+C", "Control+Alt+Space", "Control+Alt+P"];
 
 /** Engine de anotações — uma instância por processo (sessão corrente). */
 class AnnotationEngine {
@@ -68,6 +68,9 @@ class AnnotationEngine {
   private dragging = false;
   /** Paleta visível (mantenedor 2026-09-22: ocultar sem encerrar a sessão). */
   private paletteOn = true;
+  /** Painel aberto fora de sessão (Ctrl+Alt+H) — rascunho adotável pelo REC. */
+  private standalone = false;
+  private hotkeysOn = false;
 
   get active(): boolean {
     return this.overlay !== null;
@@ -86,9 +89,69 @@ class AnnotationEngine {
     this.bufferedPrints = [];
     this.recentLasers = [];
     this.paletteOn = true;
+    this.standalone = false;
     this.createOverlay();
     this.registerHotkeys();
+    this.sendMode();
     logInfo(`anotações: attach (${kind}${dirs ? "" : ", dir no stop"})`);
+  }
+
+  /**
+   * Sessão/ditado começa: se o painel standalone já está aberto, é ADOTADO
+   * (overlay e eventos preservados — traços pré-REC entram no jsonl; t segue
+   * contando da abertura do painel, sem negativos). Senão, attach novo.
+   */
+  beginSession(kind: "session" | "ditado", startedAt: number): void {
+    if (this.overlay && this.standalone) {
+      this.standalone = false;
+      this.kind = kind;
+      this.dirs = null;
+      this.sendMode();
+      logInfo(`anotações: painel standalone adotado pela sessão (${kind})`);
+      return;
+    }
+    this.attach(kind, startedAt, null);
+  }
+
+  /** Estado standalone → overlay (método à parte: evita narrowing do TS). */
+  private sendMode(): void {
+    this.overlay?.webContents.send(IPC.annotationCmd, { type: "mode", standalone: this.standalone } satisfies AnnotationCmd);
+  }
+
+  /** Painel standalone (fora de sessão) — Ctrl+Alt+H sem overlay ativa. */
+  open(): void {
+    if (this.overlay) {
+      this.togglePalette();
+      return;
+    }
+    this.standalone = true;
+    this.kind = "session";
+    this.startedAt = Date.now();
+    this.dirs = null;
+    this.events = [];
+    this.state = emptyState();
+    this.seq = 0;
+    this.bufferedPrints = [];
+    this.recentLasers = [];
+    this.paletteOn = true;
+    this.createOverlay();
+    this.registerHotkeys();
+    this.sendMode();
+    logInfo("anotações: painel standalone aberto (Ctrl+Alt+H)");
+  }
+
+  /** ✕ da paleta standalone: fecha e descarta o rascunho. */
+  closeStandalone(): void {
+    if (this.overlay && this.standalone) void this.detach();
+  }
+
+  /** Ctrl+Alt+H — global do app: sem painel abre; com painel alterna paleta. */
+  onPaletteHotkey(): void {
+    if (!this.overlay) {
+      this.open();
+      return;
+    }
+    this.togglePalette();
   }
 
   /** Para a sessão de anotações. dirs = no ditado, o dir criado no stop. */
@@ -100,7 +163,10 @@ class AnnotationEngine {
       this.autoPrintTimer = null;
       await this.fireAutoPrint();
     }
-    for (const a of HOTKEYS) globalShortcut.unregister(a);
+    for (const a of HOTKEYS) {
+      if (this.hotkeysOn) globalShortcut.unregister(a);
+    }
+    this.hotkeysOn = false;
     this.stopCursorPoll();
     if (this.overlay && !this.overlay.isDestroyed()) this.overlay.destroy();
     this.overlay = null;
@@ -257,6 +323,8 @@ class AnnotationEngine {
   }
 
   private registerHotkeys(): void {
+    if (this.hotkeysOn) return; // painel standalone adotado: já registradas
+    this.hotkeysOn = true;
     const reg = (accel: string, fn: () => void) => {
       if (!globalShortcut.register(accel, fn)) logError(`anotações: hotkey ${accel} indisponível`);
     };
@@ -481,6 +549,10 @@ export function registerAnnotationIpc(): void {
   });
   ipcMain.handle(IPC.annotationPaletteToggle, () => {
     annotations.togglePalette();
+    return { ok: true };
+  });
+  ipcMain.handle(IPC.annotationClose, () => {
+    annotations.closeStandalone();
     return { ok: true };
   });
 }

@@ -97,4 +97,5 @@ contextBridge.exposeInMainWorld("vcInternal", {
     ipcRenderer.send(IPC.annotationPalette, rect),
   annotationPrint: () => ipcRenderer.invoke(IPC.annotationPrint),
   annotationPaletteToggle: () => ipcRenderer.invoke(IPC.annotationPaletteToggle),
+  annotationClose: () => ipcRenderer.invoke(IPC.annotationClose),
 });

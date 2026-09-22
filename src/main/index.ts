@@ -6,7 +6,7 @@
 import { app, BrowserWindow, globalShortcut, ipcMain } from "electron";
 import fs from "node:fs";
 import path from "node:path";
-import { registerAnnotationIpc } from "./annotations";
+import { registerAnnotationIpc, annotations } from "./annotations";
 import {
   IPC,
   type Bootstrap,
@@ -211,6 +211,11 @@ if (!gotLock) {
     globalShortcut.register("Control+Shift+F9", () => {
       void recordFullscreen();
     });
+    // Ctrl+Alt+H é global do app (não só com overlay ativa): sem painel abre o
+    // painel standalone (fora de sessão); com painel, oculta/mostra a paleta
+    if (!globalShortcut.register("Control+Alt+H", () => annotations.onPaletteHotkey())) {
+      logError("Ctrl+Alt+H não pôde ser registrado");
+    }
 
     // Ditado F9 (v2): só assume o F9 se o daemon suportar hold (patch novo)
     // ou não existir. Daemon velho (sem endpoint) → F9 fica com ele.

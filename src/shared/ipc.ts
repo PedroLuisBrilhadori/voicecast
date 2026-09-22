@@ -77,6 +77,8 @@ export const IPC = {
   annotationPrint: "annotation:print",
   /** Overlay → main: alterna paleta visível/oculta (botão ↔ Ctrl+Alt+H). */
   annotationPaletteToggle: "annotation:palette-toggle",
+  /** Overlay standalone → main: fecha o painel (descarta o rascunho). */
+  annotationClose: "annotation:close",
 } as const;
 
 export interface PingRequest {
@@ -176,6 +178,7 @@ export type AnnotationCmd =
   | { type: "tool"; tool: AnnotationTool; eraserMode?: EraserMode }
   | { type: "pass-through"; on: boolean }
   | { type: "palette"; on: boolean }
+  | { type: "mode"; standalone: boolean }
   /** main capturou o frame (dataURL) — overlay compõe strokes/laser e devolve o PNG */
   | { type: "capture"; id: string; frame: string; label: string };
 
@@ -193,6 +196,7 @@ export interface VcInternalBridge {
   annotationPaletteBounds: (rect: { x: number; y: number; w: number; h: number } | null) => void;
   annotationPrint: () => Promise<{ ok: boolean }>;
   annotationPaletteToggle: () => Promise<{ ok: boolean }>;
+  annotationClose: () => Promise<{ ok: boolean }>;
 }
 
 /** Superfície exposta ao renderer via contextBridge (window.voicecast). */

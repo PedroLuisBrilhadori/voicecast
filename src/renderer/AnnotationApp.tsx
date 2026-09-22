@@ -51,6 +51,7 @@ export function AnnotationApp() {
   const [palPos, setPalPos] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ dx: number; dy: number } | null>(null);
   const [palHidden, setPalHiddenS] = useState(false);
+  const [standalone, setStandaloneS] = useState(false);
 
   const setTool = (patch: Partial<Tool>) => {
     toolRef.current = { ...toolRef.current, ...patch };
@@ -197,6 +198,8 @@ export function AnnotationApp() {
         setPassThrough(cmd.on);
       } else if (cmd.type === "palette") {
         setPalHiddenS(!cmd.on);
+      } else if (cmd.type === "mode") {
+        setStandaloneS(cmd.standalone);
       } else if (cmd.type === "capture") {
         void composite(cmd.id, cmd.frame);
       }
@@ -470,6 +473,11 @@ export function AnnotationApp() {
       <button style={btn(false)} onClick={() => void window.vcInternal.annotationPaletteToggle()} title="Ocultar a paleta (Ctrl+Alt+H traz de volta)">
         ⏷ ocultar
       </button>
+      {standalone && (
+        <button style={btn(false)} onClick={() => void window.vcInternal.annotationClose()} title="Fechar o painel (descarta as anotações do rascunho)">
+          ✕ fechar
+        </button>
+      )}
       {!passThrough ? (
         <span style={{ color: "#7c4dff", font: "600 11px system-ui" }}>desenhando · Esc solta o mouse</span>
       ) : (

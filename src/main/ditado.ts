@@ -283,8 +283,9 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
     });
     startDitadoBar();
     // AN: overlay de anotação também no ditado (modo somente-transcrição) —
-    // anotar dispara print queimado automático (D7); buffer até o dir existir
-    annotations.attach("ditado", ditadoStartedAt, null);
+    // anotar dispara print queimado automático (D7); buffer até o dir existir.
+    // Painel standalone aberto antes? É adotado (traços pré-ditado entram).
+    annotations.beginSession("ditado", ditadoStartedAt);
     broadcast({ type: "ditado-state", phase: "recording" });
     const cap = await startCapture();
     if (!cap.ok) {

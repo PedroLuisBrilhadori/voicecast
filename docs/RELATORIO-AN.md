@@ -138,3 +138,23 @@ com build+suíte verdes e pass de uso a cargo do mantenedor):
 Validação de uso (drag, ocultar/mostrar, print, laser com mouse visível):
 pass de ~2 min do mantenedor — input sintético foi descartado nesse round
 (máquina em uso).
+
+## Painel standalone (2026-09-22, pedido do mantenedor)
+
+"Seria legal poder abrir o painel antes de iniciar uma gravação, e o atalho
+de ocultar/exibir funcionar fora de transcrição/gravação":
+
+- **Ctrl+Alt+H virou global do app** (registro no `whenReady`, fora da lista
+  de hotkeys por-sessão): sem overlay → abre o **painel standalone**; com
+  overlay → oculta/mostra a paleta (como já fazia em sessão).
+- Painel standalone = anotação como rascunho, sem sessão. Botão `✕ fechar`
+  na paleta fecha e descarta. `Ctrl+Alt+H` de novo oculta/mostra; o painel
+  também serve para preparar o desenho ANTES de gravar.
+- **Adoção**: `beginSession` (capture.ts e ditado.ts) — se o painel
+  standalone está aberto quando REC/ditado começa, a sessão o adota: overlay
+  não é recriada, eventos/seq preservados, traços pré-REC entram no
+  `annotations.jsonl` (t continua contando da abertura do painel, sem
+  negativos). Hotkeys não são re-registradas (guarda `hotkeysOn`).
+- Detalhe de TS: `open()` não pode referenciar `this.overlay` depois do
+  early-return (narrowing para `null` ignora a mutação de `createOverlay()`)
+  — send do cmd de modo isolado em `sendMode()`.
