@@ -23,6 +23,8 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 | `src/main/storage.ts` | Único lugar que monta path de dados (`%LOCALAPPDATA%\voicecast`) |
 | `src/main/jev.ts` | Jev (TypeSafe) no app — julgamento fail-soft do F9 e da sessão (Etapa 2 do PLANO-JEV-CU) |
 | `src/main/jev-questions.ts` | Perguntas/limiares Jev — arquivo único revisável; não editar sem rodar o smoke |
+| `src/shared/annotations.ts` | Motor PURO das anotações (fold do log, undo/redo, borracha 2 modos) — sem electron |
+| `src/main/annotations.ts` | Engine das anotações: overlay, hotkeys, jsonl, auto-print (D7), marker queimado (D6) |
 | `src/preload/` | Ponte contextBridge — só expõe o contrato |
 | `src/renderer/` | React 19 (picker, overlay de região, barra REC, editor, biblioteca) |
 | `tests/` | Vitest (contrato, paths, storage, jev) |
@@ -53,6 +55,14 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
   (F9 start→6s→stop; determinístico com `VOICECAST_DITADO_FAKE_TEXT`) e
   `--autotest` (grava 8s e sai) + `--transcribe=DIR/NOME` (transcreve+julga e
   sai). Rotina de validação no Windows documentada em docs/RELATORIO-E2.md.
+- **Anotações em tela (AN — PLANO-ANOTACOES-TELA)**: durante REC e no ditado,
+  overlay transparente com laser/pincel/borracha. Log vetorial
+  `annotations.jsonl` por sessão (px físicos, t relativo — fonte da verdade;
+  motor puro em `src/shared/annotations.ts`). Hotkeys `Ctrl+Alt+L/B/E/C`
+  ferramentas, `Ctrl+Alt+Espaço` desenho↔pass-through, `Ctrl+Alt+P` print;
+  `Ctrl+Z`/`Ctrl+Shift+Z` só com a overlay em modo desenho (nunca global).
+  Marker (`Ctrl+M`) e rajada de anotação no ditado geram prints queimados em
+  `frames/` (composite frame+marcações). Smoke determinístico: `--anotest`.
 - **React/react-dom devem ficar na MESMA versão exata** (ex.: 19.2.7 +
   19.2.7) — minors diferentes (^19) resolveram 19.2.7/19.3.0 e quebraram a
   barra em runtime (React error #527, silencioso no build).

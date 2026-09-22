@@ -220,11 +220,7 @@ declare global {
     vcPause: (p: boolean) => void;
     vcRecordDictation: () => Promise<{ ok: boolean; error?: string }>;
     vcStopDictation: () => Promise<void>;
-    vcInternal: {
-      micLevel: (level: number) => void;
-      sendBlob: (ch: string, payload: { b64: string; ext: string }) => void;
-      sendRegion: (ch: string, rect: unknown) => void;
-    };
+    vcInternal: import("../shared/ipc").VcInternalBridge;
   }
 }
 

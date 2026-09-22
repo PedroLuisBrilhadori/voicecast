@@ -19,6 +19,7 @@ import {
   type StartRecordingRequest,
 } from "../shared/ipc";
 import { sessionDirName } from "../shared/paths";
+import { annotations } from "./annotations";
 import { sessionDirs, sessionsRoot } from "./storage";
 import { resolveFfmpeg, runFfmpeg, type Ffmpeg } from "./ffmpeg";
 import { logError, logInfo } from "./logging";
@@ -140,6 +141,7 @@ async function finalizeSession(input: FinishInput): Promise<void> {
       error: String(e),
     });
     emit({ type: "session-error", message: `remux falhou: ${String(e)}` });
+    void annotations.detach(dirs); // dir existe com meta de erro — anotações ficam
     cleanupAfterStop();
     return;
   }
@@ -160,6 +162,8 @@ async function finalizeSession(input: FinishInput): Promise<void> {
   logInfo(`sessão finalizada: ${dir}/${name} (${(sizeBytes / 1_048_576).toFixed(1)}MB)`);
   M_SESSIONS?.add(1, { mode });
   H_FINALIZE?.record((Date.now() - t0) / 1000);
+  // anotações: persiste log+prints agora que o dir existe (flush antes do done)
+  await annotations.detach(dirs);
   emit({ type: "session-done", dir, name, mp4: dirs.mp4 });
   cleanupAfterStop();
   });
@@ -234,6 +238,10 @@ export async function startRecording(req: StartRecordingRequest): Promise<{ ok: 
     startBar(req.mode);
     registerMarkerShortcut();
 
+    // AN.1: overlay de anotações junto com a barra (WYSIWYG — D2); o dir só
+    // existe no stop → log/prints em buffer até o detach
+    annotations.attach("session", startedAt, null);
+
     // preview periódico p/ a barra (thumb leve da tela ativa)
     previewTimer = setInterval(async () => {
       try {
@@ -266,6 +274,7 @@ export async function cancelRecording(): Promise<{ ok: boolean }> {
   if (recorderWin && !recorderWin.isDestroyed()) {
     await recorderWin.webContents.executeJavaScript("window.vcCancel()", true).catch(() => {});
   }
+  void annotations.detach(); // cancelado: sessão não será salva, buffer descartado
   cleanupAfterStop();
   return { ok: true };
 }
@@ -274,6 +283,8 @@ export async function addMarker(): Promise<{ ok: boolean }> {
   if (state.phase !== "recording" || !state.startedAt) return { ok: false };
   state.markers.push(Date.now());
   emit({ type: "state", state: { ...state } });
+  // D6: marker vira âncora de contexto — print com as marcações queimadas
+  void annotations.marker(state.markers.length);
   return { ok: true };
 }
 

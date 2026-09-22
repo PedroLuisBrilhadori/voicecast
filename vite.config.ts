@@ -15,6 +15,7 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, "src/renderer/index.html"),
         overlay: path.resolve(__dirname, "src/renderer/overlay.html"),
+        annotation: path.resolve(__dirname, "src/renderer/annotation.html"),
         bar: path.resolve(__dirname, "src/renderer/bar.html"),
         recorder: path.resolve(__dirname, "src/renderer/recorder.html"),
         editor: path.resolve(__dirname, "src/renderer/editor.html"),

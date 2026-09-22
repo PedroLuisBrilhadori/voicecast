@@ -16,8 +16,10 @@ const webPrefs = {
   backgroundThrottling: false,
 };
 
+export { dist, preload, webPrefs };
+
 /** Manda console/crash do renderer para o log do main. */
-function wireLogging(w: BrowserWindow, tag: string): void {
+export function wireLogging(w: BrowserWindow, tag: string): void {
   const { logInfo, logError } = require("./logging") as typeof import("./logging");
   w.webContents.on("console-message", (_e, level, message, line, sourceId) => {
     logInfo(`[${tag} renderer] ${message} (${sourceId}:${line})`);

@@ -4,11 +4,7 @@ import type { Rect } from "../shared/ipc";
 declare global {
   interface Window {
     voicecast: import("../shared/ipc").VoicecastBridge;
-    vcInternal: {
-      micLevel: (l: number) => void;
-      sendBlob: (ch: string, p: { b64: string; ext: string }) => void;
-      sendRegion: (ch: string, rect: unknown) => void;
-    };
+    vcInternal: import("../shared/ipc").VcInternalBridge;
   }
 }
 

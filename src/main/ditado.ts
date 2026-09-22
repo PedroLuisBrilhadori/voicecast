@@ -18,6 +18,8 @@ import path from "node:path";
 import { Buffer } from "node:buffer";
 import { IPC, type CaptureEvent } from "../shared/ipc";
 import { decidePaste, judgeDictation } from "./jev";
+import { annotations } from "./annotations";
+import { sessionDirs } from "./storage";
 
 const M_DICTATIONS = counter("voicecast_dictations_total", "ditados por status");
 const H_TRANSCRIBE = histogram("voicecast_transcribe_seconds", "duração da transcrição ASR");
@@ -265,6 +267,9 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
       logInfo(`ditado: alvo da colagem hwnd=${h}`);
     });
     startDitadoBar();
+    // AN: overlay de anotação também no ditado (modo somente-transcrição) —
+    // anotar dispara print queimado automático (D7); buffer até o dir existir
+    annotations.attach("ditado", ditadoStartedAt, null);
     broadcast({ type: "ditado-state", phase: "recording" });
     const cap = await startCapture();
     if (!cap.ok) {
@@ -318,15 +323,19 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
         const acao = decidePaste(j);
 
         // v2: ditado com fala vira sessão de áudio na biblioteca; silêncio descarta
+        let saved: { dir: string; name: string } | null = null;
         if (text) {
           try {
-            saveDictationSession(startedAt, payload.ext, payload.b64, t, j);
+            saved = saveDictationSession(startedAt, payload.ext, payload.b64, t, j);
           } catch (e) {
             logError("ditado: falhou ao salvar histórico:", e);
           }
         } else {
           logInfo("ditado: nada reconhecido — não salva histórico");
         }
+        // anotações do ditado: persiste log + prints queimados na sessão salva
+        // (flush do auto-print pendente acontece ANTES de fechar a overlay)
+        await annotations.detach(saved ? sessionDirs(saved.dir, saved.name) : null);
 
         if (text && acao.paste) {
           await pasteToFocused(text, ditadoHwnd);

@@ -4,6 +4,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
   IPC,
+  type AnnotationCmd,
+  type AnnotationEvent,
+  type AnnotationEventRequest,
   type Bootstrap,
   type CaptureEvent,
   type PingRequest,
@@ -68,4 +71,25 @@ contextBridge.exposeInMainWorld("vcInternal", {
     if (!channel.startsWith("region:result:")) throw new Error("canal não autorizado");
     ipcRenderer.send(channel, rect);
   },
+  // ── overlay de anotações (AN.1/AN.2) ─────────────────────────
+  /** Cria um evento de anotação — main atribui seq/t/ids e devolve o evento. */
+  annotationEvent: (req: AnnotationEventRequest): Promise<AnnotationEvent | null> =>
+    ipcRenderer.invoke(IPC.annotationEvent, req),
+  /** Comandos do main: ferramenta, modo pass-through, captura p/ composite. */
+  onAnnotationCmd: (cb: (cmd: AnnotationCmd) => void) => {
+    const h = (_e: unknown, cmd: AnnotationCmd) => cb(cmd);
+    ipcRenderer.on(IPC.annotationCmd, h);
+    return () => ipcRenderer.removeListener(IPC.annotationCmd, h);
+  },
+  /** PNG queimado (b64) devolvendo uma captura pedida pelo main. */
+  sendComposite: (id: string, b64: string) =>
+    ipcRenderer.send(IPC.annotationComposite, { id, b64 }),
+  /** Mouse da janela: paleta hover (temporário) ou ESC (sai do modo desenho). */
+  annotationMouse: (req: { mouse: boolean; from: "palette" | "esc" }) =>
+    ipcRenderer.invoke(IPC.annotationMouse, req),
+  /** Strokes/lasers ativos (sendSync — só no caminho do print). */
+  annotationContext: (): {
+    strokes: import("../shared/annotations").StrokeSnapshot[];
+    lasers: { at: number; points: import("../shared/annotations").Pt[] }[];
+  } => ipcRenderer.sendSync(IPC.annotationContext),
 });

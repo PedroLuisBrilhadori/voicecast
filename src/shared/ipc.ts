@@ -7,6 +7,15 @@
  * - Toda mudança aqui precisa refletir em src/preload/index.ts e ser testada
  *   em tests/ipc-contract.test.ts.
  */
+import type {
+  AnnotationEvent,
+  AnnotationTool,
+  EraserMode,
+  Pt,
+  StrokeSnapshot,
+} from "./annotations";
+
+export type { AnnotationEvent, AnnotationTool, EraserMode, Pt, StrokeSnapshot };
 
 export const IPC = {
   ping: "app:ping",
@@ -50,6 +59,18 @@ export const IPC = {
   openEditor: "library:open-editor",
   ditadoToggle: "ditado:toggle",
   asrStatus: "library:asr-status",
+
+  // ── anotações em tela (AN.1/AN.2 — PLANO-ANOTACOES-TELA) ─────
+  /** Overlay → main: evento de anotação (main atribui seq/t, persiste e devolve). */
+  annotationEvent: "annotation:event",
+  /** Main → overlay: comandos (tool, modo pass-through, captura p/ composite). */
+  annotationCmd: "annotation:cmd",
+  /** Overlay → main: PNG queimado resultante de uma captura (b64). */
+  annotationComposite: "annotation:composite",
+  /** Overlay → main: controle de mouse da janela (paleta hover / ESC sai do desenho). */
+  annotationMouse: "annotation:mouse",
+  /** Overlay → main (sync): strokes/lasers ativos p/ compor o print. */
+  annotationContext: "annotation:context",
 } as const;
 
 export interface PingRequest {
@@ -130,6 +151,39 @@ export type CaptureEvent =
       conf?: number;
       colado?: boolean;
     };
+
+// ── anotações em tela (AN) ─────────────────────────────────────────────────
+
+/** Overlay → main: criação de evento (main atribui seq/t/ids, persiste, devolve). */
+export type AnnotationEventRequest =
+  | { kind: "stroke"; color: string; width: number; points: Pt[] }
+  | { kind: "laser"; points: Pt[] }
+  | { kind: "erase-stroke"; snapshots: StrokeSnapshot[] }
+  /** ids dos pedaços (added) são atribuídos no main (`<seq>.<i>`) */
+  | { kind: "erase-area"; removed: StrokeSnapshot[]; added: Omit<StrokeSnapshot, "id">[] }
+  | { kind: "clear" }
+  | { kind: "undo" }
+  | { kind: "redo" };
+
+/** Main → overlay. */
+export type AnnotationCmd =
+  | { type: "tool"; tool: AnnotationTool; eraserMode?: EraserMode }
+  | { type: "pass-through"; on: boolean }
+  /** main capturou o frame (dataURL) — overlay compõe strokes/laser e devolve o PNG */
+  | { type: "capture"; id: string; frame: string; label: string };
+
+/** vcInternal completo (cada página interna usa o que precisa — um tipo só,
+ *  declarado UMA vez aqui, senão os `declare global` de cada renderer colidem). */
+export interface VcInternalBridge {
+  micLevel: (level: number) => void;
+  sendBlob: (ch: string, payload: { b64: string; ext: string }) => void;
+  sendRegion: (channel: string, rect: unknown) => void;
+  annotationEvent: (req: AnnotationEventRequest) => Promise<AnnotationEvent | null>;
+  onAnnotationCmd: (cb: (cmd: AnnotationCmd) => void) => () => void;
+  sendComposite: (id: string, b64: string | null) => void;
+  annotationMouse: (req: { mouse: boolean; from: "palette" | "esc" }) => Promise<{ ok: boolean }>;
+  annotationContext: () => { strokes: StrokeSnapshot[]; lasers: { at: number; points: Pt[] }[] };
+}
 
 /** Superfície exposta ao renderer via contextBridge (window.voicecast). */
 export interface VoicecastBridge {

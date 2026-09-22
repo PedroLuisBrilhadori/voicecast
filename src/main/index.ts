@@ -4,7 +4,9 @@
  * Atalhos: Ctrl+F9 painel · Ctrl+Shift+F9 gravar tela cheia · Ctrl+M marker (só durante REC)
  */
 import { app, BrowserWindow, globalShortcut, ipcMain } from "electron";
+import fs from "node:fs";
 import path from "node:path";
+import { registerAnnotationIpc } from "./annotations";
 import {
   IPC,
   type Bootstrap,
@@ -183,6 +185,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     logInfo("whenReady: registrando IPC/atalhos…");
+    registerAnnotationIpc();
     // telemetria DEPOIS do probe do daemon: o import do SDK OTel bloqueia o
     // event loop por alguns segundos e faria o probe de 2s expirar à toa
     setTimeout(() => void initTelemetry(), 3000);
@@ -251,6 +254,49 @@ if (!gotLock) {
         logInfo(`--transcribe ${dir}/${name}: ${ok ? "ok" : "falhou"}`);
         app.exit(ok ? 0 : 1);
       });
+    }
+
+    // gancho de teste determinístico das anotações (AN): simula ditado com
+    // rajada sintética (stroke+laser) → valida jsonl + auto-print queimado.
+    if (process.argv.includes("--anotest")) {
+      setTimeout(async () => {
+        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+        const { annotations } = await import("./annotations.js");
+        const { sessionDirs } = await import("./storage.js");
+        const { sessionDirName } = await import("../shared/paths.js");
+        logInfo("[anotest] attach ditado + overlay");
+        annotations.attach("ditado", Date.now(), null);
+        await sleep(2500); // overlay carregar
+        const ev1 = annotations.record({
+          kind: "stroke",
+          color: "#ff4444",
+          width: 6,
+          points: Array.from({ length: 40 }, (_, i) => ({
+            x: 200 + i * 25,
+            y: 300 + Math.round(60 * Math.sin(i / 4)),
+            ms: i * 16,
+          })),
+        });
+        annotations.record({
+          kind: "laser",
+          points: [
+            { x: 400, y: 180, ms: 0 },
+            { x: 700, y: 240, ms: 250 },
+            { x: 1000, y: 200, ms: 500 },
+          ],
+        });
+        logInfo(`[anotest] eventos sintéticos: seq ${ev1?.seq}/${ev1 ? ev1.seq + 1 : "?"}`);
+        await sleep(4500); // debounce 2s + composite
+        const now = new Date();
+        const dayDir = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        const name = sessionDirName(now, `anotest:${Date.now()}:${Math.random()}`);
+        const dirs = sessionDirs(dayDir, name);
+        await annotations.detach(dirs);
+        const jsonl = fs.existsSync(path.join(dirs.root, "annotations.jsonl"));
+        const prints = fs.existsSync(dirs.frames) ? fs.readdirSync(dirs.frames) : [];
+        logInfo(`[anotest] jsonl=${jsonl} prints=${prints.length} [${prints.join(", ")}]`);
+        app.exit(jsonl && prints.length >= 1 ? 0 : 1);
+      }, 3000);
     }
 
     // gancho de teste determinístico: ditado F9 start→6s→stop sem tecla física.
