@@ -44,6 +44,7 @@ export function AnnotationApp() {
   const passThroughRef = useRef(true);
   const [passThrough, setPassThroughS] = useState(true);
   const [tool, setToolS] = useState<Tool>(toolRef.current);
+  const paletaRef = useRef<HTMLDivElement>(null);
   const [, forceRender] = useState(0);
 
   const setTool = (patch: Partial<Tool>) => {
@@ -55,6 +56,22 @@ export function AnnotationApp() {
     setPassThroughS(on);
     document.body.style.cursor = on ? "default" : toolRef.current.tool === "laser" ? "none" : "crosshair";
   };
+
+  // main faz polling do cursor sobre este retângulo p/ habilitar o mouse
+  useEffect(() => {
+    const report = () => {
+      const el = paletaRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      window.vcInternal.annotationPaletteBounds({ x: r.left, y: r.top, w: r.width, h: r.height });
+    };
+    const t = setTimeout(report, 300);
+    window.addEventListener("resize", report);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", report);
+    };
+  }, []);
 
   const refold = () => {
     strokesRef.current = foldEvents(logRef.current).strokes;
@@ -279,7 +296,7 @@ export function AnnotationApp() {
       if (ev) logRef.current.push(ev);
     } else if (t.tool === "eraser") {
       if (t.eraserMode === "stroke") {
-        const alvo = hitStrokes(strokesRef.current, cur, t.width * 2);
+        const alvo = hitStrokes(strokesRef.current, cur, t.width * 2.5);
         if (alvo.length) {
           const ev = await window.vcInternal.annotationEvent({ kind: "erase-stroke", snapshots: alvo });
           if (ev) {
@@ -288,7 +305,7 @@ export function AnnotationApp() {
           }
         }
       } else {
-        const { removed, added } = splitStrokesByPath(strokesRef.current, cur, t.width * 2, (_sid, i) => `tmp.${i}`);
+        const { removed, added } = splitStrokesByPath(strokesRef.current, cur, t.width * 2.5, (_sid, i) => `tmp.${i}`);
         if (removed.length) {
           const ev = await window.vcInternal.annotationEvent({
             kind: "erase-area",
@@ -317,11 +334,12 @@ export function AnnotationApp() {
 
   const paleta = (
     <div
+      ref={paletaRef}
       onMouseEnter={() => void window.vcInternal.annotationMouse({ mouse: true, from: "palette" })}
       onMouseLeave={() => void window.vcInternal.annotationMouse({ mouse: false, from: "palette" })}
       style={{
         position: "fixed",
-        bottom: 18,
+        bottom: 48,
         left: "50%",
         transform: "translateX(-50%)",
         display: "flex",
@@ -334,13 +352,13 @@ export function AnnotationApp() {
         userSelect: "none",
       }}
     >
-      <button style={btn(tool.tool === "laser" && !passThrough)} onClick={() => { setTool({ tool: "laser" }); setPassThrough(false); }} title="Laser (Ctrl+Alt+L)">
+      <button style={btn(tool.tool === "laser" && !passThrough)} onClick={() => { setTool({ tool: "laser" }); void window.vcInternal.annotationMouse({ mouse: true, from: "draw", tool: "laser" }); }} title="Laser (Ctrl+Alt+L)">
         Laser
       </button>
-      <button style={btn(tool.tool === "brush" && !passThrough)} onClick={() => { setTool({ tool: "brush" }); setPassThrough(false); }} title="Pincel (Ctrl+Alt+B)">
+      <button style={btn(tool.tool === "brush" && !passThrough)} onClick={() => { setTool({ tool: "brush" }); void window.vcInternal.annotationMouse({ mouse: true, from: "draw", tool: "brush" }); }} title="Pincel (Ctrl+Alt+B)">
         Pincel
       </button>
-      <button style={btn(tool.tool === "eraser" && !passThrough)} onClick={() => { setTool({ tool: "eraser" }); setPassThrough(false); }} title="Borracha (Ctrl+Alt+E)">
+      <button style={btn(tool.tool === "eraser" && !passThrough)} onClick={() => { setTool({ tool: "eraser" }); void window.vcInternal.annotationMouse({ mouse: true, from: "draw", tool: "eraser" }); }} title="Borracha (Ctrl+Alt+E)">
         Borracha
       </button>
       {tool.tool === "eraser" && (

@@ -60,6 +60,10 @@ class AnnotationEngine {
   private bufferedPrints: { name: string; b64: string }[] = [];
   /** Lasers recentes p/ queimar no print (visual efêmero, memória curta). */
   private recentLasers: { at: number; points: Pt[] }[] = [];
+  /** Retângulo da paleta (CSS px) p/ polling de cursor — hover sem forward. */
+  private paletteBounds: { x: number; y: number; w: number; h: number } | null = null;
+  private cursorPoll: NodeJS.Timeout | null = null;
+  private mouseOnWindow = false;
 
   get active(): boolean {
     return this.overlay !== null;
@@ -92,8 +96,10 @@ class AnnotationEngine {
       await this.fireAutoPrint();
     }
     for (const a of HOTKEYS) globalShortcut.unregister(a);
+    this.stopCursorPoll();
     if (this.overlay && !this.overlay.isDestroyed()) this.overlay.destroy();
     this.overlay = null;
+    this.mouseOnWindow = false;
     if (this.dirs) {
       this.flushJsonl();
       this.flushBufferedPrints();
@@ -160,6 +166,45 @@ class AnnotationEngine {
     });
     wireLogging(w, "annotation");
     this.overlay = w;
+    this.startCursorPoll();
+  }
+
+  /**
+   * Hover da paleta sem depender de forwarded mousemove (não chegava ao
+   * renderer nesta máquina): main faz polling do cursor e habilita o mouse
+   * da janela quando o cursor está sobre a paleta (modo pass-through apenas).
+   */
+  private startCursorPoll(): void {
+    if (this.cursorPoll) clearInterval(this.cursorPoll);
+    this.cursorPoll = setInterval(() => {
+      const w = this.overlay;
+      if (!w || w.isDestroyed() || this.drawMode) return;
+      try {
+        const c = screen.getCursorScreenPoint();
+        const b = w.getBounds();
+        const p = this.paletteBounds;
+        const inside =
+          p !== null &&
+          c.x >= b.x + p.x && c.x <= b.x + p.x + p.w &&
+          c.y >= b.y + p.y && c.y <= b.y + p.y + p.h;
+        if (inside !== this.mouseOnWindow) {
+          this.mouseOnWindow = inside;
+          logInfo(`anotações: poll cursor → mouse da janela ${inside ? "ON" : "off"}`);
+          w.setIgnoreMouseEvents(!inside, { forward: true });
+        }
+      } catch {}
+    }, 100);
+  }
+
+  private stopCursorPoll(): void {
+    if (this.cursorPoll) {
+      clearInterval(this.cursorPoll);
+      this.cursorPoll = null;
+    }
+  }
+
+  setPaletteBounds(rect: { x: number; y: number; w: number; h: number } | null): void {
+    this.paletteBounds = rect;
   }
 
   /** Modo: desenho (mouse+teclado) ou pass-through (usuário no app embaixo). */
@@ -167,6 +212,8 @@ class AnnotationEngine {
     const w = this.overlay;
     if (!w || w.isDestroyed()) return;
     this.drawMode = !passThrough;
+    this.mouseOnWindow = !passThrough; // poll não briga com o setPassThrough
+    logInfo(`anotações: modo ${passThrough ? "pass-through" : "desenho"}`);
     w.setIgnoreMouseEvents(passThrough, { forward: true });
     w.setFocusable(!passThrough);
     if (!passThrough) w.focus();
@@ -187,6 +234,11 @@ class AnnotationEngine {
     if (w && !w.isDestroyed() && !this.drawMode) {
       w.setIgnoreMouseEvents(!mouse, { forward: true });
     }
+  }
+
+  /** Entrar no modo desenho pela PALETA (sem hotkey) — ativa a ferramenta. */
+  enterDrawMode(tool?: AnnotationTool): void {
+    this.cmdTool(tool ?? this.tool);
   }
 
   private registerHotkeys(): void {
@@ -368,16 +420,23 @@ export const annotations = new AnnotationEngine();
 /** Contexto do overlay precisa vir pelo IPC (main é a fonte do estado). */
 export function registerAnnotationIpc(): void {
   ipcMain.handle(IPC.annotationEvent, (_e, req: AnnotationEventRequest) => annotations.record(req));
-  ipcMain.handle(IPC.annotationMouse, (_e, req: { mouse: boolean; from: "palette" | "esc" }) => {
-    if (req.from === "esc" && !req.mouse) annotations.setPassThrough(true);
-    else annotations.setWindowMouse(req.mouse);
-    return { ok: true };
-  });
+  ipcMain.handle(
+    IPC.annotationMouse,
+    (_e, req: { mouse: boolean; from: "palette" | "esc" | "draw"; tool?: AnnotationTool }) => {
+      if (req.from === "esc" && !req.mouse) annotations.setPassThrough(true);
+      else if (req.from === "draw") annotations.enterDrawMode(req.tool);
+      else annotations.setWindowMouse(req.mouse);
+      return { ok: true };
+    },
+  );
   ipcMain.on(IPC.annotationComposite, (_e, p: { id: string; b64: string | null }) => {
     annotations.resolveComposite(p.id, p.b64);
   });
   /** Overlay pede o estado p/ compor o print (strokes/lasers ativos). */
   ipcMain.on(IPC.annotationContext, (e) => {
     e.returnValue = annotations.overlayContext();
+  });
+  ipcMain.on(IPC.annotationPalette, (_e, rect: { x: number; y: number; w: number; h: number }) => {
+    annotations.setPaletteBounds(rect);
   });
 }

@@ -299,6 +299,26 @@ if (!gotLock) {
       }, 3000);
     }
 
+    // gancho de UI das anotações: overlay aberta por 90s p/ dirigir mouse/
+    // teclado reais (validação de UX por agente). Persiste no fim e sai.
+    if (process.argv.includes("--anoui")) {
+      setTimeout(async () => {
+        const { annotations } = await import("./annotations.js");
+        const { sessionDirs } = await import("./storage.js");
+        const { sessionDirName } = await import("../shared/paths.js");
+        logInfo("[anoui] overlay aberta por 90s — dirija o mouse");
+        annotations.attach("session", Date.now(), null);
+        setTimeout(async () => {
+          const now = new Date();
+          const dayDir = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+          const name = sessionDirName(now, `anoui:${Date.now()}:${Math.random()}`);
+          await annotations.detach(sessionDirs(dayDir, name));
+          logInfo("[anoui] fim");
+          app.exit(0);
+        }, 90_000);
+      }, 3000);
+    }
+
     // gancho de teste determinístico: ditado F9 start→6s→stop sem tecla física.
     // Determinístico com VOICECAST_DITADO_FAKE_TEXT (pula o ASR); sem o env,
     // transcreve o mic de verdade. Sai sozinho no fim.

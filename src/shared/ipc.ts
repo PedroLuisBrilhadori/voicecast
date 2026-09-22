@@ -67,10 +67,12 @@ export const IPC = {
   annotationCmd: "annotation:cmd",
   /** Overlay → main: PNG queimado resultante de uma captura (b64). */
   annotationComposite: "annotation:composite",
-  /** Overlay → main: controle de mouse da janela (paleta hover / ESC sai do desenho). */
+  /** Overlay → main: controle de mouse da janela (paleta hover / ESC / entrar no desenho). */
   annotationMouse: "annotation:mouse",
   /** Overlay → main (sync): strokes/lasers ativos p/ compor o print. */
   annotationContext: "annotation:context",
+  /** Overlay → main: retângulo CSS da paleta (p/ polling de cursor no main). */
+  annotationPalette: "annotation:palette",
 } as const;
 
 export interface PingRequest {
@@ -181,8 +183,9 @@ export interface VcInternalBridge {
   annotationEvent: (req: AnnotationEventRequest) => Promise<AnnotationEvent | null>;
   onAnnotationCmd: (cb: (cmd: AnnotationCmd) => void) => () => void;
   sendComposite: (id: string, b64: string | null) => void;
-  annotationMouse: (req: { mouse: boolean; from: "palette" | "esc" }) => Promise<{ ok: boolean }>;
+  annotationMouse: (req: { mouse: boolean; from: "palette" | "esc" | "draw"; tool?: AnnotationTool }) => Promise<{ ok: boolean }>;
   annotationContext: () => { strokes: StrokeSnapshot[]; lasers: { at: number; points: Pt[] }[] };
+  annotationPaletteBounds: (rect: { x: number; y: number; w: number; h: number }) => void;
 }
 
 /** Superfície exposta ao renderer via contextBridge (window.voicecast). */

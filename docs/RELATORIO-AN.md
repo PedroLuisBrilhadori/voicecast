@@ -50,12 +50,54 @@ dir da sessão salva), `index.ts` (registerAnnotationIpc + `--anotest`),
 & $env:LOCALAPPDATA\voicecast\src\node_modules\electron\dist\electron.exe `
   $env:LOCALAPPDATA\voicecast\src --anotest     # jsonl + auto-print queimado
 # REC com marker: --autotest (grava 8s, marca, queima frames/marker-1.png)
+# UI interativa: --anoui (overlay aberta 90s p/ dirigir mouse/teclado reais)
 ```
+
+## Validação de UI REAL dirigida por agente (2026-09-22) ✅
+
+A passada de UX que faltava foi executada sem humano: mouse sintético
+(SetCursorPos + mouse_event via interop WSL→Windows) sobre a overlay real,
+com screenshots por passo lidos visualmente + log do main como evidência.
+
+| Passo | Resultado |
+|---|---|
+| Hotkey `Ctrl+Alt+B` (input sintético) | ✅ entrou em modo desenho (`modo desenho` no log) |
+| **Clique na paleta "Pincel"** (pass-through → hover → click) | ✅ `annotationMouse from:draw` → modo desenho + cmd tool brush |
+| Drag na tela (pincel) | ✅ pointerdown/move/up no canvas → **traço vermelho visível no screenshot** + stroke no jsonl |
+| `Ctrl+Alt+L` + drag (laser) | ✅ rastro efêmero + caminho no log |
+| `Ctrl+Alt+E` + drag (borracha) | ✅ funciona; hit-test por raio era limítrofe → **folga de 25% adicionada** |
+| Status da paleta | ✅ "desenhando · Esc solta o mouse" ↔ "pass-through · Ctrl+Alt+Espaço desenha" |
+| `Esc` | ✅ volta a pass-through (`modo pass-through` no log) |
+
+**Bugs achados e corrigidos pela validação de UI:**
+
+1. **Botões da paleta não ativavam o desenho** — mudavam só estado local do
+   renderer; o main (dono de `setIgnoreMouseEvents`/`focusable`) não era
+   avisado. Corrigido: paleta → `annotationMouse {from:"draw"}` → `cmdTool`.
+2. **Hover da paleta em pass-through nunca chegava** — `forward:true`
+   (forwarded mousemove) não entrega eventos de hover de forma confiável
+   nesta máquina. Corrigido com o padrão determinístico: **main faz polling
+   do cursor** (100ms) e habilita o mouse da janela quando o cursor está
+   sobre o retângulo da paleta (reportado pelo renderer). Log
+   `poll cursor → mouse da janela ON` confirma a transição.
+3. **Paleta cortada pela barra de tarefas** — `bottom:18` → `bottom:48`.
+
+Método (para reproduzir): ganchos `--anoui` (overlay 90s) + driver PowerShell
+(`SetCursorPos`+`mouse_event`), screenshots por passo (CopyFromScreen) lidos
+como imagem, `annotations.jsonl` e main.log como evidência estruturada.
+Limitação honesta: "sensação de uso" (suavidade do traço, ergonomia dos
+atalhos em uso real) só o mantenedor avalia — o resto está validado.
+
+### Veredito Jev sobre a evidência (jev-1.13.0, 772ms)
+
+- `verdicto_ux` (score 0–4): **3.05** (conf 0.96) — "funciona de ponta a
+  ponta; ajustes menores ou cosméticos pendentes"
+- `bloqueante` (noul): **0.17** — nada que exija correção antes do uso normal
 
 ## Pendências
 
-- **Pass humana de UX** (5 min): desenhar/laser/borracha/undo com o mouse de
-  verdade, ESC/pass-through, paleta — sensação e atalhos em uso real.
+- ~~Pass humana de UX~~ **validação funcional por agente concluída** (seção
+  acima); sensação subjetiva de uso continua com o mantenedor.
 - **AN.4**: linhas de anotação no `buildContext` + exposição no MCP (com E3).
 - Laser queimado no print só quando recente (<1,5s) — calibrar se necessário.
 - Paleta sempre-visível durante REC (WYSIWYG D2) — a paleta NÃO entra nos

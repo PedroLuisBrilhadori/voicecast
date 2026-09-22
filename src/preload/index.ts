@@ -84,12 +84,15 @@ contextBridge.exposeInMainWorld("vcInternal", {
   /** PNG queimado (b64) devolvendo uma captura pedida pelo main. */
   sendComposite: (id: string, b64: string) =>
     ipcRenderer.send(IPC.annotationComposite, { id, b64 }),
-  /** Mouse da janela: paleta hover (temporário) ou ESC (sai do modo desenho). */
-  annotationMouse: (req: { mouse: boolean; from: "palette" | "esc" }) =>
+  /** Mouse da janela: paleta hover (temporário), ESC (sai do desenho) ou entrar no desenho pela paleta. */
+  annotationMouse: (req: { mouse: boolean; from: "palette" | "esc" | "draw"; tool?: import("../shared/annotations").AnnotationTool }) =>
     ipcRenderer.invoke(IPC.annotationMouse, req),
   /** Strokes/lasers ativos (sendSync — só no caminho do print). */
   annotationContext: (): {
     strokes: import("../shared/annotations").StrokeSnapshot[];
     lasers: { at: number; points: import("../shared/annotations").Pt[] }[];
   } => ipcRenderer.sendSync(IPC.annotationContext),
+  /** Retângulo da paleta (CSS px) — main faz polling do cursor por cima. */
+  annotationPaletteBounds: (rect: { x: number; y: number; w: number; h: number }) =>
+    ipcRenderer.send(IPC.annotationPalette, rect),
 });
