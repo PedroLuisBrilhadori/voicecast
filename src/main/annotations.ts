@@ -85,7 +85,7 @@ class AnnotationEngine {
 
   // ── lifecycle ───────────────────────────────────────────────────────
 
-  attach(kind: "session" | "ditado", startedAt: number, dirs: SessionDirs | null): void {
+  attach(kind: "session" | "ditado", startedAt: number, dirs: SessionDirs | null, opts: { paletteOn?: boolean } = {}): void {
     if (this.overlay) void this.detach();
     this.kind = kind;
     this.startedAt = startedAt;
@@ -95,12 +95,14 @@ class AnnotationEngine {
     this.seq = 0;
     this.bufferedPrints = [];
     this.recentLasers = [];
-    this.paletteOn = true;
+    // paleta sob demanda (Ctrl+Alt+H) — decisão do mantenedor (2026-09-23):
+    // não abrir junto com a gravação; overlay segue viva (prints/hotkeys ok)
+    this.paletteOn = opts.paletteOn ?? false;
     this.standalone = false;
     this.createOverlay();
     this.registerHotkeys();
     this.sendMode();
-    logInfo(`anotações: attach (${kind}${dirs ? "" : ", dir no stop"})`);
+    logInfo(`anotações: attach (${kind}${dirs ? "" : ", dir no stop"}${this.paletteOn ? ", paleta" : ""})`);
   }
 
   /**
@@ -242,6 +244,9 @@ class AnnotationEngine {
     w.once("ready-to-show", () => {
       w.showInactive();
       this.setPassThrough(true);
+      // renderer nasce com paleta visível — sincroniza o estado real
+      // (oculta em sessão; standalone/show-up abre com ela)
+      this.setPaletteVisible(this.paletteOn);
     });
     wireLogging(w, "annotation");
     this.overlay = w;

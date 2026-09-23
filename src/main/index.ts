@@ -322,7 +322,8 @@ if (!gotLock) {
         const { sessionDirs } = await import("./storage.js");
         const { sessionDirName } = await import("../shared/paths.js");
         logInfo("[anoui] overlay aberta por 90s — dirija o mouse");
-        annotations.attach("session", Date.now(), null);
+        // paleta visível: o teste dirige a própria paleta (arrastar, ferramentas)
+        annotations.attach("session", Date.now(), null, { paletteOn: true });
         setTimeout(async () => {
           const now = new Date();
           const dayDir = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;

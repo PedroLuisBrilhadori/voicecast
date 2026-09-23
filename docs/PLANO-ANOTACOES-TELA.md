@@ -82,8 +82,13 @@ nenhum print — o automático só existe quando o usuário marcou algo.
 | **Limpar** (C) | Apaga tudo (evento `clear` — desfazível) |
 | **Desfazer/Refazer** | `Ctrl+Z` / `Ctrl+Shift+Z` + botões na paleta |
 
-Paleta compacta sempre-visível durante REC (irmã da barra REC, canto):
+Paleta compacta durante REC (irmã da barra REC, canto):
 tools, cores, espessura, undo/redo, indicador do modo (desenho/pass-through).
+**REVISÃO do mantenedor (2026-09-23): a paleta NÃO abre mais junto com o
+REC/ditado** — fica oculta por default e aparece sob demanda no
+`Ctrl+Alt+H` (a overlay segue viva em pass-through: prints D6/D7, Ctrl+Alt+P
+e hotkeys continuam funcionando sem a paleta). O painel standalone
+(Ctrl+Alt+H fora de sessão) continua abrindo com a paleta visível.
 Atalhos globais durante REC: `Ctrl+Alt+G/B/E/C` ferramentas, `Ctrl+Alt+Espaço`
 alterna desenho↔pass-through (proposta — ver aberto nº 2). Laser mudou de
 `Ctrl+Alt+L` para `Ctrl+Alt+G` (mantenedor, 2026-09-22: cluster inteiro na

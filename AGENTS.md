@@ -69,7 +69,10 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
   ferramentas, `Ctrl+Alt+C` ou `Ctrl+Alt+X` limpar tudo, `Ctrl+Alt+Espaço` desenho↔pass-through, `Ctrl+Alt+P` print.
   `Ctrl+Alt+H` é global do app: sem painel aberto, abre o painel standalone
   (fora de sessão, com botão `✕ fechar` que descarta o rascunho); com painel,
-  oculta/mostra a paleta. Gravação/ditado iniciados com o painel standalone
+  oculta/mostra a paleta. **Paleta sob demanda (2026-09-23)**: REC/ditado NÃO
+  abrem mais a paleta (oculta por default; `Ctrl+Alt+H` mostra) — a overlay
+  segue viva em pass-through, então prints (D6/D7/Ctrl+Alt+P) e hotkeys
+  funcionam sem ela. Gravação/ditado iniciados com o painel standalone
   aberto o ADOTAM (overlay e traços preservados — entram no jsonl da sessão).
   Paleta móvel pelo grip `⠿` (funciona
   até em pass-through — IPC `annotation:mouse from:"drag"` congela o poll do

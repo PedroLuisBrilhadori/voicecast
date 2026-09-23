@@ -22,6 +22,7 @@ Janela: 2026-09-19 → 2026-09-22. Do zero à v2: fundação Electron, captura c
 
 ### Changed
 
+- **[an]** Paleta de anotações sob demanda: REC e ditado NÃO abrem mais a paleta (oculta por default; `Ctrl+Alt+H` mostra) — overlay segue viva em pass-through, com prints D6/D7, Ctrl+Alt+P e hotkeys intactos; painel standalone e `--anoui` mantêm paleta visível (revisão do mantenedor sobre o D2)
 - **[docs]** Visão v2: voicecast absorve o voice-dictation (decisão do mantenedor) (fa66a4a)
 - **[docs]** Plano de anotações em tela (laser/pincel/borracha/undo, print no modo transcrição) com decisões confirmadas pelo mantenedor: WYSIWYG, atalhos, paleta fixa, print em ambos os modos, laser persistindo o caminho no `annotations.jsonl` e print queimado automático ao anotar em modo somente-transcrição (306945b, d4409e3, 86d2b7e, cde5b77)
 - **[ci]** Versão do pnpm passa a vir do `packageManager` do `package.json` (21c4d5f)
