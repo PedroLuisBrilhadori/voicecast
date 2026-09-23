@@ -3,8 +3,11 @@ import {
   IPC,
   type AnnotationWheelRequest,
   type Bootstrap,
+  type ClipInfo,
   type PingRequest,
   type PingResponse,
+  type SessionMetaPatch,
+  type SessionSegment,
 } from "../src/shared/ipc";
 
 /**
@@ -18,6 +21,8 @@ describe("contrato IPC", () => {
     expect(IPC.getBootstrap).toBe("app:get-bootstrap");
     expect(IPC.getVersion).toBe("app:get-version");
     expect(IPC.annotationWheel).toBe("annotation:wheel"); // AN.6 scroll-through
+    expect(IPC.listClips).toBe("library:list-clips"); // editor fase B
+    expect(IPC.exportCut).toBe("library:export-cut"); // editor fase B
   });
 
   it("payloads serializáveis (sem funções nos tipos de dados)", () => {
@@ -56,5 +61,14 @@ describe("contrato IPC", () => {
       shortcuts: { recordFullscreen: "Ctrl+Shift+F9", togglePanel: "Ctrl+F9" },
     };
     expect(b.shortcuts.togglePanel).toContain("F9");
+  });
+
+  it("payloads do editor fase B serializáveis (segmento, patch de meta, clipe)", () => {
+    const seg: SessionSegment = { id: "seg-1", label: "demo", inS: 1.5, outS: 9.25 };
+    const patch: SessionMetaPatch = { title: "t", tags: ["a"], segments: [seg] };
+    const clip: ClipInfo = { file: "C:\\x\\a.mp4", name: "a.mp4", bytes: 10, mtimeMs: 1 };
+    expect(JSON.parse(JSON.stringify(seg))).toEqual(seg);
+    expect(JSON.parse(JSON.stringify(patch))).toEqual(patch);
+    expect(JSON.parse(JSON.stringify(clip))).toEqual(clip);
   });
 });

@@ -232,3 +232,27 @@ body.bar-body { background: transparent; overflow: hidden; }
   background: var(--accent); color: #fff; padding: 8px 18px; border-radius: 999px;
   font-size: 13.5px; box-shadow: 0 4px 18px rgba(0,0,0,0.5);
 }
+
+/* ── editor fase B: timeline de segmentos, lista de segmentos e clipes ── */
+.seg-track {
+  position: relative; height: 14px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 4px; overflow: hidden;
+}
+.seg-block {
+  position: absolute; top: 0; bottom: 0; border: 0; padding: 0;
+  border-radius: 3px; background: var(--accent); opacity: 0.85; cursor: pointer;
+}
+.seg-block:hover { opacity: 1; }
+.seg-block.ghost { background: var(--ok); opacity: 0.4; pointer-events: none; }
+.seg-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.seg-row { display: flex; align-items: center; gap: 6px; }
+.seg-row input { flex: 1; min-width: 60px; }
+.seg-row .tag { flex-shrink: 0; }
+.clip-list { display: flex; flex-direction: column; gap: 6px; }
+.clip-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  padding: 6px 10px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; cursor: pointer; text-align: left;
+}
+.clip-row:hover { border-color: var(--accent); }
+.clip-row .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

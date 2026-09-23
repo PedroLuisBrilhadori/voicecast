@@ -14,8 +14,9 @@ import type {
   Pt,
   StrokeSnapshot,
 } from "./annotations";
+import type { SessionSegment } from "./segments";
 
-export type { AnnotationEvent, AnnotationTool, EraserMode, Pt, StrokeSnapshot };
+export type { AnnotationEvent, AnnotationTool, EraserMode, Pt, StrokeSnapshot, SessionSegment };
 
 export const IPC = {
   ping: "app:ping",
@@ -54,6 +55,9 @@ export const IPC = {
   createClip: "library:create-clip",
   captureFrame: "library:capture-frame",
   buildContext: "library:build-context",
+  /** Editor fase B: clipes existentes no disco + corte combinado de segmentos. */
+  listClips: "library:list-clips",
+  exportCut: "library:export-cut",
   copyText: "library:copy",
   openPath: "library:open-path",
   openEditor: "library:open-editor",
@@ -241,12 +245,16 @@ export interface VoicecastBridge {
   // M2 — biblioteca e pós-produção
   listSessions(query?: string): Promise<SessionSummary[]>;
   getSession(dir: string, name: string): Promise<SessionDetail | null>;
-  updateSession(dir: string, name: string, patch: { title?: string; tags?: string[] }): Promise<OpResult>;
+  updateSession(dir: string, name: string, patch: SessionMetaPatch): Promise<OpResult>;
   deleteSession(dir: string, name: string): Promise<OpResult>;
   transcribeSession(dir: string, name: string): Promise<OpResult>;
   createClip(dir: string, name: string, inS: number, outS: number, label?: string): Promise<{ ok: true; file: string; bytes: number } | { ok: false; error: string }>;
   captureFrame(dir: string, name: string, atS: number): Promise<{ ok: true; file: string } | { ok: false; error: string }>;
   buildContext(dir: string, name: string, range?: { inS: number; outS: number } | null): Promise<{ ok: true; markdown: string } | { ok: false; error: string }>;
+  /** Clipes .mp4 que existem em clips/ (nome, tamanho, mtime — p/ lista do editor). */
+  listClips(dir: string, name: string): Promise<ClipInfo[]>;
+  /** Corta cada segmento e concatena num mp4 único (clips/<label>-<N>seg.mp4). */
+  exportCut(dir: string, name: string, segments: SessionSegment[], label?: string): Promise<{ ok: true; file: string; bytes: number } | { ok: false; error: string }>;
   copyText(text: string): Promise<OpResult>;
   openPath(winPath: string): Promise<OpResult>;
   /** Abre o editor da sessão numa janela própria. */
@@ -300,11 +308,29 @@ export interface SessionDetail {
     markers?: number[];
     transcriptStatus?: string;
     sizeBytes?: number;
+    /** Trechos nomeados do editor (fase B) — clipe e contexto nascem daqui. */
+    segments?: SessionSegment[];
   };
   transcript: TranscriptInfo | null;
   /** file:// URL da mídia para o player do editor. */
   mediaUrl: string | null;
   mediaKind: "video" | "audio" | null;
+}
+
+/** Patch de meta que o renderer pode gravar (tudo sanitizado no main). */
+export interface SessionMetaPatch {
+  title?: string;
+  tags?: string[];
+  segments?: SessionSegment[];
+}
+
+/** Clipe .mp4 existente em clips/ (listagem do editor — fase B). */
+export interface ClipInfo {
+  /** Caminho Windows completo. */
+  file: string;
+  name: string;
+  bytes: number;
+  mtimeMs: number;
 }
 
 export type OpResult = { ok: true } | { ok: false; error: string };

@@ -26,6 +26,7 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 | `src/main/jev.ts` | Jev (TypeSafe) no app — julgamento fail-soft do F9 e da sessão (Etapa 2 do PLANO-JEV-CU) |
 | `src/main/jev-questions.ts` | Perguntas/limiares Jev — arquivo único revisável; não editar sem rodar o smoke |
 | `src/shared/annotations.ts` | Motor PURO das anotações (fold do log, undo/redo, borracha 2 modos) — sem electron |
+| `src/shared/segments.ts` | Motor PURO dos segmentos do editor fase B (sanitize, nomes de clipe/corte, fatia de transcrição) — sem electron |
 | `src/main/annotations.ts` | Engine das anotações: overlay, hotkeys, jsonl, auto-print (D7), marker queimado (D6) |
 | `src/preload/` | Ponte contextBridge — só expõe o contrato |
 | `src/renderer/` | React 19 (picker, overlay de região, barra REC, editor, biblioteca) |

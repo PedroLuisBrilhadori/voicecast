@@ -4,6 +4,7 @@
  */
 import { clipboard } from "electron";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { asrHealth, transcribeSession, type Transcript } from "./asr";
 import { judgeSession, type DictationJudgment } from "./jev";
@@ -11,12 +12,16 @@ import { resolveFfmpeg, runFfmpeg } from "./ffmpeg";
 import { logError, logInfo } from "./logging";
 import { sessionDirs, sessionsRoot } from "./storage";
 import { sessionDirName, wslPathQuoted } from "../shared/paths";
+import type { ClipInfo, SessionMetaPatch, SessionSegment } from "../shared/ipc";
+import { clipFileBase, cutFileBase, sanitizeSegments, wordsInRange } from "../shared/segments";
 import { counter, histogram, withSpan } from "./telemetry";
 
 // voicecast_sessions_total é do capture.ts (que emite); duplicar aqui criava
 // confusão — com o core lazy cairia no mesmo instrumento, mas fica num lugar só
 const M_TRANSCRIBE = counter("voicecast_transcriptions_total", "transcrições por status");
 const H_TRANSCRIBE = histogram("voicecast_transcribe_seconds", "duração da transcrição ASR");
+const M_CUT = counter("voicecast_cuts_total", "cortes combinados por desfecho");
+const H_CUT = histogram("voicecast_cut_seconds", "duração do corte combinado (exportCut)");
 
 // ── tipos de biblioteca ────────────────────────────────────────
 
@@ -62,6 +67,8 @@ interface Meta {
   sizeBytes?: number;
   markers?: number[];
   transcriptStatus?: string;
+  /** Trechos nomeados do editor (fase B) — sempre sanitizados antes de gravar. */
+  segments?: SessionSegment[];
   /** Ditado: primeira frase da transcrição (título automático). */
   textPreview?: string;
   /** Julgamento Jev (fail-soft: ausente quando off/sem key/erro). */
@@ -185,8 +192,6 @@ export function saveDictationSession(
   return { dir: dayDir, name };
 }
 
-const safeNamePart = (s: string) => s.replace(/[^\w.-]+/g, "-").slice(0, 60);
-
 // ── transcrição (chamada no fim da sessão e manual) ────────────
 
 export async function transcribeAndStore(dir: string, name: string): Promise<boolean> {
@@ -264,8 +269,7 @@ export async function createClip(
   const dirs = sessionDirs(dir, name);
   if (!fs.existsSync(dirs.mp4)) return { error: "mp4 ausente" };
   fs.mkdirSync(dirs.clips, { recursive: true });
-  const base = `${safeNamePart(label || "trecho")}-${Math.round(inS)}s-${Math.round(outS)}s`;
-  const dest = path.join(dirs.clips, `${base}.mp4`);
+  const dest = path.join(dirs.clips, `${clipFileBase(label ?? "", inS, outS)}.mp4`);
   try {
     const ff = await resolveFfmpeg();
     // corte exato: re-encode leve (corta em qualquer frame, não só keyframe)
@@ -278,6 +282,69 @@ export async function createClip(
   } catch (e) {
     logError("clipe falhou:", e);
     return { error: String(e) };
+  }
+}
+
+/** Clipes .mp4 existentes em clips/ — a lista do editor (fase A gravava, não listava). */
+export function listClips(dir: string, name: string): ClipInfo[] {
+  const dirs = sessionDirs(dir, name);
+  if (!fs.existsSync(dirs.clips)) return [];
+  const out: ClipInfo[] = [];
+  for (const f of fs.readdirSync(dirs.clips)) {
+    if (!f.endsWith(".mp4")) continue;
+    try {
+      const st = fs.statSync(path.join(dirs.clips, f));
+      out.push({ file: path.join(dirs.clips, f), name: f, bytes: st.size, mtimeMs: st.mtimeMs });
+    } catch {}
+  }
+  return out.sort((a, b) => b.mtimeMs - a.mtimeMs);
+}
+
+/**
+ * Corte combinado (fase B): recorta cada segmento (mesmo encode do createClip
+ * — params idênticos são pré-requisito do concat) e junta num mp4 único em
+ * clips/<label>-<N>seg.mp4. Re-export sobrescreve (nome determinístico).
+ */
+export async function exportCut(
+  dir: string,
+  name: string,
+  segments: SessionSegment[],
+  label = "corte",
+): Promise<{ file: string; bytes: number } | { error: string }> {
+  const segs = sanitizeSegments(segments);
+  if (!segs.length) return { error: "sem segmentos válidos" };
+  const dirs = sessionDirs(dir, name);
+  if (!fs.existsSync(dirs.mp4)) return { error: "mp4 ausente" };
+  fs.mkdirSync(dirs.clips, { recursive: true });
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "voicecast-cut-"));
+  const t0 = Date.now();
+  try {
+    const ff = await resolveFfmpeg();
+    const parts: string[] = [];
+    for (const [i, s] of segs.entries()) {
+      const part = path.join(tmp, `part-${String(i).padStart(3, "0")}.mp4`);
+      await runFfmpeg(ff, [
+        "-y", "-ss", String(s.inS), "-i", dirs.mp4, "-to", String(Math.max(0.1, s.outS - s.inS)),
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-c:a", "aac", "-b:a", "96k",
+        part,
+      ]);
+      parts.push(part);
+    }
+    // concat demuxer: paths escapados p/ aspas simples (sintaxe do próprio ffmpeg)
+    const listFile = path.join(tmp, "list.txt");
+    fs.writeFileSync(listFile, parts.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n"));
+    const dest = path.join(dirs.clips, `${cutFileBase(label, segs.length)}.mp4`);
+    await runFfmpeg(ff, ["-y", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", dest]);
+    H_CUT?.record((Date.now() - t0) / 1000, { segments: String(segs.length) });
+    M_CUT?.add(1, { status: "ok" });
+    logInfo(`corte combinado pronto: ${dir}/${name} (${segs.length} segmentos)`);
+    return { file: dest, bytes: fs.statSync(dest).size };
+  } catch (e) {
+    logError("corte falhou:", e);
+    M_CUT?.add(1, { status: "erro" });
+    return { error: String(e) };
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
@@ -342,7 +409,7 @@ export async function buildContext(
     const words = transcript.words ?? [];
     const inS = input.range?.inS ?? 0;
     const outS = input.range?.outS ?? Infinity;
-    const sel = words.filter((w) => w.end > inS && w.start < outS);
+    const sel = wordsInRange(words, inS, outS);
     const slice = sel.length ? sel : input.range ? [] : words;
     if (slice.length) {
       const text = slice.map((w) => w.w).join(" ").replace(/\s+/g, " ").trim();
@@ -351,6 +418,25 @@ export async function buildContext(
     }
   } else if (meta.transcriptStatus === "pending") {
     lines.push("Fala: (transcrição em andamento)");
+  }
+
+  // trechos nomeados (editor fase B): fala de cada segmento + clipe quando existe
+  const segs = meta.segments ?? [];
+  if (segs.length) {
+    lines.push(`Trechos (${segs.length}):`);
+    for (const [i, s] of segs.entries()) {
+      const slice = transcript ? wordsInRange(transcript.words ?? [], s.inS, s.outS) : [];
+      const text = slice.length
+        ? slice.map((w) => w.w).join(" ").replace(/\s+/g, " ").trim()
+        : "(sem fala no trecho)";
+      lines.push(`${i + 1}. ${s.label} (${fmtTs(s.inS)}–${fmtTs(s.outS)}): ${text ? `"${text}"` : text}`);
+      const clip = path.join(dirs.clips, `${clipFileBase(s.label, s.inS, s.outS)}.mp4`);
+      if (fs.existsSync(clip)) lines.push(`   Clipe: ${wslPathQuoted(clip)}`);
+    }
+    const cut = path.join(dirs.clips, `${cutFileBase("corte", segs.length)}.mp4`);
+    if (fs.existsSync(cut)) {
+      lines.push(`Corte combinado (${segs.length} trechos): ${wslPathQuoted(cut)}`);
+    }
   }
 
   // julgamento Jev (Etapa 2) — triagem pronta para o agente consumir
@@ -398,15 +484,13 @@ export function openInFolder(winPath: string): void {
   spawn("explorer.exe", [winPath], { detached: true, stdio: "ignore" }).unref();
 }
 
-export function updateSessionMeta(
-  dir: string,
-  name: string,
-  patch: { title?: string; tags?: string[] },
-): void {
+export function updateSessionMeta(dir: string, name: string, patch: SessionMetaPatch): void {
   const dirs = sessionDirs(dir, name);
   if (!fs.existsSync(dirs.meta)) return;
   const m = JSON.parse(fs.readFileSync(dirs.meta, "utf8")) as Meta;
-  writeMeta(dirs.meta, { ...m, ...patch });
+  const next: Meta = { ...m, ...patch };
+  if (patch.segments) next.segments = sanitizeSegments(patch.segments);
+  writeMeta(dirs.meta, next);
 }
 
 export function deleteSession(dir: string, name: string): void {

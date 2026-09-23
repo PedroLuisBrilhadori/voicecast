@@ -13,6 +13,8 @@ import {
   type CaptureEvent,
   type PingRequest,
   type PingResponse,
+  type SessionMetaPatch,
+  type SessionSegment,
   type StartRecordingRequest,
 } from "../shared/ipc";
 import {
@@ -42,7 +44,9 @@ import {
   copyToClipboard,
   createClip,
   deleteSession,
+  exportCut,
   getSessionDetail,
+  listClips,
   listSessions,
   openInFolder,
   searchSessions,
@@ -129,7 +133,7 @@ function registerIpc(): void {
       mediaKind: d.mp4 ? "video" : d.audio ? "audio" : null,
     };
   });
-  ipcMain.handle(IPC.updateSession, (_e, dir: string, name: string, patch: { title?: string; tags?: string[] }) => {
+  ipcMain.handle(IPC.updateSession, (_e, dir: string, name: string, patch: SessionMetaPatch) => {
     updateSessionMeta(dir, name, patch);
     return { ok: true } as const;
   });
@@ -148,6 +152,11 @@ function registerIpc(): void {
   ipcMain.handle(IPC.captureFrame, async (_e, dir: string, name: string, atS: number) => {
     const r = await captureFrame(dir, name, atS);
     return "error" in r ? { ok: false, error: r.error } : { ok: true, file: r.file };
+  });
+  ipcMain.handle(IPC.listClips, (_e, dir: string, name: string) => listClips(dir, name));
+  ipcMain.handle(IPC.exportCut, async (_e, dir: string, name: string, segments: SessionSegment[], label?: string) => {
+    const r = await exportCut(dir, name, segments, label);
+    return "error" in r ? { ok: false, error: r.error } : { ok: true, file: r.file, bytes: r.bytes };
   });
   ipcMain.handle(IPC.buildContext, async (_e, dir: string, name: string, range?: { inS: number; outS: number } | null) => {
     const r = await buildContext({ dir, name, range });

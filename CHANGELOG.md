@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased] - 2026-09-23
+
+### Added
+
+- **[m2]** Editor fase B — multi-segmentos: trechos nomeados persistidos no `meta.json`
+  (motor puro `src/shared/segments.ts`, sanitizado no main), timeline visual no player,
+  lista editável (renomear/✂ clipe/▶ tocar/✕), **exportar corte** (concatena todos os
+  trechos num mp4 único, `clips/corte-<N>seg.mp4`) e a lista de clipes existentes no
+  editor (fase A gravava e não listava). `buildContext` ganha a seção `Trechos` com a
+  fala de cada segmento + path do clipe/corte. Telemetria: `voicecast_cuts_total` e
+  `voicecast_cut_seconds`.
+
 ## [Unreleased] - 2026-09-22
 
 Janela: 2026-09-19 → 2026-09-22. Do zero à v2: fundação Electron, captura completa (tela/janela/região) + pós-produção, absorção do voice-dictation (ditado F9, ASR próprio) e anotações em tela.

@@ -13,6 +13,8 @@ import {
   type PingRequest,
   type PingResponse,
   type RecordingState,
+  type SessionMetaPatch,
+  type SessionSegment,
   type SourceInfo,
   type StartRecordingRequest,
   type VoicecastBridge,
@@ -32,7 +34,7 @@ const bridge: VoicecastBridge = {
   getState: (): Promise<RecordingState> => ipcRenderer.invoke(IPC.getState),
   listSessions: (query?: string) => ipcRenderer.invoke(IPC.listSessions, query),
   getSession: (dir: string, name: string) => ipcRenderer.invoke(IPC.getSession, dir, name),
-  updateSession: (dir: string, name: string, patch: { title?: string; tags?: string[] }) =>
+  updateSession: (dir: string, name: string, patch: SessionMetaPatch) =>
     ipcRenderer.invoke(IPC.updateSession, dir, name, patch),
   deleteSession: (dir: string, name: string) => ipcRenderer.invoke(IPC.deleteSession, dir, name),
   transcribeSession: (dir: string, name: string) => ipcRenderer.invoke(IPC.transcribeSession, dir, name),
@@ -42,6 +44,9 @@ const bridge: VoicecastBridge = {
     ipcRenderer.invoke(IPC.captureFrame, dir, name, atS),
   buildContext: (dir: string, name: string, range?: { inS: number; outS: number } | null) =>
     ipcRenderer.invoke(IPC.buildContext, dir, name, range),
+  listClips: (dir: string, name: string) => ipcRenderer.invoke(IPC.listClips, dir, name),
+  exportCut: (dir: string, name: string, segments: SessionSegment[], label?: string) =>
+    ipcRenderer.invoke(IPC.exportCut, dir, name, segments, label),
   copyText: (text: string) => ipcRenderer.invoke(IPC.copyText, text),
   openPath: (winPath: string) => ipcRenderer.invoke(IPC.openPath, winPath),
   openEditor: (dir: string, name: string) => ipcRenderer.invoke(IPC.openEditor, dir, name),
