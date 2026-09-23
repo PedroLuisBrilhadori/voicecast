@@ -31,7 +31,7 @@ import { createPicker, createEditor } from "./windows";
 import { ensureLayout } from "./storage";
 import { initLogging, logError, logInfo } from "./logging";
 import { registerDitadoHotkey, claimHotkey, toggleDitado } from "./ditado";
-import { initTelemetry } from "./telemetry";
+import { initTelemetry, stopTelemetry } from "./telemetry";
 import { ensureAsrHost, stopAsrHost } from "./asr-host";
 import {
   asrHealth,
@@ -188,9 +188,17 @@ if (!gotLock) {
     logInfo("whenReady: registrando IPC/atalhos…");
     void ensureAsrHost(); // backend de transcrição (spawn+supervisão) — o modelo carrega em background
     registerAnnotationIpc();
-    // telemetria DEPOIS do probe do daemon: o import do SDK OTel bloqueia o
-    // event loop por alguns segundos e faria o probe de 2s expirar à toa
-    setTimeout(() => void initTelemetry(), 3000);
+    // telemetria DEPOIS do boot: o import do SDK OTel bloqueia o event loop
+    // por ~9s (medido no autotest de 2026-09-23) — se colidir com uma
+    // gravação, a captura abre segundos tarde. Espera idle + 15s de vida.
+    const initTelIdle = () => {
+      if (getState().phase !== "idle") {
+        setTimeout(initTelIdle, 5_000);
+        return;
+      }
+      void initTelemetry();
+    };
+    setTimeout(initTelIdle, 15_000);
     ensureLayout();
     applyRetention();
     registerIpc();
@@ -259,7 +267,7 @@ if (!gotLock) {
       const [dir, name] = tr.split("=")[1]!.split("/");
       void transcribeAndStore(dir, name).then((ok) => {
         logInfo(`--transcribe ${dir}/${name}: ${ok ? "ok" : "falhou"}`);
-        app.exit(ok ? 0 : 1);
+        void stopTelemetry().finally(() => app.exit(ok ? 0 : 1));
       });
     }
 
@@ -397,6 +405,9 @@ if (!gotLock) {
     // gancho de teste determinístico: grava 8s fullscreen+mic com um marker e para
     if (process.argv.includes("--autotest")) {
       setTimeout(async () => {
+        // init ANTES de medir: o autotest valida o caminho estável (em uso
+        // real a telemetria já subiu muito antes da primeira gravação)
+        await initTelemetry();
         logInfo("[autotest] start fullscreen+mic");
         await recordFullscreen();
         setTimeout(async () => {
@@ -410,7 +421,10 @@ if (!gotLock) {
       const done = (e: CaptureEvent) => {
         if (e.type === "session-done" || e.type === "session-error") {
           logInfo(`[autotest] fim: ${e.type}`);
-          setTimeout(() => app.exit(0), 500);
+          // margem pro flush do OTel (senão o app.exit perde as métricas do ciclo)
+          setTimeout(() => {
+            void stopTelemetry().finally(() => app.exit(0));
+          }, 1_000);
           clearTimeout(guard);
         }
       };
@@ -433,6 +447,7 @@ if (!gotLock) {
   app.on("will-quit", () => {
     globalShortcut.unregisterAll();
     void claimHotkey(false); // devolve o F9 ao daemon
+    void stopTelemetry(); // flush do OTel (best-effort — o smokes chamam direto)
     stopAsrHost(); // derruba o serviço python que subimos
   });
 

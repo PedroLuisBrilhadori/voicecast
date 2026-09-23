@@ -64,26 +64,51 @@ barra REC.
   do `pnpm docker:observability` do unidocs) → Prometheus/Tempo → Grafana
   `localhost:3001`.
 
-## Validação
+## Validação (real, Windows + Grafana — 2026-09-23)
 
 - WSL: `pnpm ci:local` ok (typecheck + 61 testes + build), incluindo os novos
-  testes do telemetry-core; queries representativas do dashboard validadas na
-  API do Grafana (`/api/ds/query` — sintaxe ok, frames vazios sem dados).
-- Dashboard provisionado e visível no Grafana local (uid `voicecast`) sem
-  restart.
-- **Pendente (Windows, com o mantenedor)**: `pnpm dev:win` → `--autotest` →
-  conferir no Grafana `voicecast_sessions_total` subindo, histograma de start
-  com dados e traces `session.start` no Tempo; na mão, `Ctrl+Shift+F9` deve
-  mostrar a barra instantânea com "preparando captura…" e o timer começando
-  ~0 no REC. Baseline do delay: percepção do mantenedor (8–10s) — números
-  reais passam a ficar no painel.
+  testes do telemetry-core; queries do dashboard validadas na API do Grafana.
+- **Prometheus recebeu as métricas do app**: `voicecast_sessions_total` = 1,
+  `voicecast_session_starts_total` = 1, `voicecast_session_start_seconds_count`
+  = 3 (estágios total/gum-desktop/gum-mic) após `--autotest`; collector com
+  delta positivo e **zero falhas novas**.
+- **Breakdown real do start (quente)**: total **1,18s** · gum-desktop **0,27s**
+  · gum-mic **0,26s** — a captura é rápida; o delay de 8–10s relatado tinha
+  OUTRA causa (abaixo).
+- Traces `session.start`/`recorder.load`/`recorder.open`/`sources.list` no
+  Tempo (service `voicecast`).
+- **Checagem visual do dashboard** (painéis/legendas/units) pendente do
+  mantenedor: http://localhost:3001/d/voicecast.
+
+## Descobertas do diagnóstico (o "delay" tinha dois andares)
+
+1. **Barra depois da captura** (fixado na F1): a barra só nascia após o
+   getUserMedia — agora nasce na hora ("preparando captura…").
+2. **Import do SDK OTel trava o event loop por ~9s**: medido no autotest de
+   cold start (`start ok: total=9.97s` com desktop=218ms/mic=221ms — o
+   `telemetria: OTLP para` só terminou DEPOIS de 9s, colidindo com o start).
+   Mitigação: init do OTel agora espera **idle + 15s de vida** (retry 5s);
+   o `--autotest` inicializa a telemetria ANTES de medir (caminho estável).
+   Residual: gravação iniciada nos ~9s em que o import roda ainda colide —
+   fix definitivo futuro = import do SDK em worker thread.
+3. **Infra (unidocs)**: o remotewrite do collector descartava lotes inteiros
+   com `out of order sample` **desde 2026-09-19** (~98k pontos no acumulado) —
+   produtores com relógio à frente (Windows: skew medido de ~2,2s do WSL2) e
+   replays de fila. Fix: Prometheus `v3.0.1 → v3.13.3` +
+   `storage.tsdb.out_of_order_time_window: 10m` (a config não existe no
+   v3.0.1; no v3 virou chave de config, não flag de CLI). Sonda OTLP→collector
+   →Prometheus validada antes/depois.
+4. **App saía sem flush**: o reader só exporta a cada 5s e o `app.exit()`
+   dos smokes perdia o ciclo — `stopTelemetry()` (shutdown+flush) no
+   will-quit e nos ganchos que saem. Detecção de erros de export:
+   `VOICECAST_OTEL_DEBUG=1` (diag logger, silencioso por default).
 
 ## Notas
 
-- Emits nos primeiros ~3s de vida do app (antes do init) são descartados por
-  design — janela pequena, documentada no telemetry-core.
-- Nomes Prometheus: counters com sufixo `_total` mantidos; histogramas geram
-  `_bucket/_sum/_count` via remotewrite. Se o collector fizer sanitização
-  diferente na validação real, ajustar as queries do painel (não o código).
-- Fora do escopo deste marco (próximos blocos): ditado-start/ASR host/boot/
-  erros globais/`clip_seconds`; logs → Loki (handler OTLP, paridade voice).
+- Emits antes do init (idle ≥15s) são descartados por design — janela
+  pequena, documentada no telemetry-core.
+- Nomes Prometheus: counters com `_total`, histogramas geram
+  `_bucket/_sum/_count` — validado ponta a ponta.
+- Próximos blocos (fora do escopo): ditado-start/ASR host/boot/erros globais/
+  `clip_seconds`; logs → Loki (handler OTLP); worker thread p/ o import do
+  SDK; re-sync de relógio do WSL2 (hwclock) na infra.

@@ -20,6 +20,7 @@ export const histogram: typeof core.histogram = core.histogram;
 
 let tracer: import("@opentelemetry/api").Tracer | null = null;
 let started = false;
+let sdk: import("@opentelemetry/sdk-node").NodeSDK | null = null;
 
 export async function initTelemetry(): Promise<void> {
   if (started) return;
@@ -30,6 +31,11 @@ export async function initTelemetry(): Promise<void> {
   }
   try {
     const api = await import("@opentelemetry/api");
+    if (process.env.VOICECAST_OTEL_DEBUG === "1") {
+      // diag do OTel é silencioso por default — sem isso erros de export
+      // (ex.: metric reader) desaparecem sem vestígios
+      api.diag.setLogger(new api.DiagConsoleLogger(), api.DiagLogLevel.DEBUG);
+    }
     const { NodeSDK } = await import("@opentelemetry/sdk-node");
     const { OTLPTraceExporter } = await import("@opentelemetry/exporter-trace-otlp-http");
     const { OTLPMetricExporter } = await import("@opentelemetry/exporter-metrics-otlp-http");
@@ -37,13 +43,16 @@ export async function initTelemetry(): Promise<void> {
 
     const endpoint =
       process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://localhost:4318";
-    const sdk = new NodeSDK({
+    sdk = new NodeSDK({
       serviceName: "voicecast",
       traceExporter: new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
-      metricReader: new PeriodicExportingMetricReader({
-        exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics` }),
-        exportIntervalMillis: 15_000,
-      }),
+      // plural (singular 'metricReader' é deprecado no sdk-node 0.222+)
+      metricReaders: [
+        new PeriodicExportingMetricReader({
+          exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics` }),
+          exportIntervalMillis: 5_000,
+        }),
+      ],
     });
     sdk.start();
     core.setMeter(api.metrics.getMeter("voicecast"));
@@ -53,7 +62,22 @@ export async function initTelemetry(): Promise<void> {
     logError("telemetria indisponível (seguindo sem ela):", (e as Error)?.message ?? e);
     core.setMeter(null);
     tracer = null;
+    sdk = null;
   }
+}
+
+/**
+ * Flush+shutdown do SDK — sem isso o app.exit() perde as métricas do ciclo
+ * corrente (o reader só exporta no intervalo). Chamar no will-quit e nos
+ * smokes que saem (--autotest/--transcribe) ANTES do app.exit.
+ */
+export async function stopTelemetry(): Promise<void> {
+  const s = sdk;
+  sdk = null;
+  if (!s) return;
+  try {
+    await s.shutdown();
+  } catch {}
 }
 
 /** Span para blocos async: const r = await withSpan("ditado.toggle", async (s) => {...}) */
