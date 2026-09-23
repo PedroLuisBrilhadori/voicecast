@@ -82,6 +82,10 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
   `Ctrl+Z`/`Ctrl+Shift+Z` só com a overlay em modo desenho (nunca global).
   Marker (`Ctrl+M`) e rajada de anotação no ditado geram prints queimados em
   `frames/` (composite frame+marcações). Smoke determinístico: `--anotest`.
+- **Observabilidade é Definition of Done** (mantenedor, 2026-09-23): o que
+  rodou, como e o que aconteceu sempre fica registrado — funcionalidade nova
+  nasce instrumentada (spans/métricas/log OTLP via `telemetry-core` +
+  `logging`), sem "telemetria depois".
 - **React/react-dom devem ficar na MESMA versão exata** (ex.: 19.2.7 +
   19.2.7) — minors diferentes (^19) resolveram 19.2.7/19.3.0 e quebraram a
   barra em runtime (React error #527, silencioso no build).
