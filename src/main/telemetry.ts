@@ -17,7 +17,7 @@
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { logError, logInfo } from "./logging";
-import { createTelemetryCore } from "../shared/telemetry-core";
+import { createTelemetryCore, type MeterLike } from "../shared/telemetry-core";
 import { createTelemetryBridge, type TelemetryBridge } from "../shared/telemetry-bridge";
 
 const core = createTelemetryCore();
@@ -25,6 +25,17 @@ const core = createTelemetryCore();
 /** Lazy: resolvem o instrumento no primeiro emit (ver telemetry-core.ts). */
 export const counter: typeof core.counter = core.counter;
 export const histogram: typeof core.histogram = core.histogram;
+
+/**
+ * C4: pluga um meter NO PROCESSO CORRENTE — o worker do agente (utilityProcess)
+ * usa isto para retransmitir counter/histogram do runner ao main pela porta
+ * (agent-worker-protocol.ts): o SDK OTel continua existindo só no
+ * worker-thread do main (W1) — o utilityProcess NÃO duplica o init. O main
+ * nunca chama isto (seu meter é ligado pelo initTelemetry).
+ */
+export function setProcessMeter(m: MeterLike | null): void {
+  core.setMeter(m);
+}
 
 const bridge: TelemetryBridge = createTelemetryBridge({
   logger: { info: logInfo, error: logError },
