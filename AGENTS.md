@@ -17,6 +17,10 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 
 | Path | Papel |
 |---|---|
+| `docs/DELEGACAO.md` | **Protocolo de WPs pilotados por subagents** + estado dos WPs + briefings em `docs/wp/` — agente delegado começa por aqui |
+
+| Path | Papel |
+|---|---|
 | `src/shared/ipc.ts` | Contrato IPC tipado — canais + payloads. Mudou aqui → muda preload + renderer + testes |
 | `src/shared/paths.ts` | Helpers puros (WSL path, nomes de sessão) — testáveis |
 | `src/main/` | Processo principal: janelas, atalhos globais, captura, ffmpeg, storage |
