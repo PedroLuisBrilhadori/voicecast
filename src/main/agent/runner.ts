@@ -16,6 +16,10 @@
  *   WSL — nunca paths Windows); o self-heal de credentials roda dentro do
  *   WSL via node24 -e (SETUP_CREDENTIALS_JS).
  * - Fila de 1 goal por vez; timeout com kill; kill-switch VOICECAST_AGENT_BRIDGE=0.
+ * - C3: o goal pode ser ENRIQUECIDO com o contexto bounded da última sessão
+ *   (`req.enrich`, injetado pelo chamador — goal-context.ts; aqui só o
+ *   contrato pura entra, sem import de electron). Atributos `context.*` vão
+ *   no span `agent.goal`.
  * - Config: ZCODE_AGENT_BIN (override do binário), ZCODE_AGENT_TIMEOUT_MS,
  *   VOICECAST_ZCODE_BUILD_DIR e VOICECAST_RUNTIME_DIR (paths do runtime setup).
  */
@@ -34,6 +38,7 @@ import {
   type GoalPhase,
   type GoalState,
 } from "../../shared/agent-goal";
+import type { EnrichedGoal, GoalEnricher } from "../../shared/agent-context";
 
 const M_GOALS = counter("voicecast_agent_goals_total", "goals por desfecho");
 const H_GOAL = histogram("voicecast_agent_goal_seconds", "duração do goal");
@@ -140,6 +145,12 @@ export interface RunGoalRequest {
   goal: string;
   cwd: string;
   timeoutMs?: number;
+  /**
+   * C3: enriquecedor opcional do goal (contexto bounded da última sessão —
+   * goal-context.ts produz; o chamador injeta). Falha do enricher NUNCA
+   * quebra o goal (fail-soft, attrs context.* = sem).
+   */
+  enrich?: GoalEnricher;
 }
 
 export interface RunGoalResult {
@@ -158,7 +169,23 @@ export async function runGoal(req: RunGoalRequest, cfg: RunnerConfig = agentRunn
   }
   const t0 = Date.now();
   const timeoutMs = req.timeoutMs ?? cfg.timeoutMs;
-  return withSpan("agent.goal", { "goal.id": req.id }, async () => {
+  // C3: enriquecimento ANTES do span — os attrs context.* entram no start do
+  // agent.goal. Enricher quebrado não quebra o goal (fail-soft, "sem").
+  let goalFinal = req.goal;
+  let ctxAttrs: Record<string, string | number> = {};
+  if (req.enrich) {
+    try {
+      const eg: EnrichedGoal = await req.enrich(req.goal);
+      goalFinal = eg.goal;
+      ctxAttrs = {
+        "context.incluido": eg.included ? "com" : "sem",
+        "context.chars": eg.contextChars,
+      };
+    } catch {
+      ctxAttrs = { "context.incluido": "sem", "context.chars": 0 };
+    }
+  }
+  return withSpan("agent.goal", { "goal.id": req.id, ...ctxAttrs }, async () => {
     // Runtime setup (C2b): materializa/cura o data-dir 1x por processo —
     // falha de pré-requisito (sem build U1 / sem login) vira goal failed com
     // erro claro (o counter de setup já foi emitido no ensure).
@@ -180,7 +207,7 @@ export async function runGoal(req: RunGoalRequest, cfg: RunnerConfig = agentRunn
         return result;
       }
     }
-    const { cmd, args, env } = goalSpawnArgs(cfg, req.goal, rt?.env);
+    const { cmd, args, env } = goalSpawnArgs(cfg, goalFinal, rt?.env);
     const child = spawn(cmd, args, {
       cwd: cfg.direct ? req.cwd : undefined,
       env: { ...process.env, ...env },
@@ -237,9 +264,12 @@ export class GoalQueue {
   private busy = false;
   private pending: RunGoalRequest[] = [];
   private onState: (state: GoalState) => void;
+  /** C3: enriquecedor do goal (contexto da última sessão) — injetado pelo chamador. */
+  private enrich?: GoalEnricher;
 
-  constructor(onState: (state: GoalState) => void = () => {}) {
+  constructor(onState: (state: GoalState) => void = () => {}, enrich?: GoalEnricher) {
     this.onState = onState;
+    this.enrich = enrich;
   }
 
   get size(): number {
@@ -264,7 +294,7 @@ export class GoalQueue {
     this.onState(state);
     state = transitionGoal(state, { type: "start" });
     this.onState(state);
-    const result = await runGoal(req, cfg);
+    const result = await runGoal(this.enrich ? { ...req, enrich: this.enrich } : req, cfg);
     state = transitionGoal(state, {
       type: "finish",
       phase: result.phase === "completed" ? "completed" : result.phase === "timeout" ? "timeout" : "failed",

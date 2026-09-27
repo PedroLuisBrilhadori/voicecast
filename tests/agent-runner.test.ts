@@ -5,6 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { GoalQueue, agentRunnerConfig, goalSpawnArgs, runGoal, type RunnerConfig } from "../src/main/agent/runner";
 import { SETUP_CREDENTIALS_JS } from "../src/main/agent/runtime-setup";
+import type { GoalEnricher } from "../src/shared/agent-context";
+import { SESSION_CONTEXT_BEGIN, SESSION_CONTEXT_END } from "../src/shared/agent-context";
+import { isGoalFinal, type GoalState } from "../src/shared/agent-goal";
 
 /**
  * Runner do cockpit (C2) contra um agente FAKE (tests/fixtures/fake-agent.sh)
@@ -155,6 +158,35 @@ describe("runGoal (agente fake)", () => {
     expect(r.phase).toBe("failed");
     expect(r.error).toContain("VOICECAST_AGENT_BRIDGE");
   });
+
+  it("C3: enrich injetado altera o goal que chega ao agente", async () => {
+    const enrich: GoalEnricher = async (goal) => ({
+      goal: `${goal}\n\n${SESSION_CONTEXT_BEGIN}\nfala da sessão\n${SESSION_CONTEXT_END}`,
+      included: true,
+      contextChars: 16,
+    });
+    process.env.FAKE_ECHO_ARGS = "1";
+    const r = await runGoal({ id: "5", goal: "base", cwd: os.tmpdir(), enrich }, cfg);
+    delete process.env.FAKE_ECHO_ARGS;
+    expect(r.phase).toBe("completed");
+    expect(r.stdout).toContain("base");
+    expect(r.stdout).toContain(SESSION_CONTEXT_BEGIN);
+    expect(r.stdout).toContain("fala da sessão");
+    expect(r.stdout).toContain(SESSION_CONTEXT_END);
+  });
+
+  it("C3: enricher quebrado NUNCA quebra o goal (fail-soft)", async () => {
+    const r = await runGoal({
+      id: "6",
+      goal: "base",
+      cwd: os.tmpdir(),
+      enrich: async () => {
+        throw new Error("boom");
+      },
+    }, cfg);
+    expect(r.phase).toBe("completed");
+    expect(r.stdout).toContain("ok do agente");
+  });
 });
 
 describe("GoalQueue", () => {
@@ -181,5 +213,25 @@ describe("GoalQueue", () => {
     const q = new GoalQueue();
     expect(q.enqueue({ id: "x", goal: "  ", cwd: "." })).toEqual({ ok: false, error: "goal vazio" });
     expect(q.enqueue({ id: "y", goal: "g", cwd: "." }, { enabled: false, agentBin: "", timeoutMs: 1, direct: true }).ok).toBe(false);
+  });
+
+  it("C3: enricher injetado no GoalQueue chega ao agente pelo goal enriquecido", async () => {
+    const enrich: GoalEnricher = async (goal) => ({
+      goal: `${goal}\n\n${SESSION_CONTEXT_BEGIN}\ncontexto pela fila\n${SESSION_CONTEXT_END}`,
+      included: true,
+      contextChars: 18,
+    });
+    const finals: GoalState[] = [];
+    const q = new GoalQueue((s) => {
+      if (isGoalFinal(s.phase)) finals.push(s);
+    }, enrich);
+    process.env.FAKE_ECHO_ARGS = "1";
+    q.enqueue({ id: "c3", goal: "goal da fila", cwd: os.tmpdir() }, cfg);
+    await new Promise((r) => setTimeout(r, 800));
+    delete process.env.FAKE_ECHO_ARGS;
+    expect(finals.some((s) => s.phase === "completed")).toBe(true);
+    const done = finals.find((s) => s.phase === "completed");
+    expect(done?.lastOutput).toContain(SESSION_CONTEXT_BEGIN);
+    expect(done?.lastOutput).toContain("contexto pela fila");
   });
 });
