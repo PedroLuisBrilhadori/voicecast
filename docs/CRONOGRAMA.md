@@ -35,6 +35,12 @@ ponta a ponta ✅.
 
 ## Onda 1 — Metamorfose de harness: voicecast como cockpit do agente · M/L · 23–30/09
 
+> Plano detalhado: **[PLANO-COCKPIT](PLANO-COCKPIT.md)** (WPs C1–C7, teste,
+> segurança e decisões a ratificar). FD.0 resolvido (2026-09-23): o engine do
+> ZCode é dirigível por **stdio** (`zcode-server.cjs`, protocolo
+> `session/create/send/subscribe` + `turn.*` + `permission.respond`) — o
+> cockpit aciona agente de primeira classe, sem UIA/colagem (ficam de fallback).
+
 Direção do mantenedor (2026-09-23): a integração almejada **não é "ZCode
 consulta o voicecast"** (MCP ficou sem dono por enquanto) — é o **voicecast
 subir de gravador a porta de entrada do agente**. ZCode vira o engine atrás.
