@@ -1,10 +1,37 @@
 # Probe ACP — protocolo stdio do zcode-server (C1 do PLANO-COCKPIT)
 
-Data: 2026-09-27 · Probe: `probe-acp.mjs` (transcript em `probe-log.jsonl`)
+Data: 2026-09-27 · Probes: `probe-acp.mjs` + `probe-roundtrip.mjs`
+(transcripts em `probe-log.jsonl` / `roundtrip-log.jsonl`)
 Alvo: `~/.zcode/server/zcode-server.cjs` (v3.14.3, linux/x64) — o MESMO binary
 que o ZCode Desktop dirige hoje (pid observado em produção).
 
-## O que foi provado
+## Adendo do roundtrip (mesma data) — achados que mudaram o C2
+
+1. `createSession {workspacePath}` (canal `zcode-agent`, args como ARRAY
+   posicional) chega ao server e ele vai LONGE: resolve o workspace, spawn o
+   **agente aninhado** `~/.zcode/server/agents/glm/zcode-agent app-server
+   --stdio --surface desktop` (ndjson JSON-RPC), entrega provider config.
+2. Na sequência o **agente pede `session/requestRuntimePreferences` de volta
+   ao pai** — e quem responde é a **autoridade desktop**
+   (`serviceAuthorityMode: desktop-attached-remote`). Sem desktop conectado →
+   timeout 15s → `createSession` falha.
+3. O CLI do agente expõe **modo headless de primeira classe**: `-p/--prompt`,
+   `--surface terminal|desktop`, `--attach`, `--resume`, `--mode
+   build|edit|plan|yolo` (default yolo em -p), `--cwd`, `--json`, `-c`.
+   Credenciais compartilhadas `~/.zcode/v2/credentials.json`.
+4. Bloqueio único do headless: "Select a model before continuing" — seleção
+   vive no db de sessões (`session_entry`, chave `runtime/model_selection`,
+   id `<sessão>:runtime-model-selection`); via TUI o desktop seleciona, o
+   headless não tem flag documentada. Pendência: caminho oficial de seleção.
+5. **Conclusão**: bridge v1 = CLI headless direto (sem middleman). O
+   conhecimento do canal binário fica registrado p/ E5/fabric e integrações
+   futuras (permission gating etc.).
+
+O restante deste documento registra a decodificação original do protocolo
+binário (handshake, framing, serializer, canais, schemas v4) — continua
+correto e útil; apenas não é o caminho do bridge v1.
+
+## O que foi provado (roundtrip original, sem o pivot)
 
 1. **O server aceita clientes próprios**: spawn limpo, handshake aceito com
    `clientId: voicecast-probe` ("client connected"), boot até "stdio mode

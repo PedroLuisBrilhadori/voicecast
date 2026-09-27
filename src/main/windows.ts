@@ -4,7 +4,9 @@
  */
 import { BrowserWindow, screen, ipcMain } from "electron";
 import path from "node:path";
+import fs from "node:fs";
 import type { Rect } from "../shared/ipc";
+import { appDataDir } from "./storage";
 
 const dist = (...p: string[]) => path.join(__dirname, "../renderer", ...p);
 const preload = () => path.join(__dirname, "../preload/index.js");
@@ -96,15 +98,54 @@ export function selectRegionOnDisplay(displayIndex = 0): Promise<Rect | null> {
   });
 }
 
+// ── posição da bar persistida entre sessões ────────────────────
+
+const barBoundsFile = (): string => {
+  try {
+    return path.join(appDataDir(), "bar-position.json");
+  } catch {
+    return ""; // app não pronto (testes) — sem persistência
+  }
+};
+
+/** Última posição salva da bar (ou null). Valida que ainda está visível em alguma tela. */
+export function loadSavedBarBounds(): Rect | null {
+  const f = barBoundsFile();
+  if (!f) return null;
+  try {
+    const b = JSON.parse(fs.readFileSync(f, "utf8")) as Rect;
+    const onScreen = screen.getAllDisplays().some((d) => {
+      const { x, y, width, height } = d.bounds;
+      return b.x + b.width > x + 40 && b.x < x + width - 40 && b.y + b.height > y + 10 && b.y < y + height - 10;
+    });
+    return onScreen ? b : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveBarBounds(w: BrowserWindow): void {
+  const f = barBoundsFile();
+  if (!f || w.isDestroyed()) return;
+  try {
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, JSON.stringify(w.getBounds()));
+  } catch {}
+}
+
 /** Barra compacta frameless sempre-no-topo durante a gravação.
- *  opts.ditado: botões viram toggle do ditado; caller decide show() vs showInactive(). */
+ *  opts.ditado: botões viram toggle do ditado; caller decide show() vs showInactive().
+ *  Restaura a última posição arrastada pelo usuário (bar-position.json); sem
+ *  posição salva nasce no default do SO. */
 export function createBar(
   modeLabel: string,
   opts: { ditado?: boolean } = {},
 ): BrowserWindow {
+  const saved = loadSavedBarBounds();
   const w = new BrowserWindow({
     width: opts.ditado ? 300 : 460,
     height: 56,
+    ...(saved ? { x: saved.x, y: saved.y } : {}),
     show: false,
     frame: false,
     resizable: false,
@@ -120,6 +161,13 @@ export function createBar(
     query: { mode: modeLabel, ...(opts.ditado ? { ditado: "1" } : {}) },
   });
   wireLogging(w, "bar");
+  let saveTimer: NodeJS.Timeout | null = null;
+  const persist = () => {
+    clearTimeout(saveTimer!);
+    saveTimer = setTimeout(() => saveBarBounds(w), 300);
+  };
+  w.on("moved", persist);
+  w.on("close", persist);
   w.show();
   return w;
 }

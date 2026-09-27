@@ -52,25 +52,42 @@ F9 (voz) → ditado → ASR → Jev rota comando_agente (conf ≥0.9)
 
 ## Work packages
 
-### C1 — Probe do protocolo (S) · primeiro, destrava tudo
-Script standalone em `scripts/probes/2026-09-23-acp/` (padrão discovery):
-spawn do server pelo WSL, `initialize`, `session/create`, envio de goal mínimo
-("responda só: ok"), leitura de `turn.completed`. Documenta os schemas reais
-(request/response) do subconjunto que o bridge usa, no RESULTADOS.md do probe.
-**Aceite**: goal mínimo executa ponta a ponta e a troca de mensagens fica
-logada (JSONL). Não gasta nada além de uma sessão de teste.
+### C1 — Probe do protocolo (S) · CONCLUÍDO (2026-09-27)
+Script standalone em `scripts/probes/2026-09-27-acp/`:
+`probe-acp.mjs` (handshake+framing decodificados) e `probe-roundtrip.mjs`
+(roundtrip real). Resultados completos no `RESULTADOS.md` do probe. Em
+síntese: handshake ndjson `zcode-hello/ack` ✓ · framing binário VS Code
+(13B) ✓ · serializer byte-exato ✓ · args como ARRAY posicional ✓ ·
+`zcode-agent.createSession {workspacePath}` chega ao server ✓. **Porém**: o
+server é um *relay* — na criação de sessão o agente aninhado
+(`agents/glm/zcode-agent`) pede runtime preferences de volta e quem responde
+é a **autoridade desktop**; sem desktop, `createSession` estoura timeout.
+Replicar a autoridade = superfície instável e version-coupled.
 
-### C2 — `agent-bridge` em utilityProcess (M) · o coração
-Encapsula o ciclo spawn → initialize → session/create → send → subscribe →
-stop, com timeout, fila de 1 goal por vez e teardown no quit. Roda em
-**utilityProcess** (decisão ratificada): crash do bridge não derruba
-gravação/ditado; o main só vê o contrato do bridge (messages port). Paths do
-server/node configuráveis (`ZCODE_SERVER_*`), kill-switch `VOICECAST_AGENT_BRIDGE=0`.
-Testável com server **fake** por stdio (fixtures de `turn.*`).
-**Instrumentação (DoD)**: spans `agent.goal`; counters
-`voicecast_agent_goals_total{desfecho}`; histograma `voicecast_agent_goal_seconds`.
-**Aceite**: unit verde com server fake; `--agenttest "goal de teste"`
-determinístico no Windows (novo gancho, padrão `--autotest`).
+**Pivot ratificado pelo achado (2026-09-27)**: o bridge v1 **não usa o
+middleman** — usa o modo headless de primeira classe do CLI do agente
+(`zcode-agent -p "<goal>" --surface terminal`, com `--attach`, `--resume`,
+`--mode`). Mesmo binário/plano/credenciais do desktop
+(`~/.zcode/v2/credentials.json`); zero protocolo reverso.
+
+### C2 — `agent-bridge` em utilityProcess (M) · núcleo implementado (2026-09-27)
+- `src/shared/agent-goal.ts`: máquina de estados pura
+  (queued→running→completed/failed/timeout/cancelled) + resumos p/ barra.
+- `src/main/agent/runner.ts`: runner do goal — Linux/WSL spawn direto,
+  Windows via `wsl.exe --exec sh -lc` com **goal por env** (nunca argv
+  interpolado), fila de 1 (`GoalQueue`), timeout com SIGTERM→SIGKILL,
+  kill-switch `VOICECAST_AGENT_BRIDGE=0`, telemetria
+  (`voicecast_agent_goals_total{desfecho}`, `voicecast_agent_goal_seconds`,
+  span `agent.goal`).
+- Testes: `tests/agent-goal.test.ts` + `tests/agent-runner.test.ts` (agente
+  fake `tests/fixtures/fake-agent.sh`) — 14 novos, 86 no total.
+- **Bloqueio único (config, não código)**: o CLI headless exige seleção de
+  modelo prévia ("Select a model before continuing") — o desktop seleciona
+  via UI e o estado vive no db compartilhado (`runtime/model_selection`,
+  `session_entry` por sessão). Pendente definir o caminho oficial: primeira
+  seleção via TUI, flag/config do CLI, ou seed do db — a definir com o
+  mantenedor. UtilityProcess + IPC + barra = próximo passo (padrão já
+  ratificado, código aguarda o desbloqueio acima).
 
 ### C3 — Contexto no goal (S)
 O goal leva o `buildContext` bounded da última sessão (se < N minutos e

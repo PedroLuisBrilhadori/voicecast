@@ -26,12 +26,13 @@ function desfechoDitado(r: { rota?: string; colado?: boolean }): string {
 }
 
 /** Barra compacta frameless: REC + timer + waveform + markers + controles.
- *  Arrastável pela área esquerda (-webkit-app-region: drag).
+ *  Janela inteira arrastável (app-region: drag); botões no-drag.
  *  Modo ditado (query ditado=1): sem foco, só timer + waveform + parar. */
 export function BarApp() {
   const qs = new URLSearchParams(location.search);
   const mode = qs.get("mode") ?? "Gravação";
   const isDitado = qs.get("ditado") === "1";
+  const noDrag = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
   const [elapsed, setElapsed] = useState(0);
   const [transcribing, setTranscribing] = useState(false);
   const [resultado, setResultado] = useState<{ rota?: string; conf?: number; colado?: boolean } | null>(null);
@@ -110,9 +111,10 @@ export function BarApp() {
         color: "#e8e8ee",
         font: "13px system-ui",
         userSelect: "none",
-      }}
+        WebkitAppRegion: "drag",
+      } as React.CSSProperties}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8, WebkitAppRegion: "drag" } as React.CSSProperties}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         {resultado ? (
           <span
             style={{
@@ -164,7 +166,7 @@ export function BarApp() {
       {isDitado ? (
         <button
           onClick={() => void window.voicecast.ditadoToggle()}
-          style={{ background: "#2d1b3d", borderColor: "#7c4dff", padding: "4px 14px", fontWeight: 700 }}
+          style={{ background: "#2d1b3d", borderColor: "#7c4dff", padding: "4px 14px", fontWeight: 700, ...noDrag }}
         >
           ■ Parar
         </button>
@@ -174,7 +176,7 @@ export function BarApp() {
             title="Marcar momento (Ctrl+M)"
             onClick={() => void window.voicecast.addMarker()}
             disabled={arming}
-            style={{ padding: "4px 10px", opacity: arming ? 0.4 : 1 }}
+            style={{ padding: "4px 10px", opacity: arming ? 0.4 : 1, ...noDrag }}
           >
             ◆ {markers}
           </button>
@@ -184,21 +186,21 @@ export function BarApp() {
               void window.voicecast.pause(!paused);
             }}
             disabled={arming}
-            style={{ padding: "4px 10px", opacity: arming ? 0.4 : 1 }}
+            style={{ padding: "4px 10px", opacity: arming ? 0.4 : 1, ...noDrag }}
           >
             {paused ? "▶" : "❚❚"}
           </button>
           <button
             onClick={() => void window.voicecast.stopRecording()}
             disabled={arming}
-            style={{ background: "#2d1b3d", borderColor: "#7c4dff", padding: "4px 14px", fontWeight: 700, opacity: arming ? 0.4 : 1 }}
+            style={{ background: "#2d1b3d", borderColor: "#7c4dff", padding: "4px 14px", fontWeight: 700, opacity: arming ? 0.4 : 1, ...noDrag }}
           >
             ■ Parar
           </button>
           <button
             title="Cancelar (não salva)"
             onClick={() => void window.voicecast.cancelRecording()}
-            style={{ padding: "4px 10px", color: "#ff8a8a" }}
+            style={{ padding: "4px 10px", color: "#ff8a8a", ...noDrag }}
           >
             ✕
           </button>

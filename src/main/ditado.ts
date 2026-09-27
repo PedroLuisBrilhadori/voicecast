@@ -9,7 +9,7 @@
 import { BrowserWindow, clipboard, globalShortcut, ipcMain } from "electron";
 import { transcribeAudioFile } from "./asr";
 import { logError, logInfo } from "./logging";
-import { createDitado, createBar } from "./windows";
+import { createDitado, createBar, loadSavedBarBounds } from "./windows";
 import { saveDictationSession } from "./library";
 import { counter, histogram, withSpan } from "./telemetry";
 import { spawn } from "node:child_process";
@@ -119,10 +119,13 @@ export async function claimHotkey(claim: boolean): Promise<boolean> {
 
 function startDitadoBar(): void {
   const { screen } = require("electron") as typeof import("electron");
-  const d = screen.getPrimaryDisplay();
   barWin = createBar("Ditado", { ditado: true });
-  const b = barWin.getBounds();
-  barWin.setPosition(d.workArea.x + d.workArea.width - b.width - 18, d.workArea.y + d.workArea.height - b.height - 18);
+  if (!loadSavedBarBounds()) {
+    // primeira vez: canto inferior direito; depois, vale onde o usuário arrastou
+    const d = screen.getPrimaryDisplay();
+    const b = barWin.getBounds();
+    barWin.setPosition(d.workArea.x + d.workArea.width - b.width - 18, d.workArea.y + d.workArea.height - b.height - 18);
+  }
   barWin.showInactive(); // aparece SEM tomar foco — o Ctrl+V cola onde você estava
 }
 
