@@ -40,8 +40,8 @@ WPs fechados.
 | [W1 — worker thread p/ import OTel](wp/W1-worker-otel.md) | 1 ⚡ | ✅ **entregue** (331e35b; 114 testes; API main intacta; gate Windows pendente) | — |
 | [C7 — hook + skill .zcode](wp/C7-hook-skill.md) | 1 ⚡ | ✅ **entregue** (39 testes; hook `enabled:false` — gate: ligar + validar c/ sessão real no Windows) | — |
 | C2-unlock — validar goal headless de verdade | 1 | bloqueado: depende de U1 | — |
-| [C3 — contexto no goal](wp/C3-contexto-goal.md) | 1 | 🚀 piloto em background (C2 desbloqueado) | C4 serial |
-| [C4 — cockpit na barra (utilityProcess+IPC)](wp/C4-cockpit-barra.md) | 1 | briefing pronto (após C3 — runner.ts compartilhado) | — |
+| [C3 — contexto no goal](wp/C3-contexto-goal.md) | 1 | ✅ **entregue** (6a6d751..2aa5fe1; 167 testes; política Jev-ausente documentada) | — |
+| [C4 — cockpit na barra (utilityProcess+IPC)](wp/C4-cockpit-barra.md) | 1 | 🚀 piloto em background (liga o enricher do C3) | — |
 | C5 — gate de permissão local | 1 | bloqueado: C4 | — |
 | Onda 2 (#5 paridade, #3 dataset, #4 WASAPI) | 2 | rascunho (briefing ainda não escrito) | — |
 
