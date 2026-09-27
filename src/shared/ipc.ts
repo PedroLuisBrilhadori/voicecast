@@ -14,9 +14,10 @@ import type {
   Pt,
   StrokeSnapshot,
 } from "./annotations";
+import type { GoalPhase, GoalState } from "./agent-goal";
 import type { SessionSegment } from "./segments";
 
-export type { AnnotationEvent, AnnotationTool, EraserMode, Pt, StrokeSnapshot, SessionSegment };
+export type { AnnotationEvent, AnnotationTool, EraserMode, Pt, StrokeSnapshot, SessionSegment, GoalPhase, GoalState };
 
 export const IPC = {
   ping: "app:ping",
@@ -63,6 +64,12 @@ export const IPC = {
   openEditor: "library:open-editor",
   ditadoToggle: "ditado:toggle",
   asrStatus: "library:asr-status",
+
+  // ── cockpit de agente (C4 — PLANO-COCKPIT) ────────────────────
+  /** Renderer → main: enfileira um goal no worker do cockpit (entrada digitada). */
+  agentRunGoal: "agent:run-goal",
+  /** Renderer → main: snapshot do estado atual do goal (ou null). */
+  agentGetState: "agent:get-state",
 
   // ── anotações em tela (AN.1/AN.2 — PLANO-ANOTACOES-TELA) ─────
   /** Overlay → main: evento de anotação (main atribui seq/t, persiste e devolve). */
@@ -166,7 +173,9 @@ export type CaptureEvent =
       rota?: string;
       conf?: number;
       colado?: boolean;
-    };
+    }
+  /** C4: transição do goal do cockpit (worker → bridge → broadcast). */
+  | { type: "agent-state"; state: GoalState };
 
 // ── anotações em tela (AN) ─────────────────────────────────────────────────
 
@@ -262,6 +271,12 @@ export interface VoicecastBridge {
   /** Liga/desliga o ditado (usado pela barra do ditado). */
   ditadoToggle(): Promise<{ ok: boolean; error?: string }>;
   asrStatus(): Promise<{ ok: boolean; source?: string }>;
+
+  // C4 — cockpit de agente
+  /** Enfileira um goal no worker do cockpit (retorno imediato; estados via onEvent "agent-state"). */
+  agentRunGoal(goal: string): Promise<{ ok: true; id: string } | { ok: false; error: string }>;
+  /** Estado atual do goal (ou null se nunca houve) — snapshot inicial da barra/painel. */
+  agentGetState(): Promise<GoalState | null>;
 }
 
 // ── biblioteca / pós-produção (M2) ─────────────────────────────

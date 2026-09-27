@@ -52,6 +52,9 @@ const bridge: VoicecastBridge = {
   openEditor: (dir: string, name: string) => ipcRenderer.invoke(IPC.openEditor, dir, name),
   ditadoToggle: () => ipcRenderer.invoke(IPC.ditadoToggle),
   asrStatus: () => ipcRenderer.invoke(IPC.asrStatus),
+  // C4 — cockpit de agente
+  agentRunGoal: (goal: string) => ipcRenderer.invoke(IPC.agentRunGoal, goal),
+  agentGetState: () => ipcRenderer.invoke(IPC.agentGetState),
   onEvent: (cb: (e: CaptureEvent) => void) => {
     const h = (_e: unknown, ev: CaptureEvent) => cb(ev);
     ipcRenderer.on(IPC.event, h);

@@ -3,7 +3,9 @@ import {
   IPC,
   type AnnotationWheelRequest,
   type Bootstrap,
+  type CaptureEvent,
   type ClipInfo,
+  type GoalState,
   type PingRequest,
   type PingResponse,
   type SessionMetaPatch,
@@ -70,5 +72,35 @@ describe("contrato IPC", () => {
     expect(JSON.parse(JSON.stringify(seg))).toEqual(seg);
     expect(JSON.parse(JSON.stringify(patch))).toEqual(patch);
     expect(JSON.parse(JSON.stringify(clip))).toEqual(clip);
+  });
+
+  it("canais do cockpit (C4) estáveis", () => {
+    expect(IPC.agentRunGoal).toBe("agent:run-goal");
+    expect(IPC.agentGetState).toBe("agent:get-state");
+  });
+
+  it("evento agent-state e GoalState serializáveis (C4) — payload puro cruza a porta", () => {
+    const state: GoalState = {
+      id: "g1",
+      goal: "abre um PR do C4",
+      cwd: "/home/x",
+      phase: "running",
+      startedAt: 1_700_000_000_000,
+      endedAt: null,
+      lastOutput: "texto do agente",
+      error: null,
+    };
+    const ev: CaptureEvent = { type: "agent-state", state };
+    expect(JSON.parse(JSON.stringify(ev))).toEqual(ev);
+    expect(Object.keys(state).sort()).toEqual([
+      "cwd",
+      "endedAt",
+      "error",
+      "goal",
+      "id",
+      "lastOutput",
+      "phase",
+      "startedAt",
+    ]);
   });
 });

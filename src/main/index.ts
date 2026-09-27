@@ -17,6 +17,8 @@ import {
   type SessionSegment,
   type StartRecordingRequest,
 } from "../shared/ipc";
+import { isGoalFinal, goalSummary } from "../shared/agent-goal";
+import { createAgentBridge, type AgentBridge } from "./agent/bridge";
 import {
   addMarker,
   applyRetention,
@@ -64,6 +66,12 @@ const SHORTCUTS: Bootstrap["shortcuts"] = {
 
 let picker: BrowserWindow | null = null;
 
+/** C4: modo smoke do cockpit (--agenttest "goal") — estados impressos no stdout. */
+const agenttestMode = process.argv.includes("--agenttest");
+
+/** Ponte do cockpit (utilityProcess) — criada no whenReady, parada no will-quit. */
+let agentBridge: AgentBridge | null = null;
+
 function broadcast(e: CaptureEvent): void {
   for (const w of BrowserWindow.getAllWindows()) {
     if (!w.isDestroyed()) w.webContents.send(IPC.event, e);
@@ -100,7 +108,7 @@ async function recordFullscreen(): Promise<void> {
   if (primary) await startRecording({ mode: "screen", sourceId: primary.id, withMic: true });
 }
 
-function registerIpc(): void {
+function registerIpc(agent: AgentBridge): void {
   ipcMain.handle(IPC.ping, (_e, req: PingRequest): PingResponse => ({ nonce: req.nonce, at: Date.now() }));
   ipcMain.handle(IPC.getBootstrap, (): Bootstrap => ({
     version: app.getVersion(),
@@ -175,6 +183,9 @@ function registerIpc(): void {
     return { ok: true } as const;
   });
   ipcMain.handle(IPC.ditadoToggle, () => toggleDitado());
+  // C4 — cockpit de agente: enqueue no worker (estados chegam via broadcast agent-state)
+  ipcMain.handle(IPC.agentRunGoal, (_e, goal: string) => agent.enqueue(typeof goal === "string" ? goal : ""));
+  ipcMain.handle(IPC.agentGetState, () => agent.lastState());
 
   ipcMain.on(IPC.micLevel, (_e, level: number) => {
     broadcast({ type: "mic-level", level });
@@ -195,7 +206,21 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     logInfo("whenReady: registrando IPC/atalhos…");
-    void ensureAsrHost(); // backend de transcrição (spawn+supervisão) — o modelo carrega em background
+    // backend de transcrição (spawn+supervisão) — o modelo carrega em background.
+    // --agenttest não o levanta (smoke do cockpit sem efeitos colaterais).
+    if (!agenttestMode) void ensureAsrHost();
+    // C4: ponte do cockpit — cada transição vira broadcast p/ barra/painel e,
+    // no --agenttest, linha no stdout (gancho determinístico do gate Windows).
+    agentBridge = createAgentBridge((s) => {
+      broadcast({ type: "agent-state", state: s });
+      if (agenttestMode) {
+        console.log(`[agenttest] ${s.id} ${s.phase}: ${goalSummary(s)}${s.error ? ` — ${s.error}` : ""}`);
+        if (isGoalFinal(s.phase)) {
+          const code = s.phase === "completed" ? 0 : 1;
+          void stopTelemetry().finally(() => app.exit(code));
+        }
+      }
+    });
     registerAnnotationIpc();
     // telemetria DEPOIS do boot: o import do SDK OTel bloqueia o event loop
     // por ~9s (medido no autotest de 2026-09-23) — se colidir com uma
@@ -210,7 +235,7 @@ if (!gotLock) {
     setTimeout(initTelIdle, 15_000);
     ensureLayout();
     applyRetention();
-    registerIpc();
+    registerIpc(agentBridge);
     subscribeEvents((e) => {
       broadcast(e);
       // M2: sessão finalizada → dispara transcrição automática em background
@@ -445,6 +470,37 @@ if (!gotLock) {
         app.exit(1);
       }, 120_000);
     }
+
+    // C4 — gancho de teste determinístico do cockpit: enfileira um goal no
+    // bridge (utilityProcess), imprime os estados no stdout e sai (exit 0 =
+    // completed). Roda no Windows (gate do mantenedor); o protocolo em si fica
+    // smokeado no WSL pelos testes do worker. Determinismo: ZCODE_AGENT_BIN
+    // aponta um binário fake (ex.: tests/fixtures/fake-agent.sh no WSL) — sem
+    // override, roda o runtime C2b de verdade.
+    if (agenttestMode) {
+      const idx = process.argv.indexOf("--agenttest");
+      const goalArg = process.argv[idx + 1];
+      const goal = goalArg && !goalArg.startsWith("--") ? goalArg : "Responda somente: ok";
+      setTimeout(async () => {
+        await initTelemetry(); // counter da ponte + telemetria retransmitida do worker
+        logInfo(`[agenttest] enfileirando goal: ${goal}`);
+        const r = agentBridge?.enqueue(goal);
+        if (!r?.ok) {
+          console.log(`[agenttest] enqueue falhou: ${r && "error" in r ? r.error : "bridge ausente"}`);
+          void stopTelemetry().finally(() => app.exit(1));
+          return;
+        }
+        console.log(`[agenttest] goal enfileirado: ${r.id}`);
+        // guard de segurança: runner sem resposta em timeout+30s → exit 1
+        setTimeout(
+          () => {
+            console.log("[agenttest] timeout de segurança — saindo");
+            void stopTelemetry().finally(() => app.exit(1));
+          },
+          (Number(process.env.ZCODE_AGENT_TIMEOUT_MS) || 15 * 60_000) + 30_000,
+        );
+      }, 2_000);
+    }
   });
 
   app.on("render-process-gone", (_e, wc, details) => {
@@ -459,6 +515,7 @@ if (!gotLock) {
     void claimHotkey(false); // devolve o F9 ao daemon
     void stopTelemetry(); // flush do OTel (best-effort — o smokes chamam direto)
     stopAsrHost(); // derruba o serviço python que subimos
+    agentBridge?.stop(); // C4: encerra o utilityProcess do cockpit
   });
 
   // fechar janela ≠ sair (o app vive nos atalhos globais)
