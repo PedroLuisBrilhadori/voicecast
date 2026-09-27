@@ -37,8 +37,8 @@ WPs fechados.
 | [W1 — worker thread p/ import OTel](wp/W1-worker-otel.md) | 1 ⚡ | **pronto** | U1, C6, C7 |
 | [C7 — hook + skill .zcode](wp/C7-hook-skill.md) | 1 ⚡ | pronto (gate humano no fim) | U1, C6, W1 |
 | C2-unlock — validar goal headless de verdade | 1 | bloqueado: depende de U1 | — |
-| C3 — contexto no goal | 1 | bloqueado: C2 | — |
-| C4 — cockpit na barra (utilityProcess+IPC) | 1 | bloqueado: C2/C3 | — |
+| [C3 — contexto no goal](wp/C3-contexto-goal.md) | 1 | briefing pronto (executa pós-U1) | C7 |
+| [C4 — cockpit na barra (utilityProcess+IPC)](wp/C4-cockpit-barra.md) | 1 | briefing pronto (executa pós-U1) | C3 (serial no repo) |
 | C5 — gate de permissão local | 1 | bloqueado: C4 | — |
 | Onda 2 (#5 paridade, #3 dataset, #4 WASAPI) | 2 | rascunho (briefing ainda não escrito) | — |
 
