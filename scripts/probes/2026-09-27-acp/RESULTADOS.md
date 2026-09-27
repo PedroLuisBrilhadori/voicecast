@@ -49,9 +49,32 @@ que o ZCode Desktop dirige hoje (pid observado em produção).
   mecanismo da ponte do Desktop).
 - Custo: cada goal roda no plano ZAI real (server consulta billing no boot).
 
-## O que falta no C1 (uma iteração)
+## Incógnitas do C1 — RESOLVIDAS (2026-09-27, mesma sessão)
 
-Roundtrip final com `vscode-rpc`: nome exato do canal do agente + args de
-`createSession`/`sendText` + nome do evento de turno (validar empiricamente;
-tudo já reduzido a essas três incógnitas). Transcript completo no
-`probe-log.jsonl`.
+1. **Canal do agente**: `zcode-agent` (irmãos úteis: `zcode-session`,
+   `conversation-share`; demais: `file/system/terminal/git/setting/
+   credential/cua-*/broadcast/zcode-task/window-controller`).
+2. **Args dos comandos v4** (schemas zod extraídos do bundle):
+   - `createSession`: `{ workspaceId: string, firstInput?: { text, attachments?,
+     modelSelection?, mode?, planEnabled? }, config?, mcpServers?,
+     offPeakToolEnabled?, dynamicWorkflowEnabled? }` — **cria a sessão e dispara
+     o goal no mesmo comando** (`firstInput.text`); sem firstInput = sessão draft.
+   - `sendText`: envelope `{type:"sendText", sessionId, payload}` com payload
+     `{ text, attachments?, requestedDelivery?: "startNow"|"queue"|"guide",
+     browserAmbientContext?, context_refs? (≤1), heldQueueDisposition? }` —
+     comando com ACK (`assertV4CommandAckOk`).
+   - Há TAMBÉM um createSession em nível de serviço que aceita
+     `workspacePath` (camada direta) — o mapeamento `cwd → workspaceId` fica
+     como detalhe de implementação do C2.
+3. **Eventos da sessão** (registry completo do bundle): `session.titleUpdated/
+   closed`, `turn.started/steerQueued/steerDrained/completed/failed`
+   (`turn.completed` carrega `duration` + `cacheStats`), `message.upserted/
+   removed`, `part.started/delta/upserted/removed`, `model.streaming`,
+   `tool.updated`, **`permission.requested/resolved`** (gancho do gate C5),
+   `userInput.requested/resolved`.
+
+Residual único para o C2: resolver `workspaceId` a partir do cwd escolhido
+(proável: serviço de workspace ou createSession em nível de serviço com
+`workspacePath`).
+
+## O que era a seção anterior (contexto)
