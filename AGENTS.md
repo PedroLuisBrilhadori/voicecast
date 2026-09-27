@@ -66,7 +66,10 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 - Ganchos de teste no app real (sem tecla física): `--ditado-test`
   (F9 start→6s→stop; determinístico com `VOICECAST_DITADO_FAKE_TEXT`) e
   `--autotest` (grava 8s e sai) + `--transcribe=DIR/NOME` (transcreve+julga e
-  sai). Rotina de validação no Windows documentada em docs/RELATORIO-E2.md.
+  sai) + `--agenttest "goal"` (C4/cockpit: enfileira o goal na ponte do
+  utilityProcess, imprime os estados no stdout e sai — exit 0 = completed;
+  determinístico com `ZCODE_AGENT_BIN` apontando um agente fake).
+  Rotina de validação no Windows documentada em docs/RELATORIO-E2.md.
 - **Anotações em tela (AN — PLANO-ANOTACOES-TELA)**: durante REC e no ditado,
   overlay transparente com laser/pincel/borracha. Log vetorial
   `annotations.jsonl` por sessão (px físicos, t relativo — fonte da verdade;

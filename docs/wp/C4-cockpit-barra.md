@@ -64,4 +64,56 @@ depois), protocolo do zcode-server (fora de escopo).
 Commits convencionais, sem push. Preencher Resultado abaixo.
 
 ## Resultado (preenche o piloto)
-- (pendente)
+
+**Entregue (2026-09-27)** — commits `37ee380`, `a54b22f`, `b69e7a3` (+ docs).
+`pnpm ci:local` verde: typecheck ×2 · **176 testes** (7 novos do worker com
+porta MOCK + 2 novos no ipc-contract) · build produz `dist/main/agent/worker.js`
+(CJS, sibling do bridge.js — fork resolve por `__dirname`, sem mudança de build).
+
+**Decisões com evidência (fora do caminho óbvio do briefing):**
+
+1. **Enricher C3 roda NO MAIN, não no worker** — medido empiricamente no
+   Electron 44 (smoke xvfb): dentro do utilityProcess `require("electron")`
+   devolve **apenas `{net, systemPreferences}`** — não há `app`. A cadeia do
+   `goalContextEnricher()` (biblioteca → storage → `app.getPath("userData")`)
+   não roda lá. O worker hospeda o GoalQueue com um **delegante pela porta**
+   (`enrich-request`/`enrich-result`, fail-soft por timeout de 30s — mesma
+   semântica C3); o main responde com o `goalContextEnricher()` de produção.
+   O counter `voicecast_agent_context_total` então segue emitindo no main.
+2. **Telemetria do runner migra com a fila SEM duplicar SDK** — o utilityProcess
+   não inicializa SDK OTel (regra do briefing). O worker pluga um **meter-ponte**
+   (`setProcessMeter`, export novo e mínimo no `telemetry.ts`) que retransmite
+   counter/histogram pela porta (`{type:"telemetry"}`); o bridge os reemite na
+   telemetria do main com os **mesmos nomes** (`voicecast_agent_goals_total`,
+   `voicecast_agent_goal_seconds`, counter do runtime setup) — um único
+   SDK/exporter (worker-thread do W1), sem colisão no collector. **Spans do
+   `agent.goal` ficam ausentes no worker** (withSpan não atravessa a porta) —
+   aceito e documentado conforme o briefing.
+3. **Recusa de enqueue vira estado sintético `failed`** (goal vazio / bridge
+   off) — a barra mostra o POR QUÊ, sem novo tipo de mensagem no protocolo.
+
+**Escopo entregue:** worker + protocolo puro (`agent-worker-protocol.ts`) ·
+bridge (fork lazy com refork pós-crash, kill-switch duplo — nível do fork E do
+runner — cleanup no will-quit, counter `voicecast_agent_bridge_messages_total{direcao}`)
+· IPC `agent:run-goal`/`agent:get-state` + evento broadcast `agent-state` no
+`CaptureEvent` (padrão da casa) + preload + teste de contrato · BarApp com linha
+de estado do goal (linguagem visual do `ditado-state`, desfecho some em 6s) ·
+entrada digitada no painel (App.tsx, Ctrl+F9) · gancho `--agenttest "goal"`
+(determinístico com `ZCODE_AGENT_BIN` fake; imprime estados no stdout, exit
+0 = completed).
+
+**Smoke E2E real no WSL (além dos mocks, xvfb + Electron):** fork do
+utilityProcess → worker → GoalQueue → fake-agent.sh → `queued → running →
+completed` de volta pela porta, com round-trip de enrich respondido; kill-switch
+`VOICECAST_AGENT_BRIDGE=0` bloqueia no fork (`ok:false`).
+
+**Achados (não consertados — fora do escopo):** o runner ignora `req.cwd` no
+Windows (spawn via `wsl.exe` sem cwd — comportamento do C2); o `goalSummary`
+duplicado em `runner.ts` e `agent-goal.ts` (o do runner não é usado pelo C4 —
+o puro da shared é o consumido).
+
+**Pendências p/ gate Windows (mantenedor):** rodar `pnpm dev:win` +
+`voicecast.exe --agenttest "Responda somente: ok"` (runtime C2b real — valida
+spawn wsl.exe, estados na barra e telemetria no Grafana: counters
+`voicecast_agent_bridge_messages_total`, `voicecast_agent_goals_total`,
+`voicecast_agent_context_total`); validar entrada digitada no painel.
