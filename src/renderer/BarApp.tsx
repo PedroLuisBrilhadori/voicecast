@@ -1,10 +1,21 @@
 import { useEffect, useRef, useState } from "react";
+import { goalSummary, isGoalFinal, type GoalPhase, type GoalState } from "../shared/agent-goal";
 
 declare global {
   interface Window {
     voicecast: import("../shared/ipc").VoicecastBridge;
   }
 }
+
+/** Cores da linha de goal do cockpit (mesma linguagem do ditado-state). */
+const GOAL_UI: Record<GoalPhase, string> = {
+  queued: "#f4b942",
+  running: "#f4b942",
+  completed: "#3ecf8e",
+  failed: "#ff8a8a",
+  timeout: "#ff8a8a",
+  cancelled: "#9a9aa8",
+};
 
 function fmt(s: number): string {
   const m = Math.floor(s / 60);
@@ -38,12 +49,17 @@ export function BarApp() {
   const [resultado, setResultado] = useState<{ rota?: string; conf?: number; colado?: boolean } | null>(null);
   const [markers, setMarkers] = useState(0);
   const [paused, setPaused] = useState(false);
+  /** C4: estado do goal do cockpit (linha dedicada, mesma linguagem do ditado-state). */
+  const [goal, setGoal] = useState<GoalState | null>(null);
+  const goalClear = useRef<number | null>(null);
   /** True entre o pedido de start e a captura abrir (main emite com arming). */
   const [arming, setArming] = useState(false);
   const levels = useRef<number[]>([]);
   const [, forceRender] = useState(0);
 
   useEffect(() => {
+    // snapshot inicial (goal pode ter começado antes da barra abrir)
+    window.voicecast.agentGetState().then((s) => s && setGoal(s)).catch(() => {});
     const off = window.voicecast.onEvent((e) => {
       if (e.type === "mic-level") {
         levels.current = [...levels.current.slice(-59), e.level];
@@ -61,12 +77,20 @@ export function BarApp() {
         } else {
           setTranscribing(e.phase === "transcribing");
         }
+      } else if (e.type === "agent-state") {
+        setGoal(e.state);
+        // desfecho aparece no fim e some depois — sem notificação intrusiva
+        if (goalClear.current) window.clearTimeout(goalClear.current);
+        goalClear.current = isGoalFinal(e.state.phase)
+          ? window.setTimeout(() => setGoal(null), 6_000)
+          : null;
       }
     });
     const t = window.setInterval(() => forceRender((n) => n + 1), 500);
     return () => {
       off();
       clearInterval(t);
+      if (goalClear.current) window.clearTimeout(goalClear.current);
     };
   }, []);
 
@@ -146,6 +170,24 @@ export function BarApp() {
         )}
         <span style={{ color: "#9a9aa8", fontSize: 11 }}>{mode}</span>
       </div>
+
+      {/* C4: linha de estado do goal do cockpit — uma linha, sem intrusão */}
+      {goal && (
+        <span
+          title={`goal: ${goal.goal}`}
+          style={{
+            color: GOAL_UI[goal.phase],
+            fontSize: 12.5,
+            fontWeight: 600,
+            maxWidth: 260,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          ● {goalSummary(goal)}
+        </span>
+      )}
 
       <div style={{ display: "flex", alignItems: "flex-end", gap: 1.5, height: 22, flex: 1, overflow: "hidden" }}>
         {levels.current.map((l, i) => (

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Bootstrap, RecordingState, SessionSummary, SourceInfo, StartRecordingRequest } from "../shared/ipc";
+import { goalSummary, type GoalState } from "../shared/agent-goal";
 
 declare global {
   interface Window {
@@ -23,6 +24,10 @@ export function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionSearch, setSessionSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "ditado" | "screen" | "window" | "region">("all");
+  // C4 — cockpit: entrada digitada de goal (voz entra depois — F9 já roteia)
+  const [goalText, setGoalText] = useState("");
+  const [goalState, setGoalState] = useState<GoalState | null>(null);
+  const [goalBusy, setGoalBusy] = useState(false);
 
   const refreshSessions = useCallback(() => {
     window.voicecast.listSessions(sessionSearch).then(setSessions).catch(console.error);
@@ -47,10 +52,25 @@ export function App() {
     const off = window.voicecast.onEvent((e) => {
       if (e.type === "state") setState(e.state);
       if (e.type === "session-error") setError(e.message);
+      if (e.type === "agent-state") setGoalState(e.state);
     });
     window.voicecast.getState().then(setState);
+    window.voicecast.agentGetState().then((s) => s && setGoalState(s)).catch(() => {});
     return off;
   }, []);
+
+  const runGoal = useCallback(async () => {
+    const text = goalText.trim();
+    if (!text) return;
+    setGoalBusy(true);
+    try {
+      const r = await window.voicecast.agentRunGoal(text);
+      if (r.ok) setGoalText("");
+      else setError(r.error);
+    } finally {
+      setGoalBusy(false);
+    }
+  }, [goalText]);
 
   const refreshScreens = useCallback(() => {
     window.voicecast.listSources("screen").then(setScreens).catch(console.error);
@@ -120,6 +140,29 @@ export function App() {
         <div className="error-bar">
           {error} <button onClick={() => setError(null)}>×</button>
         </div>
+      )}
+
+      {/* C4 — cockpit: goal digitado para o agente (estados ao vivo abaixo) */}
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <input
+          className="search"
+          style={{ flex: 1, margin: 0 }}
+          placeholder="Goal para o agente (ex.: resume as sessões de hoje)…"
+          value={goalText}
+          onChange={(e) => setGoalText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void runGoal();
+          }}
+        />
+        <button className="go" disabled={!goalText.trim() || goalBusy} onClick={() => void runGoal()}>
+          ▶ Goal
+        </button>
+      </div>
+      {goalState && (
+        <p className="muted" style={{ margin: "6px 0 0" }}>
+          agente: <strong>{goalSummary(goalState)}</strong>
+          {goalState.error ? ` — ${goalState.error}` : ""}
+        </p>
       )}
 
       <div className="tabs">
