@@ -34,13 +34,14 @@ WPs fechados.
 |---|---|---|---|
 | [U1 — build do CLI open source](wp/U1-build-cli.md) | 1 | ✅ build ok (esbuild main) | — |
 | U2 — diagnóstico standalone | 1 | ✅ **causa raiz + goal "ok" ponta a ponta** (falta chave `identity` no credential store; desbloqueio testado via `ZCODE_DATA_BASE_DIR`) | — |
-| [C2b — wiring do runtime headless no runner](wp/C2b-wiring-headless.md) | 1 | 🚀 piloto em background | C3/C4 (em seguida) |
+| [C2b — wiring do runtime headless no runner](wp/C2b-wiring-headless.md) | 1 | ✅ **entregue** — goal real "ok" 9,4s via runGoal (47610fe; 133 testes; gate Windows pendente) | — |
+| [C3 — contexto no goal](wp/C3-contexto-goal.md) | 1 | 🚀 piloto em background (C2 desbloqueado) | C4 serial |
 | [C6 — AN.4: anotações no buildContext](wp/C6-an4-buildcontext.md) | 1 | ✅ **entregue** (d0c7c3f..46a5afb; 103 testes; gate Windows pendente) | — |
 | [W1 — worker thread p/ import OTel](wp/W1-worker-otel.md) | 1 ⚡ | ✅ **entregue** (331e35b; 114 testes; API main intacta; gate Windows pendente) | — |
 | [C7 — hook + skill .zcode](wp/C7-hook-skill.md) | 1 ⚡ | ✅ **entregue** (39 testes; hook `enabled:false` — gate: ligar + validar c/ sessão real no Windows) | — |
 | C2-unlock — validar goal headless de verdade | 1 | bloqueado: depende de U1 | — |
-| [C3 — contexto no goal](wp/C3-contexto-goal.md) | 1 | briefing pronto (executa pós-U1) | C7 |
-| [C4 — cockpit na barra (utilityProcess+IPC)](wp/C4-cockpit-barra.md) | 1 | briefing pronto (executa pós-U1) | C3 (serial no repo) |
+| [C3 — contexto no goal](wp/C3-contexto-goal.md) | 1 | 🚀 piloto em background (C2 desbloqueado) | C4 serial |
+| [C4 — cockpit na barra (utilityProcess+IPC)](wp/C4-cockpit-barra.md) | 1 | briefing pronto (após C3 — runner.ts compartilhado) | — |
 | C5 — gate de permissão local | 1 | bloqueado: C4 | — |
 | Onda 2 (#5 paridade, #3 dataset, #4 WASAPI) | 2 | rascunho (briefing ainda não escrito) | — |
 
