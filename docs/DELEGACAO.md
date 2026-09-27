@@ -36,7 +36,7 @@ WPs fechados.
 | U2 — diagnosticar síntese de account providers no boot standalone | 1 | 🚀 piloto em background | W1 (repo só leitura) |
 | [C6 — AN.4: anotações no buildContext](wp/C6-an4-buildcontext.md) | 1 | ✅ **entregue** (d0c7c3f..46a5afb; 103 testes; gate Windows pendente) | — |
 | [W1 — worker thread p/ import OTel](wp/W1-worker-otel.md) | 1 ⚡ | **pronto** | U1, C6, C7 |
-| [C7 — hook + skill .zcode](wp/C7-hook-skill.md) | 1 ⚡ | pronto (gate humano no fim) | U1, C6, W1 |
+| [C7 — hook + skill .zcode](wp/C7-hook-skill.md) | 1 ⚡ | ✅ **entregue** (39 testes; hook `enabled:false` — gate: ligar + validar c/ sessão real no Windows) | — |
 | C2-unlock — validar goal headless de verdade | 1 | bloqueado: depende de U1 | — |
 | [C3 — contexto no goal](wp/C3-contexto-goal.md) | 1 | briefing pronto (executa pós-U1) | C7 |
 | [C4 — cockpit na barra (utilityProcess+IPC)](wp/C4-cockpit-barra.md) | 1 | briefing pronto (executa pós-U1) | C3 (serial no repo) |
