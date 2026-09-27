@@ -32,8 +32,9 @@ WPs fechados.
 
 | WP | Onda | Estado | Paralelizável com |
 |---|---|---|---|
-| [U1 — build do CLI open source](wp/U1-build-cli.md) | 1 | ✅ **build ok** / goal pendente (registry standalone sem modelos → follow-up U2) | — |
-| U2 — diagnosticar síntese de account providers no boot standalone | 1 | 🚀 piloto em background | W1 (repo só leitura) |
+| [U1 — build do CLI open source](wp/U1-build-cli.md) | 1 | ✅ build ok (esbuild main) | — |
+| U2 — diagnóstico standalone | 1 | ✅ **causa raiz + goal "ok" ponta a ponta** (falta chave `identity` no credential store; desbloqueio testado via `ZCODE_DATA_BASE_DIR`) | — |
+| [C2b — wiring do runtime headless no runner](wp/C2b-wiring-headless.md) | 1 | 🚀 piloto em background | C3/C4 (em seguida) |
 | [C6 — AN.4: anotações no buildContext](wp/C6-an4-buildcontext.md) | 1 | ✅ **entregue** (d0c7c3f..46a5afb; 103 testes; gate Windows pendente) | — |
 | [W1 — worker thread p/ import OTel](wp/W1-worker-otel.md) | 1 ⚡ | ✅ **entregue** (331e35b; 114 testes; API main intacta; gate Windows pendente) | — |
 | [C7 — hook + skill .zcode](wp/C7-hook-skill.md) | 1 ⚡ | ✅ **entregue** (39 testes; hook `enabled:false` — gate: ligar + validar c/ sessão real no Windows) | — |
