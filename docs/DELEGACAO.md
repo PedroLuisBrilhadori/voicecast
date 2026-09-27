@@ -41,7 +41,12 @@ WPs fechados.
 | [C7 — hook + skill .zcode](wp/C7-hook-skill.md) | 1 ⚡ | ✅ **entregue** (39 testes; hook `enabled:false` — gate: ligar + validar c/ sessão real no Windows) | — |
 | C2-unlock — validar goal headless de verdade | 1 | bloqueado: depende de U1 | — |
 | [C3 — contexto no goal](wp/C3-contexto-goal.md) | 1 | ✅ **entregue** (6a6d751..2aa5fe1; 167 testes; política Jev-ausente documentada) | — |
-| [C4 — cockpit na barra (utilityProcess+IPC)](wp/C4-cockpit-barra.md) | 1 | 🚀 piloto em background (liga o enricher do C3) | — |
+| [C4 — cockpit na barra (utilityProcess+IPC)](wp/C4-cockpit-barra.md) | 1 | ✅ **entregue** (37ee380..5311384; 176 testes; smoke E2E real c/ xvfb; gate Windows: `--agenttest`) | — |
+
+> **Onda 1 (cockpit v1) — código completo** (2026-09-27). Gates do mantenedor:
+> (1) `pnpm dev:win` — valida fase B do editor, C6, W1, C2b/C3/C4 via
+> `voicecast.exe --agenttest "Responda somente: ok"` (estados na barra);
+> (2) ligar hook do C7 (`enabled:true` no zcode.json) + F9 com sessão real.
 | C5 — gate de permissão local | 1 | bloqueado: C4 | — |
 | Onda 2 (#5 paridade, #3 dataset, #4 WASAPI) | 2 | rascunho (briefing ainda não escrito) | — |
 
