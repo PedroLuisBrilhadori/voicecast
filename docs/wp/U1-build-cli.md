@@ -48,4 +48,27 @@ o repo voicecast, installs globais, PATH. Tudo confinado a /tmp.
 Nenhum commit (trabalho em /tmp). Preencher Resultado abaixo.
 
 ## Resultado (preenche o piloto)
-- (pendente)
+- **Build: OK.** Binário do main (`29628c9`, "feat: update v3.14.3") gerado e
+  reproduzível — comando completo em `/tmp/zcode-cli-build/BUILD.md`.
+  Artefato: `/tmp/zcode-cli-build/zcode` (bundle esbuild 29,7 MB, +
+  `provider/zcode-builtin.json` + node 24.14.0 em `/tmp/zcode-cli-build/node24`).
+  Nuances: workspace aninhado de `apps/zcode-cli` tem lock stale — instalar e
+  buildar pelo workspace RAIZ; `dynamic-workflow` precisa buildar antes de
+  `core`/`adapters`.
+- **Goal: FALHOU (exit 1, stdout vazio).** stderr: `Error: Model creation
+  failed (traceId: 83f20b27-f8a4-4a53-8bdc-5d97b9528ace)`. No log, causa real:
+  `Select a model before continuing` (CONFIGURATION_ERROR, `turnPhase:
+  model_creation`) — ou seja, o main AINDA exige seleção no `-p`; a hipótese
+  de drift de versão era necessária mas não suficiente.
+- **Diagnóstico**: o wiring existe no main (`resolveInitialModelSelection`
+  consumido no boot headless; default `account:zai-individual-coding-plan/GLM-5.3`
+  lido do config pessoal), mas a resolução inicial devolveu "none" — nem o
+  default era selectable, nem o registry-fallback achou modelo visível: o
+  snapshot do registry no boot standalone veio sem modelos. Credenciais OK no
+  `~/.zcode/v2/credentials.json`. Nenhum evento de account/registry no log info.
+- **Impacto no C2**: continua bloqueado; próximos passos sugeridos no BUILD.md
+  (log debug do AccountProviderService; conferir chaves do credential store vs
+  `readStandaloneAccountProviderConfigSnapshot`; alternativa: persistir
+  `runtime/model_selection` no db e usar `--resume`).
+- Pegadas declaradas: estado normal de execução em `~/.zcode/cli/` (log,
+  sessão, migração sqlite do db) — nenhuma config/credencial alterada.
