@@ -35,7 +35,7 @@ WPs fechados.
 | [U1 — build do CLI open source](wp/U1-build-cli.md) | 1 | ✅ **build ok** / goal pendente (registry standalone sem modelos → follow-up U2) | — |
 | U2 — diagnosticar síntese de account providers no boot standalone | 1 | 🚀 piloto em background | W1 (repo só leitura) |
 | [C6 — AN.4: anotações no buildContext](wp/C6-an4-buildcontext.md) | 1 | ✅ **entregue** (d0c7c3f..46a5afb; 103 testes; gate Windows pendente) | — |
-| [W1 — worker thread p/ import OTel](wp/W1-worker-otel.md) | 1 ⚡ | **pronto** | U1, C6, C7 |
+| [W1 — worker thread p/ import OTel](wp/W1-worker-otel.md) | 1 ⚡ | ✅ **entregue** (331e35b; 114 testes; API main intacta; gate Windows pendente) | — |
 | [C7 — hook + skill .zcode](wp/C7-hook-skill.md) | 1 ⚡ | ✅ **entregue** (39 testes; hook `enabled:false` — gate: ligar + validar c/ sessão real no Windows) | — |
 | C2-unlock — validar goal headless de verdade | 1 | bloqueado: depende de U1 | — |
 | [C3 — contexto no goal](wp/C3-contexto-goal.md) | 1 | briefing pronto (executa pós-U1) | C7 |
