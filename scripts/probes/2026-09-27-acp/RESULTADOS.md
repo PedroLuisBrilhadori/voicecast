@@ -27,6 +27,40 @@ que o ZCode Desktop dirige hoje (pid observado em produção).
    conhecimento do canal binário fica registrado p/ E5/fabric e integrações
    futuras (permission gating etc.).
 
+## Adendo 2 — código aberto (repo zai-org/zcode, 2026-09-27)
+
+O harness é open source (github.com/zai-org/zcode, MIT). O código-fonte
+esclareceu a seleção de modelo de forma definitiva:
+
+- `defaultModelSelection` é **campo do provider_config.json pessoal**
+  (`config.defaultModelSelection = {providerId, modelId, options?}` — codec
+  strict, schemaVersion 1). É o que o TUI persiste via
+  `saveConfiguredDefault` ao escolher modelo.
+- No `main`, o boot headless lê esse default
+  (`configuredDefaultModelSelection`) e ainda tem **registry-fallback**
+  (primeiro modelo visível) para drafts novos — `resolveInitialModelSelection`
+  em packages/provider/src/model-selection-config.ts.
+- Providers `account:*` são **sintetizados das credenciais** (standalone
+  account service) — não vêm do builtin; o builtin define templates.
+- O builtin completo está EMBUTIDO no server (string no bundle) — extraído
+  para `/tmp/zcode-builtin-provider.json` (revision 30, 20 templates); envs
+  `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` /
+  `ZCODE_PERSONAL_PROVIDER_CONFIG_FILE` apontam os caminhos.
+
+**Estado do unlock ao fim do turno**: o CLI instalado (0.16.9) contém o
+repositório do default mas o consumo completo no `-p` (default→runtime +
+fallback) está no main — drift de versão. Gravamos
+`defaultModelSelection` no arquivo pessoal (backup
+`provider_config.json.bak-voicecast`) e testamos com os envs: ainda
+"Select a model". Caminhos de desbloqueio, em ordem de preferência:
+
+1. **Buildar o CLI do repo** (main) e usar esse binário no bridge — caminho
+   open-source nativo, elimina o drift; o bridge já parametriza binário por
+   `ZCODE_AGENT_BIN`.
+2. Verificar se atualização oficial do CLI (>0.16.9) já traz o wiring.
+3. Validar se selecionar modelo uma vez no TUI persiste o default (0.16.9) e
+   destrava o headless — provável, a testar.
+
 O restante deste documento registra a decodificação original do protocolo
 binário (handshake, framing, serializer, canais, schemas v4) — continua
 correto e útil; apenas não é o caminho do bridge v1.
