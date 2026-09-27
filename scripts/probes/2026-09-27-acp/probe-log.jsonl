@@ -1,0 +1,47 @@
+{"dir":"in","at":"2026-09-27T16:24:03.850Z","data":"{\"type\":\"zcode-hello\",\"version\":\"3.14.3\",\"platform\":\"linux\",\"arch\":\"x64\",\"pid\":15237}"}
+{"dir":"out","at":"2026-09-27T16:24:03.851Z","data":"{\"type\":\"zcode-hello-ack\",\"version\":\"1.0.0-voicecast-probe\",\"clientId\":\"voicecast-probe\"}"}
+{"dir":"err","at":"2026-09-27T16:24:03.852Z","data":"(node:15237) ExperimentalWarning: SQLite is an experimental feature and might change at any time"}
+{"dir":"err","at":"2026-09-27T16:24:03.852Z","data":"(Use `node --trace-warnings ...` to show where the warning was created)"}
+{"dir":"err","at":"2026-09-27T16:24:03.854Z","data":"[2026-09-27 13:24:03.854] [pid:15237] [zcode-server:stdio] client connected: voicecast-probe (v1.0.0-voicecast-probe)"}
+{"dir":"out","at":"2026-09-27T16:24:04.887Z","data":"{\"id\":1,\"method\":\"runtime/capabilities\",\"params\":{}}"}
+{"dir":"err","at":"2026-09-27T16:24:05.590Z","data":"bash: cannot set terminal process group (15225): Inappropriate ioctl for device"}
+{"dir":"err","at":"2026-09-27T16:24:05.590Z","data":"bash: no job control in this shell"}
+{"dir":"err","at":"2026-09-27T16:24:05.590Z","data":"oh-my-bash/check_for_upgrade: Failed to get a lock.  Please make sure that no"}
+{"dir":"err","at":"2026-09-27T16:24:05.591Z","data":"other process is trying to update Oh My Bash and remove"}
+{"dir":"err","at":"2026-09-27T16:24:05.591Z","data":"\"/home/pedro/.oh-my-bash/log/update.lock\""}
+{"dir":"err","at":"2026-09-27T16:24:05.599Z","data":"[2026-09-27 13:24:05.599] [pid:15237] [cua-pip-session] [cua-pip-session] wiring resolved {"}
+{"dir":"err","at":"2026-09-27T16:24:05.600Z","data":"  enabled: false,"}
+{"dir":"err","at":"2026-09-27T16:24:05.600Z","data":"  platform: 'linux',"}
+{"dir":"err","at":"2026-09-27T16:24:05.600Z","data":"  serviceAuthorityMode: 'desktop-attached-remote',"}
+{"dir":"err","at":"2026-09-27T16:24:05.600Z","data":"  lifecycleWired: false"}
+{"dir":"err","at":"2026-09-27T16:24:05.600Z","data":"}"}
+{"dir":"err","at":"2026-09-27T16:24:05.609Z","data":"[2026-09-27 13:24:05.609] [pid:15237] [zcode-server:stdio] stdio mode ready"}
+{"dir":"err","at":"2026-09-27T16:24:06.267Z","data":"[2026-09-27 13:24:06.267] [pid:15237] [coding-plan-availability] billing/balance 请求完成 {"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"  durationMs: 480,"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"  hasActiveStartPlan: true,"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"  msg: '',"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"  payload: {"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"    code: 0,"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"    msg: '',"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"    data: { server_time: 1790526249, plans: [Array], balances: [Array] },"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"    logid: '202609271624091eae8aae25ee18de8227'"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"  },"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"  planCount: 1,"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"  plans: ["}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"    {"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"      name: 'ZCode Weekend Build',"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"      plan_id: 'zcode-v3-start-plan-0924-wk',"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"      status: 'active'"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"    }"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"  ],"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"  providerId: 'account:zai-start-plan',"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"  success: true,"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"  url: 'https://zcode.z.ai/api/v1/zcode-plan/billing/balance?app_version=3.14.3',"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"  code: 0"}
+{"dir":"err","at":"2026-09-27T16:24:06.268Z","data":"}"}
+{"dir":"err","at":"2026-09-27T16:24:07.144Z","data":"[2026-09-27 13:24:07.144] [pid:15237] [provider-runtime][trace:Provider Registry 已就绪] {"}
+{"dir":"err","at":"2026-09-27T16:24:07.144Z","data":"  configRevision: '[\"zcode-builtin:30:fc63369a9c8950645d1d9d698eedd64e0e808494653a96336ea1d01d584f272c\",\"2915b997aefbd6c7fe8ccfc87153713dc11851987034eec5a515e9660ac81b0e\"]',"}
+{"dir":"err","at":"2026-09-27T16:24:07.144Z","data":"  providerCount: 3"}
+{"dir":"err","at":"2026-09-27T16:24:07.144Z","data":"}"}
+{"dir":"out","at":"2026-09-27T16:24:12.891Z","data":"{\"id\":2,\"method\":\"session/list\",\"params\":{}}"}
+{"dir":"out","at":"2026-09-27T16:24:20.900Z","data":"{\"id\":3,\"method\":\"v4/commands/query\",\"params\":{}}"}

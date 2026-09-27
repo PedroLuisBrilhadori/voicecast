@@ -1,10 +1,10 @@
 # Plano — Cockpit de voz: voicecast como porta de entrada do agente (Onda 1)
 
-Data: 2026-09-23 · Status: **proposta p/ ratificação do mantenedor**
+Data: 2026-09-27 · Status: **ratificado pelo mantenedor** (decisões abaixo)
 Referências: [CRONOGRAMA](CRONOGRAMA.md) Onda 1 · [PLANO-JEV-CU](PLANO-JEV-CU.md)
 Etapa 2 (rota `comando_agente`) · [RELATORIO-E2](RELATORIO-E2.md)
 
-## Descoberta FD.0 (2026-09-23) — o engine é dirigível, sem hacks
+## Descoberta FD.0 (2026-09-27) — o engine é dirigível, sem hacks
 
 O ZCode Desktop roda um server próprio — `~/.zcode/server/zcode-server.cjs`
 com node dedicado (`~/.zcode/server/node`) — e conversa com ele **por pipes
@@ -60,9 +60,11 @@ spawn do server pelo WSL, `initialize`, `session/create`, envio de goal mínimo
 **Aceite**: goal mínimo executa ponta a ponta e a troca de mensagens fica
 logada (JSONL). Não gasta nada além de uma sessão de teste.
 
-### C2 — `agent-bridge` no main (M) · o coração
+### C2 — `agent-bridge` em utilityProcess (M) · o coração
 Encapsula o ciclo spawn → initialize → session/create → send → subscribe →
-stop, com timeout, fila de 1 goal por vez e teardown no quit. Paths do
+stop, com timeout, fila de 1 goal por vez e teardown no quit. Roda em
+**utilityProcess** (decisão ratificada): crash do bridge não derruba
+gravação/ditado; o main só vê o contrato do bridge (messages port). Paths do
 server/node configuráveis (`ZCODE_SERVER_*`), kill-switch `VOICECAST_AGENT_BRIDGE=0`.
 Testável com server **fake** por stdio (fixtures de `turn.*`).
 **Instrumentação (DoD)**: spans `agent.goal`; counters
@@ -113,15 +115,18 @@ Unit (WSL, sem rede): bridge × server fake stdio; gate; contexto bounded;
 contrato IPC novo (estado do agente p/ barra). Smoke Windows: `--agenttest`.
 CI segue `pnpm ci:local`.
 
-## Decisões a ratificar pelo mantenedor
+## Decisões ratificadas pelo mantenedor (2026-09-27)
 
-1. **Workspace padrão (cwd) dos goals**: último usado pelo ZCode? fixo
-   (`~/programing/projetos`)? por goal falado?
-2. **Mode/model default**: herdar settings do ZCode ou explícito no voicecast?
-3. **Permissão**: auto-aprovar leitura e exigir humano p/ mutação (espelha
-   guardrail) — confirmar.
-4. **Onde roda o bridge**: no main mesmo (simples) vs utilityProcess
-   (isolamento de crash) — proposta: main primeiro, migrar se doer.
+1. **Workspace (cwd) dos goals**: por **diferentes diretórios** — selecionável
+   por goal (falado/ digitado), com default no último usado. O painel do
+   cockpit oferece a lista; o goal pode nomear o alvo.
+2. **Mode/model**: **config explícito do voicecast** (arquivo próprio em
+   `%APPDATA%\voicecast\agent.json`, não herda settings do ZCode); overridável
+   por goal.
+3. **Permissão**: auto-aprovar leitura, exigir humano para mutação (espelha o
+   guardrail).
+4. **Onde roda o bridge**: **utilityProcess** (isolamento de crash — queda do
+   bridge não derruba gravação/ditado).
 
 ## Sequência e estimativa
 
