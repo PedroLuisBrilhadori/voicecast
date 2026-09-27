@@ -14,6 +14,7 @@ import { sessionDirs, sessionsRoot } from "./storage";
 import { sessionDirName, wslPathQuoted } from "../shared/paths";
 import type { ClipInfo, SessionMetaPatch, SessionSegment } from "../shared/ipc";
 import { clipFileBase, cutFileBase, sanitizeSegments, wordsInRange } from "../shared/segments";
+import { annotationSection, fmtTs } from "../shared/annotations-context";
 import { counter, histogram, withSpan } from "./telemetry";
 
 // voicecast_sessions_total é do capture.ts (que emite); duplicar aqui criava
@@ -22,6 +23,12 @@ const M_TRANSCRIBE = counter("voicecast_transcriptions_total", "transcrições p
 const H_TRANSCRIBE = histogram("voicecast_transcribe_seconds", "duração da transcrição ASR");
 const M_CUT = counter("voicecast_cuts_total", "cortes combinados por desfecho");
 const H_CUT = histogram("voicecast_cut_seconds", "duração do corte combinado (exportCut)");
+// AN.4: nº de marcações citadas no contexto (só emite quando há — sessão sem
+// anotação não gera seção nem métrica)
+const M_CTX_ANNOTATIONS = counter(
+  "voicecast_context_annotations_total",
+  "marcações de tela incluídas no buildContext",
+);
 
 // ── tipos de biblioteca ────────────────────────────────────────
 
@@ -376,12 +383,6 @@ export interface ContextInput {
   includeFullTranscript?: boolean;
 }
 
-function fmtTs(s: number): string {
-  const m = Math.floor(s / 60);
-  const sec = Math.round(s % 60);
-  return `${m}:${String(sec).padStart(2, "0")}`;
-}
-
 export async function buildContext(
   input: ContextInput,
 ): Promise<{ markdown: string } | { error: string }> {
@@ -436,6 +437,24 @@ export async function buildContext(
     const cut = path.join(dirs.clips, `${cutFileBase("corte", segs.length)}.mp4`);
     if (fs.existsSync(cut)) {
       lines.push(`Corte combinado (${segs.length} trechos): ${wslPathQuoted(cut)}`);
+    }
+  }
+
+  // anotações em tela (AN.4): marcações do jsonl + print queimado correspondente
+  // (path só quando o PNG existe em frames/ — linha sem print é normal)
+  const annotationsJsonl = path.join(dirs.root, "annotations.jsonl");
+  if (fs.existsSync(annotationsJsonl)) {
+    const frameFiles = fs.existsSync(dirs.frames)
+      ? fs.readdirSync(dirs.frames).filter((f) => f.endsWith(".png"))
+      : [];
+    const ann = annotationSection(
+      fs.readFileSync(annotationsJsonl, "utf8"),
+      frameFiles,
+      dirs.frames,
+    );
+    if (ann) {
+      lines.push(...ann.lines);
+      M_CTX_ANNOTATIONS?.add(ann.count);
     }
   }
 
