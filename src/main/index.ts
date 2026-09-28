@@ -93,6 +93,9 @@ function togglePicker(): void {
   else {
     w.show();
     w.focus();
+    // hide/show não remonta o React — lista de sessões pode estar stale
+    // (ex.: título editado no editor). Reabrir sempre recarrega.
+    w.webContents.send(IPC.event, { type: "sessions-changed" });
   }
 }
 

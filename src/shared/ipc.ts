@@ -166,6 +166,8 @@ export type CaptureEvent =
   | { type: "preview"; dataUrl: string } // miniatura periódica durante REC
   | { type: "session-done"; dir: string; name: string; mp4: string }
   | { type: "session-error"; message: string }
+  /** Biblioteca mudou (ditado salvo, título editado…) — painel recarrega a lista. */
+  | { type: "sessions-changed" }
   | {
       type: "ditado-state";
       phase: "recording" | "transcribing" | "done";

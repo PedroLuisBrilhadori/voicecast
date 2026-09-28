@@ -361,6 +361,10 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
         // (flush do auto-print pendente acontece ANTES de fechar a overlay)
         await annotations.detach(saved ? sessionDirs(saved.dir, saved.name) : null);
 
+        // painel/biblioteca: ditado salvo é mudança de lista (sem isso a lista
+        // do picker fica stale — hide/show não remonta o React)
+        if (saved) broadcast({ type: "sessions-changed" });
+
         if (text && acao.paste) {
           await pasteToFocused(text, ditadoHwnd);
         } else if (text) {

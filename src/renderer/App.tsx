@@ -36,7 +36,8 @@ export function App() {
   useEffect(() => {
     refreshSessions();
     const off = window.voicecast.onEvent((e) => {
-      if (e.type === "session-done" || e.type === "session-error") refreshSessions();
+      if (e.type === "session-done" || e.type === "session-error" || e.type === "sessions-changed")
+        refreshSessions();
     });
     return off;
   }, [refreshSessions]);
