@@ -256,3 +256,4 @@ body.bar-body { background: transparent; overflow: hidden; }
 }
 .clip-row:hover { border-color: var(--accent); }
 .clip-row .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.copy-text { font-size: 12.5px; padding: 2px 10px; border-radius: 999px; }

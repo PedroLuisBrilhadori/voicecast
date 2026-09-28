@@ -161,6 +161,14 @@ export function EditorApp() {
     notify("título salvo");
   };
 
+  const doCopyText = async () => {
+    if (!t) return;
+    const text = t.text.trim();
+    if (!text) return notify("nada para copiar");
+    await window.voicecast.copyText(text);
+    notify(`texto copiado (${text.length} chars) — cole onde quiser`);
+  };
+
   const retranscribe = async () => {
     notify("transcrevendo…");
     const r = await window.voicecast.transcribeSession(DIR, NAME);
@@ -277,6 +285,11 @@ export function EditorApp() {
               <span className="muted">
                 {t.language ?? "?"} · {t.words.length} palavras
               </span>
+            )}
+            {t && t.text.trim() && (
+              <button className="copy-text" onClick={doCopyText} title="copiar somente o texto da transcrição">
+                📋 copiar texto
+              </button>
             )}
           </div>
           {t && t.words.length > 0 && (

@@ -191,12 +191,17 @@ function voiceSrc(): string {
     : path.join(local, "voice-dictation", "src");
 }
 
-function pythonEnv(): NodeJS.ProcessEnv {
-  // VOICE_APP_DIR alinha app_dir() do python à raiz de dados do backend
-  const env: NodeJS.ProcessEnv = { ...process.env };
+export function pythonEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  // VOICE_APP_DIR alinha app_dir() do python à raiz de dados do backend;
+  // PYTHONUTF8/PYTHONIOENCODING: Node escreve stdin em UTF-8 mas o Python no
+  // Windows decodifica com a codepage da console (cp1252) → texto colado saía
+  // mojibake ("Não"→"NÃ£o"). Força UTF-8 nos dois lados do pipe.
+  const out: NodeJS.ProcessEnv = { ...env };
   const backendDir = path.join(process.env.LOCALAPPDATA ?? "", "voicecast", "asr-backend");
-  if (fs.existsSync(backendDir)) env.VOICE_APP_DIR = backendDir;
-  return env;
+  if (fs.existsSync(backendDir)) out.VOICE_APP_DIR = backendDir;
+  out.PYTHONUTF8 = "1";
+  out.PYTHONIOENCODING = "utf-8";
+  return out;
 }
 
 function spawnHidden(cmd: string, args: string[]) {
