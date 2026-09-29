@@ -17,6 +17,8 @@ import { clipFileBase, cutFileBase, sanitizeSegments, wordsInRange } from "../sh
 import { annotationSection, fmtTs } from "../shared/annotations-context";
 import {
   applyEditsToWords,
+  diffWordCount,
+  redistributeWords,
   sanitizeEdits,
   wordsText,
 } from "../shared/corrections";
@@ -570,18 +572,22 @@ export function saveCorrection(
 
   let corrected: string;
   let nEdits: number;
-  if (transcript.words?.length) {
+  if (transcript.words?.length && edits.length) {
     // palavras são a fonte: edita no lugar (timings preservados) e recompõe
     const applied = applyEditsToWords(transcript.words, edits);
     corrected = applied.text;
     transcript = { ...transcript, words: applied.words, text: applied.text };
     nEdits = edits.length;
   } else {
-    // texto puro (words vazio): correção é o texto inteiro
+    // rewrite completo (✍️ modo texto, ou words vazio): o texto corrigido
+    // manda; words antigas são redistribuídas sobre o novo texto (timings
+    // aproximados, proporcional à duração original) — o dataset recebe
+    // validation com n_edits = diff de palavras do ASR p/ o corrigido
     corrected = String(req.correctedText ?? "").replace(/\s+/g, " ").trim();
     if (!corrected) return { ok: false, error: "correção vazia" };
-    transcript = { ...transcript, text: corrected };
-    nEdits = 0;
+    const nDiff = diffWordCount(transcript.text ?? "", corrected);
+    transcript = { ...transcript, text: corrected, words: redistributeWords(transcript.words ?? [], corrected) };
+    nEdits = nDiff;
   }
 
   try {

@@ -147,9 +147,11 @@ describe("saveCorrection — sessão ditado (voicecast)", () => {
     expect(r).toEqual({ ok: true, alvo: "voicecast", dataset: "ausente" });
     const t = JSON.parse(fs.readFileSync(path.join(SESSIONS, DAY, "1003-hash4", "transcript.json"), "utf8"));
     expect(t.text).toBe("outro texto corrigido");
-    expect(t.words).toEqual([]);
+    // pós-rewrite (2026-09-29): texto corrigido gera words redistribuídas em
+    // t=0 (não há referência temporal) — transcript não fica mais sem words
+    expect(t.words.map((w: { w: string }) => w.w)).toEqual(["outro", "texto", "corrigido"]);
     const meta = JSON.parse(fs.readFileSync(path.join(SESSIONS, DAY, "1003-hash4", "meta.json"), "utf8"));
-    expect(meta.correction.nEdits).toBe(0);
+    expect(meta.correction.nEdits).toBe(3); // diff do ASR p/ o corrigido
   });
 
   it("sessão sem transcript → erro honesto, nada é escrito", () => {

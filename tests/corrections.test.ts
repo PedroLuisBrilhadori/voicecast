@@ -8,7 +8,9 @@ import {
   buildValidation,
   corpusTs,
   datasetRootFrom,
+  diffWordCount,
   isValidItemId,
+  redistributeWords,
   sanitizeEdits,
   wordsText,
   type TimedWord,
@@ -123,5 +125,34 @@ describe("guardas do corpus", () => {
 
   it("corpusTs zero-padra mês/dia/hora", () => {
     expect(corpusTs(new Date(2026, 0, 5, 3, 7, 9))).toBe("2026-01-05T03:07:09");
+  });
+});
+
+// ── rewrite completo (modo texto — pedido do mantenedor 2026-09-29) ──
+describe("rewrite completo", () => {
+  it("diffWordCount conta inserções, remoções e substituições", () => {
+    expect(diffWordCount("o gato subiu no telhado", "o gato pulou no telhado")).toBe(1);
+    // subiu→pulou (1 subst) + bem alto no telhado (4 inserções)
+    expect(diffWordCount("o gato subiu", "o gato pulou bem alto no telhado")).toBe(5);
+    expect(diffWordCount("mesmo texto", "mesmo texto")).toBe(0);
+    expect(diffWordCount("", "uma frase nova")).toBe(3);
+  });
+
+  it("redistributeWords distribui o novo texto no intervalo original", () => {
+    const old = [
+      { w: "a", start: 10, end: 11, p: 0.9 },
+      { w: "b", start: 11, end: 12, p: 0.8 },
+    ];
+    const out = redistributeWords(old, "x y z");
+    expect(out.map((w) => w.w)).toEqual(["x", "y", "z"]);
+    expect(out[0]!.start).toBe(10);
+    expect(out[out.length - 1]!.end).toBe(12); // span preservado
+    // slots contíguos
+    expect(out[1]!.start).toBeCloseTo(out[0]!.end, 3);
+  });
+
+  it("redistributeWords sem referência temporal zera timings; texto vazio → []", () => {
+    expect(redistributeWords([], "a b").every((w) => w.start === 0 && w.end === 0)).toBe(true);
+    expect(redistributeWords([{ w: "a", start: 1, end: 2, p: 0.9 }], "  ")).toEqual([]);
   });
 });

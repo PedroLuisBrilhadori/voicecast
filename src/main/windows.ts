@@ -192,7 +192,10 @@ export function createEditor(dir: string, name: string, corpus?: string): Browse
     query: corpus !== undefined ? { corpus } : { dir, name },
   });
   wireLogging(w, "editor");
+  // show() sem focus() nasce atrás da janela ativa — a tela do dataset ficava
+  // invisível (o usuário via só a janela que já estava na frente)
   w.show();
+  w.focus();
   return w;
 }
 

@@ -32,6 +32,7 @@ function SessionEditor() {
   const transcriptRef = useRef<HTMLDivElement>(null);
   // ── correção de ditado (W2a): editar palavras preservando timings ──
   const [fixing, setFixing] = useState(false);
+  const [fixText, setFixText] = useState(false);
   const [draftWords, setDraftWords] = useState<Word[] | null>(null);
   const [draftText, setDraftText] = useState<string | null>(null);
 
@@ -193,24 +194,28 @@ function SessionEditor() {
   //    meta.json sempre; dataset do voice quando a sessão tem datasetId. ──
 
   const startFix = () => {
-    if (t?.words.length) setDraftWords(t.words.map((w) => ({ ...w })));
-    else setDraftText(t?.text ?? "");
+    if (fixText || !t?.words.length) setDraftText(t?.text ?? "");
+    else setDraftWords(t.words.map((w) => ({ ...w })));
     setFixing(true);
   };
 
   const cancelFix = () => {
     setFixing(false);
+    setFixText(false);
     setDraftWords(null);
     setDraftText(null);
   };
 
   const saveFix = async () => {
     let req: { correctedText: string; edits: ReturnType<typeof diffWords> };
-    if (draftWords && t?.words.length) {
+    if (draftWords && t?.words.length && !fixText) {
       req = { correctedText: wordsText(draftWords), edits: diffWords(t.words, draftWords) };
     } else {
       const corrected = (draftText ?? "").replace(/\s+/g, " ").trim();
       if (!corrected) return notify("correção vazia");
+      // rewrite completo: o motor replaceia o texto do transcript; no dataset
+      // vai como validation com n_edits = diff de palavras (words perdem o
+      // alinhamento 1:1 de timings — trade-off aceito do modo texto)
       req = { correctedText: corrected, edits: [] };
     }
     const r: CorrectionResult = await window.voicecast.saveCorrection(DIR, NAME, req);
@@ -337,9 +342,22 @@ function SessionEditor() {
               </span>
             )}
             {t && !fixing && detail.meta.mode === "ditado" && (
-              <button onClick={startFix} title="editar palavras erradas (timings preservados; dataset quando linkado)">
-                ✏️ corrigir
-              </button>
+              <>
+                <button onClick={startFix} title="editar palavras erradas no lugar (timings preservados; dataset quando linkado)">
+                  ✏️ corrigir
+                </button>
+                {t.words.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setFixText(true);
+                      startFix();
+                    }}
+                    title="reescrever o texto completo (o motor reaplica; timings aproximados)"
+                  >
+                    ✍️ reescrever texto
+                  </button>
+                )}
+              </>
             )}
             {fixing && (
               <>
@@ -353,13 +371,27 @@ function SessionEditor() {
               </button>
             )}
           </div>
-          {fixing && t && t.words.length > 0 && (
+          {fixing && t && t.words.length > 0 && !fixText && (
             <p className="muted" style={{ marginTop: 0 }}>
               clique na palavra errada, corrija e Enter — os timings são preservados
             </p>
           )}
-          {fixing && t && t.words.length > 0 && (
+          {fixing && t && t.words.length > 0 && !fixText && (
             <WordFixer words={draftWords ?? []} activeIndex={-1} onChange={setDraftWords} />
+          )}
+          {fixing && fixText && (
+            <>
+              <p className="muted" style={{ marginTop: 0 }}>
+                reescreva o texto inteiro — os timings são redistribuídos sobre a fala original
+              </p>
+              <textarea
+                className="fix-text"
+                value={draftText ?? ""}
+                rows={8}
+                onChange={(e) => setDraftText(e.target.value)}
+                placeholder="texto corrigido completo"
+              />
+            </>
           )}
           {fixing && t && t.words.length === 0 && (
             <textarea

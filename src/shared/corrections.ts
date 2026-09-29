@@ -139,3 +139,48 @@ export function datasetRootFrom(
   if (!local) return null;
   return join(local, "voice-dictation", "datasets");
 }
+
+// ── rewrite completo (modo texto do editor) ────────────────────
+
+/** nº de edições palavra-a-palavra entre o cru do ASR e o corrigido
+ *  (Levenshtein por palavras — substituição custa 1, alinhado ao modelo
+ *  edits[] do corrections.py). */
+export function diffWordCount(before: string, after: string): number {
+  const a = before.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  const b = after.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  // textos de ditado são curtos (≤ centenas de palavras) — O(n·m) ok
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => {
+    const row = new Array<number>(b.length + 1).fill(0);
+    row[0] = i;
+    return row;
+  });
+  for (let j = 1; j <= b.length; j++) d[0]![j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      d[i]![j] = a[i - 1] === b[j - 1]
+        ? d[i - 1]![j - 1]!
+        : 1 + Math.min(d[i - 1]![j - 1]!, d[i - 1]![j]!, d[i]![j - 1]!);
+    }
+  }
+  return d[a.length]![b.length]!;
+}
+
+/**
+ * Redistribui o texto corrigido sobre os timings antigos (proporcional à
+ * duração por palavra): o rewrite perde o alinhamento 1:1 do ASR, mas cada
+ * palavra nova ganha um slot temporal coerente com a fala original.
+ */
+export function redistributeWords(oldWords: TimedWord[], corrected: string): TimedWord[] {
+  const text = corrected.replace(/\s+/g, " ").trim();
+  if (!text) return [];
+  const newWords = text.split(" ");
+  if (!oldWords.length) {
+    // sem referência temporal: tudo em t=0 (ditados do gancho fake/antigos)
+    return newWords.map((w) => ({ w, start: 0, end: 0, p: 1 }));
+  }
+  const t0 = oldWords[0]!.start;
+  const t1 = Math.max(...oldWords.map((w) => w.end), oldWords[0]!.end);
+  const span = Math.max(0.1, t1 - t0);
+  const per = span / newWords.length;
+  return newWords.map((w, i) => ({ w, start: +(t0 + i * per).toFixed(3), end: +(t0 + (i + 1) * per).toFixed(3), p: 1 }));
+}
