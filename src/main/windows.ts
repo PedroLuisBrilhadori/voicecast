@@ -53,48 +53,57 @@ export function createPicker(): BrowserWindow {
 }
 
 /**
- * Overlay fullscreen de seleção de região num display específico.
- * Resolves com o retângulo em px FÍSICOS (ou null = cancelado).
+ * Seleção de região em TODOS os displays de uma vez (padrão snipping tool):
+ * um overlay fullscreen por monitor; o usuário ARRASTA no monitor que quiser
+ * e SOLTAR confirma (mouse-first — Enter não participa). Esc/✕ cancela tudo.
+ * Resolves {rect em px FÍSICOS, displayIndex} ou null = cancelado.
  */
-export function selectRegionOnDisplay(displayIndex = 0): Promise<Rect | null> {
+export function selectRegionOnDisplays(): Promise<{ rect: Rect; displayIndex: number } | null> {
   const displays = screen.getAllDisplays();
-  const d = displays[displayIndex] ?? screen.getPrimaryDisplay();
+  if (!displays.length) return Promise.resolve(null);
 
   return new Promise((resolve) => {
-    const overlay = new BrowserWindow({
-      ...d.bounds,
-      frame: false,
-      transparent: true,
-      resizable: false,
-      movable: false,
-      enableLargerThanScreen: true,
-      skipTaskbar: true,
-      hasShadow: false,
-      alwaysOnTop: true,
-      show: false,
-      webPreferences: { ...webPrefs, preload: preload() },
-    });
-    overlay.setAlwaysOnTop(true, "screen-saver");
-
+    const overlays: Electron.BrowserWindow[] = [];
     let settled = false;
-    const done = (rect: Rect | null) => {
+    const done = (result: { rect: Rect; displayIndex: number } | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      try {
-        overlay.destroy();
-      } catch {}
-      resolve(rect);
+      for (const o of overlays) {
+        try {
+          o.destroy();
+        } catch {}
+      }
+      resolve(result);
     };
 
     const ch = `region:result:${Date.now()}`;
-    ipcMain.once(ch, (_e, rect: Rect | null) => done(rect));
+    ipcMain.once(ch, (_e, payload: { rect: Rect; displayIndex: number } | null) => done(payload));
     const timer = setTimeout(() => done(null), 120_000); // 2min sem ação → cancela
 
-    void overlay.loadFile(dist("overlay.html"), { query: { ch, dpr: String(d.scaleFactor) } });
-    wireLogging(overlay, "overlay");
-    overlay.show();
-    overlay.focus();
+    displays.forEach((d, idx) => {
+      const overlay = new BrowserWindow({
+        ...d.bounds,
+        frame: false,
+        transparent: true,
+        resizable: false,
+        movable: false,
+        enableLargerThanScreen: true,
+        skipTaskbar: true,
+        hasShadow: false,
+        alwaysOnTop: true,
+        show: false,
+        webPreferences: { ...webPrefs, preload: preload() },
+      });
+      overlay.setAlwaysOnTop(true, "screen-saver");
+      overlays.push(overlay);
+      void overlay.loadFile(dist("overlay.html"), {
+        query: { ch, dpr: String(d.scaleFactor), idx: String(idx) },
+      });
+      wireLogging(overlay, "overlay");
+      overlay.show();
+      overlay.focus();
+    });
   });
 }
 

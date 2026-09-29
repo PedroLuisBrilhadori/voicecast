@@ -27,7 +27,7 @@ const bridge: VoicecastBridge = {
   getBootstrap: (): Promise<Bootstrap> => ipcRenderer.invoke(IPC.getBootstrap),
   listSources: (kind: SourceInfo["kind"]): Promise<SourceInfo[]> =>
     ipcRenderer.invoke(IPC.listSources, kind),
-  selectRegion: (displayIndex?: number) => ipcRenderer.invoke(IPC.selectRegion, displayIndex),
+  selectRegion: () => ipcRenderer.invoke(IPC.selectRegion),
   startRecording: (req: StartRecordingRequest) => ipcRenderer.invoke(IPC.startRecording, req),
   stopRecording: () => ipcRenderer.invoke(IPC.stopRecording),
   cancelRecording: () => ipcRenderer.invoke(IPC.cancelRecording),

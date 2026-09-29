@@ -17,6 +17,7 @@ import {
   type CaptureEvent,
   type RecordingMode,
   type RecordingState,
+  type RegionSelection,
   type SourceInfo,
   type StartRecordingRequest,
 } from "../shared/ipc";
@@ -31,7 +32,7 @@ const M_SESSIONS = counter("voicecast_sessions_total", "sessões finalizadas por
 const H_FINALIZE = histogram("voicecast_finalize_seconds", "duração do pipeline de fim de sessão");
 const M_STARTS = counter("voicecast_session_starts_total", "inícios de gravação por modo/desfecho");
 const H_START = histogram("voicecast_session_start_seconds", "duração do início de sessão por estágio (total/gum-desktop/gum-mic)");
-import { createBar, createRecorder, selectRegionOnDisplay } from "./windows";
+import { createBar, createRecorder, selectRegionOnDisplays } from "./windows";
 
 type Listener = (e: CaptureEvent) => void;
 const listeners = new Set<Listener>();
@@ -130,8 +131,24 @@ async function finalizeSession(input: FinishInput): Promise<void> {
 
   try {
     const ff = await resolveFfmpeg();
-    // fMP4 do MediaRecorder vem sem duração → remux -c copy +faststart é obrigatório
-    await runFfmpeg(ff, ["-y", "-i", dirs.video, "-c", "copy", "-movflags", "+faststart", dirs.mp4]);
+    if (mode === "region" && rect) {
+      // região: grava o display inteiro e CORTA no remux (re-encode leve,
+      // dims pares — exigência do h264). Coordenadas do rect são px físicos
+      // do display; o mp4 do getDisplayMedia é físico na mesma escala.
+      const w = rect.width - (rect.width % 2);
+      const h = rect.height - (rect.height % 2);
+      await runFfmpeg(ff, [
+        "-y", "-i", dirs.video,
+        "-vf", `crop=${w}:${h}:${rect.x}:${rect.y}`,
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-c:a", "aac", "-b:a", "96k",
+        "-movflags", "+faststart",
+        dirs.mp4,
+      ]);
+    } else {
+      // fMP4 do MediaRecorder vem sem duração → remux -c copy +faststart é obrigatório
+      await runFfmpeg(ff, ["-y", "-i", dirs.video, "-c", "copy", "-movflags", "+faststart", dirs.mp4]);
+    }
     logInfo(`remux ok: ${dirs.mp4}`);
     await runFfmpeg(
       ff,
@@ -188,8 +205,8 @@ function cleanupAfterStop(): void {
 
 // ── start/stop/cancel/marker ───────────────────────────────────
 
-export async function selectRegion(displayIndex = 0): Promise<{ x: number; y: number; width: number; height: number } | null> {
-  return selectRegionOnDisplay(displayIndex);
+export function selectRegion(): Promise<RegionSelection | null> {
+  return selectRegionOnDisplays();
 }
 
 function startBar(mode: RecordingMode): void {
@@ -209,6 +226,17 @@ export async function startRecording(req: StartRecordingRequest): Promise<{ ok: 
   if (state.phase !== "idle") return { ok: false, error: "já existe gravação em andamento" };
   if (req.mode === "window" && !req.sourceId) return { ok: false, error: "sourceId ausente" };
   if (req.mode === "region" && !req.rect) return { ok: false, error: "retângulo ausente" };
+
+  // região: resolver o sourceId do DISPLAY onde o retângulo está (ordem do
+  // desktopCapturer casa com screen.getAllDisplays) — sem isso o recorder
+  // gravava a tela errada ou nem iniciava
+  let regionSourceId: string | null = req.sourceId ?? null;
+  if (req.mode === "region") {
+    const screens = await listSources("screen");
+    const idx = Math.max(0, Math.min(req.displayIndex ?? 0, screens.length - 1));
+    regionSourceId = screens[idx]?.id ?? null;
+    if (!regionSourceId) return { ok: false, error: "nenhuma tela disponível para a região" };
+  }
 
   return withSpan("session.start", { mode: req.mode }, async () => {
     const t0 = Date.now();
@@ -245,7 +273,7 @@ export async function startRecording(req: StartRecordingRequest): Promise<{ ok: 
       const result = (await withSpan("recorder.open", {}, () =>
         recorderWin!.webContents.executeJavaScript(
           `window.vcRecord(${JSON.stringify({
-            sourceId: req.sourceId ?? null,
+            sourceId: req.mode === "region" ? regionSourceId : req.sourceId ?? null,
             withMic: req.withMic,
             mode: req.mode,
           })})`,

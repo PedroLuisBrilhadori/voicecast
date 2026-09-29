@@ -125,6 +125,12 @@ export interface Bootstrap {
 
 export type SourceKind = "screen" | "window";
 
+/** Resultado da seleção de região: retângulo em px FÍSICOS do display escolhido. */
+export interface RegionSelection {
+  rect: Rect;
+  displayIndex: number;
+}
+
 export interface SourceInfo {
   id: string;
   kind: SourceKind;
@@ -255,7 +261,8 @@ export interface VoicecastBridge {
   ping(req: PingRequest): Promise<PingResponse>;
   getBootstrap(): Promise<Bootstrap>;
   listSources(kind: SourceKind): Promise<SourceInfo[]>;
-  selectRegion(displayIndex?: number): Promise<Rect | null>;
+  /** Overlays em todos os displays; arrastar+soltar confirma. */
+  selectRegion(): Promise<RegionSelection | null>;
   startRecording(req: StartRecordingRequest): Promise<{ ok: boolean; error?: string }>;
   stopRecording(): Promise<{ ok: boolean; error?: string }>;
   cancelRecording(): Promise<{ ok: boolean }>;

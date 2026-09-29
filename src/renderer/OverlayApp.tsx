@@ -11,27 +11,28 @@ declare global {
 const params = new URLSearchParams(location.search);
 const CH = params.get("ch") ?? "";
 const DPR = Number(params.get("dpr") ?? "1");
+const IDX = Number(params.get("idx") ?? "0");
 
-/** Overlay de seleção: fundo escurecido, arrastar desenha o retângulo,
- *  Enter/confirmação duplo-clique confirma, Esc cancela. Resultado em px FÍSICOS. */
+/** Overlay de seleção de região (um por display — todos abrem juntos):
+ *  ARRASTAR e SOLTAR confirma (mouse-first), Esc/✕ cancela. O primeiro
+ *  resultado fecha todos os overlays. Resultado em px FÍSICOS + displayIndex. */
 export function OverlayApp() {
   const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const rectRef = useRef<Rect | null>(null);
-  const [hint, setHint] = useState("Arraste para selecionar a região · Enter confirma · Esc cancela");
+  const [hint, setHint] = useState("Arraste no monitor desejado · soltar confirma · Esc ou ✕ cancela");
+
+  const cancel = () => {
+    window.vcInternal.sendRegion(CH, null);
+    window.close();
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        window.vcInternal.sendRegion(CH, null);
-        window.close();
-      }
-      if (e.key === "Enter" && rectRef.current) {
-        window.vcInternal.sendRegion(CH, rectRef.current);
-        window.close();
-      }
+      if (e.key === "Escape") cancel();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const cssRect = drag
@@ -52,7 +53,7 @@ export function OverlayApp() {
       height: Math.round(cssRect.height * DPR),
     };
     rectRef.current = physical;
-    window.vcInternal.sendRegion(CH, physical);
+    window.vcInternal.sendRegion(CH, { rect: physical, displayIndex: IDX });
     window.close();
   };
 
@@ -74,7 +75,9 @@ export function OverlayApp() {
         setDrag({ ...drag, x1: e.clientX, y1: e.clientY });
       }}
       onMouseUp={() => {
-        setHint("Enter confirma · Esc cancela · duplo-clique dentro do retângulo também confirma");
+        // mouse-first: soltar com retângulo válido CONFIRMA (sem Enter)
+        if (cssRect && cssRect.width >= 8 && cssRect.height >= 8) confirmRect();
+        else if (cssRect) setHint("arraste uma área maior — ou Esc/✕ para cancelar");
       }}
       onDoubleClick={confirmRect}
     >
@@ -123,32 +126,45 @@ export function OverlayApp() {
       >
         {hint}
       </div>
-      <button
-        onClick={() => {
-          const physical: Rect = {
-            x: 0,
-            y: 0,
-            width: Math.round(window.innerWidth * DPR),
-            height: Math.round(window.innerHeight * DPR),
-          };
-          window.vcInternal.sendRegion(CH, physical);
-          window.close();
-        }}
-        style={{
-          position: "fixed",
-          top: 12,
-          right: 14,
-          background: "rgba(12,12,16,0.85)",
-          color: "#e8e8ee",
-          border: "1px solid #3a3a46",
-          borderRadius: 8,
-          font: "13px system-ui",
-          padding: "6px 12px",
-          cursor: "pointer",
-        }}
-      >
-        tela inteira
-      </button>
+      <div style={{ position: "fixed", top: 12, right: 14, display: "flex", gap: 8 }}>
+        <button
+          onClick={() => {
+            const physical: Rect = {
+              x: 0,
+              y: 0,
+              width: Math.round(window.innerWidth * DPR),
+              height: Math.round(window.innerHeight * DPR),
+            };
+            window.vcInternal.sendRegion(CH, { rect: physical, displayIndex: IDX });
+            window.close();
+          }}
+          style={{
+            background: "rgba(12,12,16,0.85)",
+            color: "#e8e8ee",
+            border: "1px solid #3a3a46",
+            borderRadius: 8,
+            font: "13px system-ui",
+            padding: "6px 12px",
+            cursor: "pointer",
+          }}
+        >
+          tela inteira
+        </button>
+        <button
+          onClick={cancel}
+          style={{
+            background: "rgba(12,12,16,0.85)",
+            color: "#e8e8ee",
+            border: "1px solid #3a3a46",
+            borderRadius: 8,
+            font: "13px system-ui",
+            padding: "6px 12px",
+            cursor: "pointer",
+          }}
+        >
+          ✕ cancelar
+        </button>
+      </div>
     </div>
   );
 }

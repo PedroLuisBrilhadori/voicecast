@@ -18,6 +18,7 @@ export function App() {
   const [windows, setWindows] = useState<SourceInfo[]>([]);
   const [search, setSearch] = useState("");
   const [regionRect, setRegionRect] = useState<import("../shared/ipc").Rect | null>(null);
+  const [regionDisplay, setRegionDisplay] = useState(0);
   const [withMic, setWithMic] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -111,8 +112,9 @@ export function App() {
 
   const pickRegion = useCallback(async () => {
     setError(null);
-    const rect = await window.voicecast.selectRegion(0);
-    if (rect) setRegionRect(rect);
+    const sel = await window.voicecast.selectRegion();
+    if (sel) setRegionRect(sel.rect);
+    if (sel) setRegionDisplay(sel.displayIndex);
   }, []);
 
   const recording = state.phase !== "idle";
@@ -230,7 +232,7 @@ export function App() {
               ▭ Selecionar área na tela
             </button>
             <p className="muted">
-              Um overlay fullscreen abre — arraste o retângulo, Enter confirma, Esc cancela.
+              Overlays abrem em TODOS os monitores — arraste no que quiser e SOLTAR confirma (✕/Esc cancela).
             </p>
             {regionRect ? (
               <div className="region-summary">
@@ -243,7 +245,7 @@ export function App() {
                 <button
                   className="go big"
                   disabled={recording || busy}
-                  onClick={() => void start({ mode: "region", rect: regionRect })}
+                  onClick={() => void start({ mode: "region", rect: regionRect, displayIndex: regionDisplay })}
                 >
                   ● Gravar região
                 </button>

@@ -123,7 +123,7 @@ function registerIpc(agent: AgentBridge): void {
     shortcuts: SHORTCUTS,
   }));
   ipcMain.handle(IPC.listSources, (_e, kind: "screen" | "window") => listSources(kind));
-  ipcMain.handle(IPC.selectRegion, (_e, displayIndex?: number) => selectRegion(displayIndex));
+  ipcMain.handle(IPC.selectRegion, () => selectRegion());
   ipcMain.handle(IPC.startRecording, (_e, req: StartRecordingRequest) => startRecording(req));
   ipcMain.handle(IPC.stopRecording, () => stopRecording());
   ipcMain.handle(IPC.cancelRecording, () => cancelRecording());
