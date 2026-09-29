@@ -38,6 +38,12 @@ describe("fmtTs", () => {
     expect(fmtTs(65.5)).toBe("1:06");
     expect(fmtTs(100.32)).toBe("1:40");
   });
+
+  it("W2b: arredonda o total antes de quebrar — 59.7 vira 1:00 (não 0:60)", () => {
+    expect(fmtTs(59.7)).toBe("1:00");
+    expect(fmtTs(59.4)).toBe("0:59");
+    expect(fmtTs(119.5)).toBe("2:00");
+  });
 });
 
 describe("summarizeAnnotationEvents (fixture)", () => {

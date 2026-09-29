@@ -19,10 +19,12 @@
 import { foldEvents, type AnnotationEvent } from "./annotations";
 import { wslPathQuoted } from "./paths";
 
-/** Tempo relativo m:ss — mesmo formato das outras seções do buildContext. */
+/** Tempo relativo m:ss — mesmo formato das outras seções do buildContext.
+ * Arredonda o TOTAL antes de quebrar (W2b): 59.7 vira "1:00", não "0:60". */
 export function fmtTs(s: number): string {
-  const m = Math.floor(s / 60);
-  const sec = Math.round(s % 60);
+  const total = Math.round(s);
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
