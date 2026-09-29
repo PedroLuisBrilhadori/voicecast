@@ -267,22 +267,10 @@ export async function runGoal(req: RunGoalRequest, cfg: RunnerConfig = agentRunn
   });
 }
 
-export function goalSummary(state: GoalState): string {
-  switch (state.phase) {
-    case "queued":
-      return "goal na fila";
-    case "running":
-      return `rodando · ${Math.round((Date.now() - (state.startedAt ?? Date.now())) / 1000)}s`;
-    case "completed":
-      return "goal concluído";
-    case "timeout":
-      return "goal excedeu o tempo";
-    case "cancelled":
-      return "goal cancelado";
-    case "failed":
-      return `goal falhou: ${state.error ?? "erro desconhecido"}`;
-  }
-}
+// W2b: fonte única do resumo do goal — shared/agent-goal.ts (a cópia que
+// vivia aqui saiu). Re-export mantido p/ quem importa do runner.
+export { goalSummary } from "../../shared/agent-goal";
+
 export class GoalQueue {
   private busy = false;
   private pending: RunGoalRequest[] = [];

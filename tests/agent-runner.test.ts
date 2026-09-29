@@ -3,11 +3,11 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { GoalQueue, agentRunnerConfig, goalSpawnArgs, runGoal, type RunnerConfig } from "../src/main/agent/runner";
+import { GoalQueue, agentRunnerConfig, goalSpawnArgs, goalSummary as goalSummaryDoRunner, runGoal, type RunnerConfig } from "../src/main/agent/runner";
 import { SETUP_CREDENTIALS_JS } from "../src/main/agent/runtime-setup";
 import type { GoalEnricher } from "../src/shared/agent-context";
 import { SESSION_CONTEXT_BEGIN, SESSION_CONTEXT_END } from "../src/shared/agent-context";
-import { isGoalFinal, type GoalState } from "../src/shared/agent-goal";
+import { goalSummary as goalSummaryDaFonte, isGoalFinal, type GoalState } from "../src/shared/agent-goal";
 
 /**
  * Runner do cockpit (C2) contra um agente FAKE (tests/fixtures/fake-agent.sh)
@@ -273,5 +273,13 @@ describe("GoalQueue", () => {
     const done = finals.find((s) => s.phase === "completed");
     expect(done?.lastOutput).toContain(SESSION_CONTEXT_BEGIN);
     expect(done?.lastOutput).toContain("contexto pela fila");
+  });
+});
+
+// W2b item 2: UMA fonte p/ goalSummary — shared/agent-goal.ts; o runner só
+// re-exporta (identidade de função prova que não há segunda implementação).
+describe("goalSummary (fonte única)", () => {
+  it("re-export do runner É a função de shared/agent-goal", () => {
+    expect(goalSummaryDoRunner).toBe(goalSummaryDaFonte);
   });
 });
