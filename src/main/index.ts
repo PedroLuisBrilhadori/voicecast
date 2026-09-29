@@ -36,6 +36,7 @@ import { ensureLayout } from "./storage";
 import { initLogging, logError, logInfo } from "./logging";
 import { registerDitadoHotkey, claimHotkey, toggleDitado } from "./ditado";
 import { initTelemetry, stopTelemetry } from "./telemetry";
+import { scheduleTelemetryInit } from "../shared/telemetry-schedule";
 import { ensureAsrHost, stopAsrHost } from "./asr-host";
 import {
   asrHealth,
@@ -225,17 +226,11 @@ if (!gotLock) {
       }
     });
     registerAnnotationIpc();
-    // telemetria DEPOIS do boot: o import do SDK OTel bloqueia o event loop
-    // por ~9s (medido no autotest de 2026-09-23) — se colidir com uma
-    // gravação, a captura abre segundos tarde. Espera idle + 15s de vida.
-    const initTelIdle = () => {
-      if (getState().phase !== "idle") {
-        setTimeout(initTelIdle, 5_000);
-        return;
-      }
-      void initTelemetry();
-    };
-    setTimeout(initTelIdle, 15_000);
+    // telemetria logo após o boot: o agendamento antigo (idle+15s) era
+    // mitigação do import do SDK que travava o event loop por ~9s — pós-W1 o
+    // SDK roda em worker_thread e o init não bloqueia nada (delay 2s residual,
+    // guarda de idle mantida p/ não competir com o boot de uma sessão).
+    scheduleTelemetryInit(() => getState().phase, () => void initTelemetry());
     ensureLayout();
     applyRetention();
     registerIpc(agentBridge);

@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createTelemetryCore, type Attributes, type MeterLike } from "../src/shared/telemetry-core";
+import { scheduleTelemetryInit } from "../src/shared/telemetry-schedule";
 
 /**
  * O bug histórico: counters/histograms declarados no module-load capturavam o
@@ -63,5 +64,38 @@ describe("telemetry-core (instrumentos lazy)", () => {
     c.add(1);
     core.setMeter(null);
     expect(() => c.add(2)).not.toThrow();
+  });
+});
+
+// W2b item 3: o agendamento saiu do index.ts (intestável) e o delay caiu de
+// idle+15s p/ 2s — pós-W1 o SDK roda em worker_thread e o init não bloqueia
+// mais o event loop; a guarda de idle (retry) continua.
+describe("scheduleTelemetryInit (W2b)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("delay inicial curto (2s, não 15s) e init dispara com captura idle", () => {
+    vi.useFakeTimers();
+    const init = vi.fn();
+    scheduleTelemetryInit(() => "idle", init);
+    vi.advanceTimersByTime(1_999);
+    expect(init).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(init).toHaveBeenCalledTimes(1);
+  });
+
+  it("captura não-idle adia o init (retry 5s) até voltar a idle", () => {
+    vi.useFakeTimers();
+    const init = vi.fn();
+    let phase = "recording";
+    scheduleTelemetryInit(() => phase, init);
+    vi.advanceTimersByTime(2_000);
+    expect(init).not.toHaveBeenCalled(); // não iniciou gravando
+    vi.advanceTimersByTime(5_000);
+    expect(init).not.toHaveBeenCalled(); // ainda gravando → retry
+    phase = "idle";
+    vi.advanceTimersByTime(5_000);
+    expect(init).toHaveBeenCalledTimes(1);
   });
 });
