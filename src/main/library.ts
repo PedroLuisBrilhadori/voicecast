@@ -12,9 +12,15 @@ import { resolveFfmpeg, runFfmpeg } from "./ffmpeg";
 import { logError, logInfo } from "./logging";
 import { sessionDirs, sessionsRoot } from "./storage";
 import { sessionDirName, wslPathQuoted } from "../shared/paths";
-import type { ClipInfo, SessionMetaPatch, SessionSegment } from "../shared/ipc";
+import type { ClipInfo, CorrectionEdit, CorrectionResult, DatasetWriteStatus, SessionMetaPatch, SessionSegment } from "../shared/ipc";
 import { clipFileBase, cutFileBase, sanitizeSegments, wordsInRange } from "../shared/segments";
 import { annotationSection, fmtTs } from "../shared/annotations-context";
+import {
+  applyEditsToWords,
+  sanitizeEdits,
+  wordsText,
+} from "../shared/corrections";
+import { writeDatasetCorrection } from "./dataset";
 import { counter, histogram, withSpan } from "./telemetry";
 
 // voicecast_sessions_total é do capture.ts (que emite); duplicar aqui criava
@@ -29,6 +35,8 @@ const M_CTX_ANNOTATIONS = counter(
   "voicecast_context_annotations_total",
   "marcações de tela incluídas no buildContext",
 );
+// W2a: correções de ditado por alvo (voicecast | dataset | ambos)
+const M_CORRECTIONS = counter("voicecast_corrections_total", "correções de ditado por alvo");
 
 // ── tipos de biblioteca ────────────────────────────────────────
 
@@ -80,6 +88,10 @@ interface Meta {
   textPreview?: string;
   /** Julgamento Jev (fail-soft: ausente quando off/sem key/erro). */
   jev?: JevMeta;
+  /** W2a: id do item correspondente no corpus do voice (link opcional). */
+  datasetId?: string;
+  /** W2a: última correção gravada nesta sessão. */
+  correction?: SessionCorrectionMeta;
 }
 
 // ── biblioteca ─────────────────────────────────────────────────
@@ -510,6 +522,92 @@ export function updateSessionMeta(dir: string, name: string, patch: SessionMetaP
   const next: Meta = { ...m, ...patch };
   if (patch.segments) next.segments = sanitizeSegments(patch.segments);
   writeMeta(dirs.meta, next);
+}
+
+// ── correção de ditados (W2a — issues #3+#5) ───────────────────
+
+export interface SessionCorrectionMeta {
+  correctedAt: string;
+  nEdits: number;
+  /** Desfecho da escrita no corpus do voice (quando a sessão tem datasetId). */
+  dataset?: DatasetWriteStatus;
+}
+
+/** Escrita atômica (tmp + rename) — transcript e corpus nunca truncados. */
+function atomicWriteFile(file: string, data: string): void {
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, data, "utf8");
+  fs.renameSync(tmp, file);
+}
+
+/**
+ * Salva a correção de um ditado da sessão:
+ * 1. transcript.json: palavras editadas NO LUGAR (start/end/p preservados) e
+ *    texto recomposto — ou texto puro trocado quando words vazio (ditados do
+ *    gancho fake / antigos sem words);
+ * 2. meta.json: bloco correction (quando/quanto);
+ * 3. dataset do voice (fail-soft): se a sessão tem datasetId e o corpus existe,
+ *    grava o bloco validation lá (text cru do corpus intocado, tmp+rename).
+ *
+ * alvo do counter: "ambos" quando os dois alvos gravam, "voicecast" quando só
+ * o local (sem datasetId ou corpus ausente).
+ */
+export function saveCorrection(
+  dir: string,
+  name: string,
+  req: { correctedText: string; edits: CorrectionEdit[] },
+): CorrectionResult {
+  const dirs = sessionDirs(dir, name);
+  if (!fs.existsSync(dirs.meta)) return { ok: false, error: "sessão não encontrada" };
+  if (!fs.existsSync(dirs.transcript)) return { ok: false, error: "sessão sem transcrição" };
+  let transcript: Transcript;
+  try {
+    transcript = JSON.parse(fs.readFileSync(dirs.transcript, "utf8")) as Transcript;
+  } catch (e) {
+    return { ok: false, error: `transcript ilegível: ${String(e)}` };
+  }
+  const edits = sanitizeEdits(req.edits);
+
+  let corrected: string;
+  let nEdits: number;
+  if (transcript.words?.length) {
+    // palavras são a fonte: edita no lugar (timings preservados) e recompõe
+    const applied = applyEditsToWords(transcript.words, edits);
+    corrected = applied.text;
+    transcript = { ...transcript, words: applied.words, text: applied.text };
+    nEdits = edits.length;
+  } else {
+    // texto puro (words vazio): correção é o texto inteiro
+    corrected = String(req.correctedText ?? "").replace(/\s+/g, " ").trim();
+    if (!corrected) return { ok: false, error: "correção vazia" };
+    transcript = { ...transcript, text: corrected };
+    nEdits = 0;
+  }
+
+  try {
+    atomicWriteFile(dirs.transcript, JSON.stringify(transcript, null, 2));
+  } catch (e) {
+    return { ok: false, error: `falha ao gravar transcript: ${String(e)}` };
+  }
+
+  // dataset do voice: só quando a sessão está linkada a um item do corpus
+  const meta = JSON.parse(fs.readFileSync(dirs.meta, "utf8")) as Meta;
+  const dsId = typeof meta.datasetId === "string" ? meta.datasetId : "";
+  const dataset = dsId
+    ? writeDatasetCorrection(dsId, corrected, edits)
+    : "ausente";
+  const next: Meta = {
+    ...meta,
+    correction: { correctedAt: new Date().toISOString(), nEdits, dataset },
+  };
+  writeMeta(dirs.meta, next);
+
+  const alvo = dataset === "ok" ? "ambos" : "voicecast";
+  M_CORRECTIONS?.add(1, { alvo });
+  logInfo(
+    `correção salva: ${dir}/${name} (${nEdits} edições; dataset=${dataset}${dsId ? ` ${dsId}` : ""})`,
+  );
+  return { ok: true, alvo, dataset };
 }
 
 export function deleteSession(dir: string, name: string): void {

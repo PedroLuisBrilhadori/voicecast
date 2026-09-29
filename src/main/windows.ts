@@ -172,18 +172,25 @@ export function createBar(
   return w;
 }
 
-/** Editor de sessão (M2): player + transcrição + clipes + contexto. */
-export function createEditor(dir: string, name: string): BrowserWindow {
+/**
+ * Editor de sessão (M2): player + transcrição + clipes + contexto.
+ * corpus !== undefined abre a janela no modo dataset do voice (W2a — tela de
+ * correção que substitui o painel :8700): corpus="" é a lista, corpus=<id>
+ * abre o detalhe do item direto.
+ */
+export function createEditor(dir: string, name: string, corpus?: string): BrowserWindow {
   const w = new BrowserWindow({
     width: 1180,
     height: 760,
     show: false,
     autoHideMenuBar: true,
-    title: `voicecast · ${name}`,
+    title: corpus !== undefined ? "voicecast · dataset" : `voicecast · ${name}`,
     backgroundColor: "#101014",
     webPreferences: webPrefs,
   });
-  void w.loadFile(dist("editor.html"), { query: { dir, name } });
+  void w.loadFile(dist("editor.html"), {
+    query: corpus !== undefined ? { corpus } : { dir, name },
+  });
   wireLogging(w, "editor");
   w.show();
   return w;

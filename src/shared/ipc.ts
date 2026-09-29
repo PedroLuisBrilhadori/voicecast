@@ -62,8 +62,20 @@ export const IPC = {
   copyText: "library:copy",
   openPath: "library:open-path",
   openEditor: "library:open-editor",
+  /** W2a: salva correção de ditado na sessão (transcript+meta) + dataset. */
+  saveCorrection: "library:save-correction",
+  /** W2a: abre a janela do dataset do voice (substitui o painel :8700). */
+  openCorpus: "library:open-corpus",
   ditadoToggle: "ditado:toggle",
   asrStatus: "library:asr-status",
+
+  // ── dataset de treino do voice (W2a — issue #3) ───────────────
+  /** Lista o histórico do corpus (transcriptions) — busca + filtro rotuladas. */
+  listDatasetItems: "dataset:list-items",
+  /** Detalhe completo de um item do corpus (words/validation/áudio). */
+  getDatasetItem: "dataset:get-item",
+  /** Correção direta num item do corpus (bloco validation, tmp+rename). */
+  saveDatasetCorrection: "dataset:save-correction",
 
   // ── cockpit de agente (C4 — PLANO-COCKPIT) ────────────────────
   /** Renderer → main: enfileira um goal no worker do cockpit (entrada digitada). */
@@ -270,9 +282,18 @@ export interface VoicecastBridge {
   openPath(winPath: string): Promise<OpResult>;
   /** Abre o editor da sessão numa janela própria. */
   openEditor(dir: string, name: string): Promise<OpResult>;
+  /** Salva a correção do ditado da sessão (transcript+meta; dataset via datasetId). */
+  saveCorrection(dir: string, name: string, req: SaveCorrectionRequest): Promise<CorrectionResult>;
+  /** Abre a janela do dataset do voice (lista; id opcional abre o detalhe). */
+  openCorpus(id?: string): Promise<OpResult>;
   /** Liga/desliga o ditado (usado pela barra do ditado). */
   ditadoToggle(): Promise<{ ok: boolean; error?: string }>;
   asrStatus(): Promise<{ ok: boolean; source?: string }>;
+
+  // W2a — dataset de treino do voice (substitui o painel :8700)
+  listDatasetItems(query?: string, labeled?: DatasetLabeledFilter): Promise<DatasetItemSummary[]>;
+  getDatasetItem(id: string): Promise<DatasetItemDetail | null>;
+  saveDatasetCorrection(id: string, req: SaveCorrectionRequest): Promise<CorrectionResult>;
 
   // C4 — cockpit de agente
   /** Enfileira um goal no worker do cockpit (retorno imediato; estados via onEvent "agent-state"). */
@@ -327,6 +348,10 @@ export interface SessionDetail {
     sizeBytes?: number;
     /** Trechos nomeados do editor (fase B) — clipe e contexto nascem daqui. */
     segments?: SessionSegment[];
+    /** W2a: link opcional com o item correspondente no corpus do voice. */
+    datasetId?: string;
+    /** W2a: última correção gravada (presença = sessão já corrigida). */
+    correction?: { correctedAt: string; nEdits: number; dataset?: string };
   };
   transcript: TranscriptInfo | null;
   /** file:// URL da mídia para o player do editor. */
@@ -351,3 +376,70 @@ export interface ClipInfo {
 }
 
 export type OpResult = { ok: true } | { ok: false; error: string };
+
+// ── correção de ditados + dataset do voice (W2a — issues #3+#5) ──
+
+/** Marcação palavra a palavra (mesmo shape do painel :8700 / corrections.py). */
+export interface CorrectionEdit {
+  /** posição no token stream (index em words). */
+  index: number;
+  originalW: string;
+  correctedW: string;
+}
+
+/** Bloco `validation` gravado no JSON do corpus — schema É o corpus (voice). */
+export interface ValidationBlock {
+  corrected_text: string;
+  ts: string;
+  n_edits: number;
+  edits: CorrectionEdit[];
+  labeled_by: string;
+}
+
+export interface SaveCorrectionRequest {
+  /** Texto final corrigido (autorisado quando words vazio — texto puro). */
+  correctedText: string;
+  /** Edições palavra a palavra (vazio = correção só de texto). */
+  edits: CorrectionEdit[];
+}
+
+/** Onde a correção foi gravada (counter voicecast_corrections_total{alvo}). */
+export type CorrectionAlvo = "voicecast" | "dataset" | "ambos";
+
+/** Desfecho da escrita no corpus do voice. */
+export type DatasetWriteStatus = "ok" | "ausente" | "erro";
+
+export type CorrectionResult =
+  | { ok: true; alvo: CorrectionAlvo; dataset: DatasetWriteStatus }
+  | { ok: false; error: string };
+
+export type DatasetLabeledFilter = "any" | "0" | "1";
+
+/** Item do histórico do corpus (lista da tela de correção). */
+export interface DatasetItemSummary {
+  id: string;
+  ts: string | null;
+  /** Primeiras palavras do texto cru do ASR. */
+  preview: string;
+  durationS: number | null;
+  source: string | null;
+  language: string | null;
+  /** Já tem bloco validation (correção rotulada). */
+  validated: boolean;
+}
+
+/** Detalhe completo de um item do corpus (words + validation + áudio). */
+export interface DatasetItemDetail {
+  id: string;
+  ts: string | null;
+  /** Texto CRU do ASR — nunca é alterado pela correção. */
+  text: string;
+  durationS: number | null;
+  source: string | null;
+  language: string | null;
+  model: string | null;
+  words: { w: string; start: number; end: number; p: number }[];
+  validation: ValidationBlock | null;
+  /** file:// URL do wav no raw/ (quando existe). */
+  audioUrl: string | null;
+}

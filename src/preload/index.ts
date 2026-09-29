@@ -10,9 +10,11 @@ import {
   type AnnotationWheelRequest,
   type Bootstrap,
   type CaptureEvent,
+  type DatasetLabeledFilter,
   type PingRequest,
   type PingResponse,
   type RecordingState,
+  type SaveCorrectionRequest,
   type SessionMetaPatch,
   type SessionSegment,
   type SourceInfo,
@@ -50,8 +52,17 @@ const bridge: VoicecastBridge = {
   copyText: (text: string) => ipcRenderer.invoke(IPC.copyText, text),
   openPath: (winPath: string) => ipcRenderer.invoke(IPC.openPath, winPath),
   openEditor: (dir: string, name: string) => ipcRenderer.invoke(IPC.openEditor, dir, name),
+  saveCorrection: (dir: string, name: string, req: SaveCorrectionRequest) =>
+    ipcRenderer.invoke(IPC.saveCorrection, dir, name, req),
+  openCorpus: (id?: string) => ipcRenderer.invoke(IPC.openCorpus, id),
   ditadoToggle: () => ipcRenderer.invoke(IPC.ditadoToggle),
   asrStatus: () => ipcRenderer.invoke(IPC.asrStatus),
+  // W2a — dataset de treino do voice
+  listDatasetItems: (query?: string, labeled?: DatasetLabeledFilter) =>
+    ipcRenderer.invoke(IPC.listDatasetItems, query, labeled),
+  getDatasetItem: (id: string) => ipcRenderer.invoke(IPC.getDatasetItem, id),
+  saveDatasetCorrection: (id: string, req: SaveCorrectionRequest) =>
+    ipcRenderer.invoke(IPC.saveDatasetCorrection, id, req),
   // C4 — cockpit de agente
   agentRunGoal: (goal: string) => ipcRenderer.invoke(IPC.agentRunGoal, goal),
   agentGetState: () => ipcRenderer.invoke(IPC.agentGetState),

@@ -52,10 +52,13 @@ import {
   listClips,
   listSessions,
   openInFolder,
+  saveCorrection,
   searchSessions,
   transcribeAndStore,
   updateSessionMeta,
 } from "./library";
+import { getDatasetItem, listDatasetItems, writeDatasetCorrection } from "./dataset";
+import type { SaveCorrectionRequest } from "../shared/ipc";
 
 initLogging();
 logInfo("boot voicecast: argv=", process.argv, "pid=", process.pid);
@@ -186,6 +189,38 @@ function registerIpc(agent: AgentBridge): void {
     createEditor(dir, name);
     return { ok: true } as const;
   });
+  // W2a — correção de ditados: salva na sessão (transcript+meta) e, quando a
+  // sessão está linkada (meta.datasetId), também no corpus do voice
+  ipcMain.handle(IPC.saveCorrection, (_e, dir: string, name: string, req: SaveCorrectionRequest) => {
+    const r = saveCorrection(dir, name, typeof req === "object" && req ? req : { correctedText: "", edits: [] });
+    if (r.ok) broadcast({ type: "sessions-changed" }); // preview da lista pode ter mudado
+    return r;
+  });
+  ipcMain.handle(IPC.openCorpus, (_e, id?: string) => {
+    createEditor("", "", typeof id === "string" ? id : "");
+    return { ok: true } as const;
+  });
+  // W2a — dataset de treino do voice (mesmo corpus que o export JSONL consome)
+  ipcMain.handle(IPC.listDatasetItems, (_e, query?: string, labeled?: "any" | "0" | "1") =>
+    listDatasetItems({ query, labeled }),
+  );
+  ipcMain.handle(IPC.getDatasetItem, (_e, id: string) => getDatasetItem(String(id ?? "")));
+  ipcMain.handle(IPC.saveDatasetCorrection, (_e, id: string, req: SaveCorrectionRequest) => {
+    const clean = typeof req === "object" && req ? req : { correctedText: "", edits: [] };
+    const corrected = String(clean.correctedText ?? "").replace(/\s+/g, " ").trim();
+    if (!corrected) return { ok: false, error: "correção vazia" } as const;
+    const status = writeDatasetCorrection(String(id ?? ""), corrected, clean.edits ?? []);
+    if (status === "ok") {
+      return { ok: true, alvo: "dataset", dataset: "ok" } as const;
+    }
+    return {
+      ok: false,
+      error:
+        status === "ausente"
+          ? "dataset do voice não encontrado (VOICECAST_DATASET_DIR / %LOCALAPPDATA%\\voice-dictation\\datasets)"
+          : "falha ao gravar no dataset (nada foi truncado)",
+    } as const;
+  });
   ipcMain.handle(IPC.ditadoToggle, () => toggleDitado());
   // C4 — cockpit de agente: enqueue no worker (estados chegam via broadcast agent-state)
   ipcMain.handle(IPC.agentRunGoal, (_e, goal: string) => agent.enqueue(typeof goal === "string" ? goal : ""));
@@ -291,6 +326,14 @@ if (!gotLock) {
     if (openEd) {
       const [dir, name] = openEd.split("=")[1]!.split("/");
       if (dir && name) createEditor(dir, name);
+    }
+
+    // --open-corpus[=<id>] abre a tela de correção do dataset do voice (W2a;
+    // sem id abre a lista — substitui o painel :8700)
+    const openCs = process.argv.find((a) => a.startsWith("--open-corpus"));
+    if (openCs) {
+      const id = openCs.includes("=") ? openCs.split("=")[1]! : "";
+      createEditor("", "", id);
     }
 
     // --transcribe=YYYY-MM-DD/hhmm-hash transcreve a sessão e sai (sem janela/som)

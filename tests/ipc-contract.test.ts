@@ -5,11 +5,17 @@ import {
   type Bootstrap,
   type CaptureEvent,
   type ClipInfo,
+  type CorrectionEdit,
+  type CorrectionResult,
+  type DatasetItemDetail,
+  type DatasetItemSummary,
   type GoalState,
   type PingRequest,
   type PingResponse,
+  type SaveCorrectionRequest,
   type SessionMetaPatch,
   type SessionSegment,
+  type ValidationBlock,
 } from "../src/shared/ipc";
 
 /**
@@ -101,6 +107,87 @@ describe("contrato IPC", () => {
       "lastOutput",
       "phase",
       "startedAt",
+    ]);
+  });
+
+  it("canais da correção de ditados + dataset (W2a) estáveis", () => {
+    expect(IPC.saveCorrection).toBe("library:save-correction");
+    expect(IPC.openCorpus).toBe("library:open-corpus");
+    expect(IPC.listDatasetItems).toBe("dataset:list-items");
+    expect(IPC.getDatasetItem).toBe("dataset:get-item");
+    expect(IPC.saveDatasetCorrection).toBe("dataset:save-correction");
+  });
+
+  it("payloads da correção (W2a) serializáveis — schema do corpus cruza a porta", () => {
+    const edit: CorrectionEdit = { index: 3, originalW: "notch", correctedW: "note" };
+    const req: SaveCorrectionRequest = { correctedText: "texto corrigido", edits: [edit] };
+    const validation: ValidationBlock = {
+      corrected_text: "texto corrigido",
+      ts: "2026-09-29T10:00:00",
+      n_edits: 1,
+      edits: [edit],
+      labeled_by: "voicecast",
+    };
+    const ok: CorrectionResult = { ok: true, alvo: "ambos", dataset: "ok" };
+    const fail: CorrectionResult = { ok: false, error: "dataset ausente" };
+    for (const payload of [edit, req, validation, ok, fail]) {
+      expect(JSON.parse(JSON.stringify(payload))).toEqual(payload);
+    }
+    expect(Object.keys(validation).sort()).toEqual([
+      "corrected_text",
+      "edits",
+      "labeled_by",
+      "n_edits",
+      "ts",
+    ]);
+    expect(Object.keys(edit).sort()).toEqual(["correctedW", "index", "originalW"]);
+  });
+
+  it("itens do dataset (W2a) serializáveis e completos", () => {
+    const summary: DatasetItemSummary = {
+      id: "011430-6f1d3072",
+      ts: "2026-09-19T01:14:52",
+      preview: "primeiras palavras…",
+      durationS: 2.5,
+      source: "dictation",
+      language: "pt",
+      validated: false,
+    };
+    const detail: DatasetItemDetail = {
+      id: "011430-6f1d3072",
+      ts: "2026-09-19T01:14:52",
+      text: "texto cru",
+      durationS: 2.5,
+      source: "dictation",
+      language: "pt",
+      model: "large-v3-turbo",
+      words: [{ w: "texto", start: 0, end: 0.4, p: 0.8 }],
+      validation: null,
+      audioUrl: "file:///C:/raw/x.wav",
+    };
+    for (const payload of [summary, detail]) {
+      expect(JSON.parse(JSON.stringify(payload))).toEqual(payload);
+    }
+    expect(Object.keys(summary).sort()).toEqual([
+      "durationS",
+      "id",
+      "language",
+      "preview",
+      "source",
+      "ts",
+      "validated",
+    ]);
+    expect(Object.keys(detail).sort()).toEqual([
+      "audioUrl",
+      "durationS",
+      "id",
+      "language",
+      "model",
+      "source",
+      "text",
+      "ts",
+      "validation",
+      "words",
     ]);
   });
 });
