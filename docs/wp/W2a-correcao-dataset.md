@@ -53,4 +53,69 @@ runner/runtime-setup, painel do picker.
 Commits convencionais (`feat(w2a): …`), sem push. Preencher Resultado abaixo.
 
 ## Resultado (preenche o piloto)
-- (pendente)
+
+**ENTREGUE (2026-09-29)** — commits `1dda3f6..fa00a6a` (+docs). `pnpm ci:local`
+verde: 219 testes (185→219, +34 do W2a), typecheck e build ok. Sem push.
+
+### Schema descoberto no corpus (o disco é a spec)
+- `datasets/transcriptions/YYYY-MM-DD/<HHMMSS-hash8>.json`: `id`, `ts` (ISO
+  local sem Z), `audio` (rel `raw/<dia>/<id>.wav`), `duration_s`, `text` (CRU),
+  `chars`, `confidence`, `device`, `paste_mode`, `model`, `language`,
+  `source`, `n_words`, `words: [{w,start,end,p}]`, `quality`, `validation`,
+  `ready_for_export`. Também há `raw/<dia>/<id>.wav` e `drafts/` (status).
+- Correção no corpus = bloco `validation` no PRÓPRIO JSON (descoberto no
+  código do painel antigo `voice-dictation/src/voice/corrections.py`, pois
+  nenhum item do corpus tem validation ainda):
+  `{corrected_text, ts, n_edits, edits:[{index,original_w,corrected_w}], labeled_by}` —
+  `text` cru NUNCA muda; escrita atômica tmp+replace; idempotente.
+
+### O que foi entregue
+1. **Motor puro** `src/shared/corrections.ts`: sanitizeEdits (mesmas regras do
+   corrections.py), applyEditsToWords (timings preservados), buildValidation,
+   guard de id (sem traversal), datasetRootFrom (`VOICECAST_DATASET_DIR`
+   override → `%LOCALAPPDATA%\voice-dictation\datasets`).
+2. **Corpus** `src/main/dataset.ts`: lista (busca/filtro rotuladas, mais
+   recente primeiro), detalhe (words/validation/áudio) e writeDatasetCorrection
+   (validation, tmp+rename, fail-soft "ausente"/"erro").
+3. **IPC** (contrato testado): `library:save-correction`,
+   `library:open-corpus`, `dataset:list-items`, `dataset:get-item`,
+   `dataset:save-correction` + payloads (`CorrectionEdit`, `CorrectionResult`
+   com alvo/dataset, `ValidationBlock`, `DatasetItemSummary/Detail`).
+4. **Correção na sessão** (`library.saveCorrection`): transcript.json com
+   words editadas NO LUGAR (timings/conf preservados) e texto recomposto — ou
+   texto puro trocado quando words vazio (gancho fake/ditados antigos);
+   `meta.correction` (correctedAt/nEdits/dataset); dataset via
+   `meta.datasetId` → alvo `ambos`/`voicecast`; counter
+   `voicecast_corrections_total{alvo}`; broadcast sessions-changed.
+5. **UI**: editor de sessões ditado ganha ✏️ corrigir (palavra clicável vira
+   input inline; textarea no caso texto puro; badge ✓ corrigido; botão 📚
+   dataset). Nova tela `?corpus` (janela editor reutilizada, `--open-corpus[=id]`)
+   substitui o painel :8700: busca, filtro (todas/sem correção/rotuladas),
+   detalhe com áudio + correção.
+
+### Decisões
+- **Link sessão↔corpus é explícito** (`meta.datasetId`): ditados voicecast não
+  são gravados no corpus hoje (escrever ditado novo no layout do voice — wav +
+  words — ficou fora do escopo do briefing e tocaria o pipeline de captura),
+  então sessões sem link ficam `alvo=voicecast` (dataset "ausente"); o caminho
+  `ambos` está implementado e testado para quando o link existir. Corrigir
+  itens do CORPUS histórico (o caso do painel :8700) vai por
+  `dataset:save-correction` (alvo=dataset).
+- `labeled_by: "voicecast"` (o painel antigo usava "panel").
+
+### Aceite
+- ✓ correção preserva timings (testes corrections/correction-save)
+- ✓ grava nos dois alvos quando dataset existe (fixture; NUNCA o corpus real —
+  testes usam `VOICECAST_DATASET_DIR`/root explícito em tmp)
+- ✓ fail-soft quando não existe (dataset "ausente", UI sinaliza)
+- ✓ contrato IPC (canais estáveis + payloads serializáveis)
+- ✓ `--ditado-test` intacto (ditado.ts/pythonEnv não tocados)
+
+### Pendências / achados
+- Gate do mantenedor (Windows): validar a tela 📚 dataset contra o corpus real
+  (só leitura no WSL aqui) e um F9→corrigir ponta a ponta.
+- Escrever ditados NOVOS no corpus (VISAO-V2 item 3 completo: wav em raw/ +
+  words + link automático meta.datasetId) — issue #3 não fecha 100% sem isso;
+  requer conversão webm→wav e toque no pipeline de captura (proibido aqui).
+- Achado vizinho (não consertado, escopo estrito): `EditorApp.tsx` hardcode
+  `C:\\Users\\pedro\\...` no botão "abrir pasta da sessão".

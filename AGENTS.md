@@ -30,6 +30,8 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 | `src/main/jev.ts` | Jev (TypeSafe) no app — julgamento fail-soft do F9 e da sessão (Etapa 2 do PLANO-JEV-CU) |
 | `src/main/jev-questions.ts` | Perguntas/limiares Jev — arquivo único revisável; não editar sem rodar o smoke |
 | `src/shared/annotations.ts` | Motor PURO das anotações (fold do log, undo/redo, borracha 2 modos) — sem electron |
+| `src/shared/corrections.ts` | Motor PURO da correção de ditados (W2a): edita words preservando timings; bloco `validation` na schema do corpus |
+| `src/main/dataset.ts` | Corpus de treino do voice-dictation (W2a): lista/detalhe/correção em `%LOCALAPPDATA%\voice-dictation\datasets` — atômica (tmp+rename), fail-soft |
 | `src/shared/segments.ts` | Motor PURO dos segmentos do editor fase B (sanitize, nomes de clipe/corte, fatia de transcrição) — sem electron |
 | `src/main/annotations.ts` | Engine das anotações: overlay, hotkeys, jsonl, auto-print (D7), marker queimado (D6) |
 | `src/preload/` | Ponte contextBridge — só expõe o contrato |
@@ -105,6 +107,17 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
   `recorder.start()` — nunca usar o início do warm-up como relógio da sessão.
   Dashboard: Grafana local, uid `voicecast` (repo unidocs,
   `volumes/grafana/dashboards-json/`).
+- **Correção de ditados + dataset (W2a, issues #3+#5)**: o editor de sessões
+  `mode:"ditado"` tem modo ✏️ corrigir (palavra a palavra, timings preservados;
+  texto puro quando words vazio) — grava transcript.json (atômico) +
+  `meta.json.correction` e, se a sessão tem `meta.datasetId`, o bloco
+  `validation` no corpus do voice (`voicecast_corrections_total{alvo}`:
+  voicecast|dataset|ambos). A tela 📚 dataset (janela editor com `?corpus` /
+  `--open-corpus[=<id>]`) substitui o painel :8700: lista/detalhe/correção do
+  corpus histórico em `%LOCALAPPDATA%\voice-dictation\datasets` (override
+  `VOICECAST_DATASET_DIR` p/ teste). O corpus é DADO REAL de treino: `text` e
+  `words` crus NUNCA são alterados (correção só no bloco `validation`), escrita
+  sempre tmp+rename, e teste NUNCA aponta pro corpus real.
 
 ## Comandos
 

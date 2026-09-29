@@ -48,7 +48,7 @@ WPs fechados.
 > `voicecast.exe --agenttest "Responda somente: ok"` (estados na barra);
 > (2) ligar hook do C7 (`enabled:true` no zcode.json) + F9 com sessão real.
 | C5 — gate de permissão local | 1 | bloqueado: C4 | — |
-| [W2a — correção de ditados + dataset (#3+#5)](wp/W2a-correcao-dataset.md) | 2 | 🚀 piloto em background | W2b (arquivos disjuntos) |
+| [W2a — correção de ditados + dataset (#3+#5)](wp/W2a-correcao-dataset.md) | 2 | ✅ **entregue** (1dda3f6..fa00a6a; 219 testes; gate Windows pendente) | W2b (arquivos disjuntos) |
 | [W2b — backlog técnico da Onda 1 (4 achados)](wp/W2b-backlog-tecnico.md) | 2 | ✅ **entregue** (fe4b44c..83deff6; 185 testes; cwd no Windows exercido no gate `--agenttest`) | — |
 
 ## Template de briefing (`docs/wp/<ID>-<slug>.md`)
