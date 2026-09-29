@@ -257,3 +257,74 @@ body.bar-body { background: transparent; overflow: hidden; }
 .clip-row:hover { border-color: var(--accent); }
 .clip-row .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .copy-text { font-size: 12.5px; padding: 2px 10px; border-radius: 999px; }
+
+/* ── W2a: correção de ditados + tela do dataset do voice ─────────── */
+
+.ok { color: var(--ok); font-size: 12.5px; }
+
+.fix-input {
+  font: inherit;
+  font-size: 14.5px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 0 4px;
+  outline: none;
+}
+
+.fix-text {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  outline: none;
+  resize: vertical;
+}
+
+.corp-tools { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
+.corp-search {
+  flex: 1;
+  font: inherit;
+  font-size: 14px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+  outline: none;
+}
+.corp-tools .on { border-color: var(--accent); }
+
+.corp-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; flex: 1; }
+.corp-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.corp-row:hover { border-color: var(--accent); }
+.corp-preview {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+}
+.corp-validation {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13.5px;
+}
+.app.corpus { display: flex; flex-direction: column; min-height: 0; height: 100vh; }

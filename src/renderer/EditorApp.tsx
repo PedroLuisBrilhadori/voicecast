@@ -1,22 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ClipInfo, SessionDetail, SessionSegment } from "../shared/ipc";
+import type { ClipInfo, CorrectionResult, SessionDetail, SessionSegment } from "../shared/ipc";
 import { newSegmentId } from "../shared/segments";
+import { wordsText } from "../shared/corrections";
+import { CorpusView } from "./CorpusView";
+import { WordFixer, correctionMsg, diffWords, fmt, type Word } from "./correction-ui";
 
 const params = new URLSearchParams(location.search);
 const DIR = params.get("dir") ?? "";
 const NAME = params.get("name") ?? "";
-
-function fmt(s: number): string {
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-}
-
-type Word = { w: string; start: number; end: number; p: number };
+/** W2a: ?corpus (ou ?corpus=<id>) abre a tela do dataset do voice no lugar do editor. */
+const CORPUS = params.get("corpus");
 
 /** Editor de sessão: player + transcrição sincronizada por palavra,
  *  segmentos nomeados (fase B), clipes, prints e copiar contexto p/ agente. */
 export function EditorApp() {
+  // W2a: janela do dataset do voice (lista/detalhe/correção do corpus histórico)
+  if (CORPUS !== null) return <CorpusView initialId={CORPUS} />;
+  return <SessionEditor />;
+}
+
+function SessionEditor() {
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -27,6 +30,10 @@ export function EditorApp() {
   const [clips, setClips] = useState<ClipInfo[]>([]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
+  // ── correção de ditado (W2a): editar palavras preservando timings ──
+  const [fixing, setFixing] = useState(false);
+  const [draftWords, setDraftWords] = useState<Word[] | null>(null);
+  const [draftText, setDraftText] = useState<string | null>(null);
 
   const refreshClips = useCallback(async () => {
     setClips(await window.voicecast.listClips(DIR, NAME));
@@ -181,6 +188,40 @@ export function EditorApp() {
     notify("transcrição pronta");
   };
 
+  // ── correção de ditado (W2a): words editáveis no lugar; texto puro quando
+  //    words vazio (ditados do gancho fake/antigos). Alvos: transcript.json +
+  //    meta.json sempre; dataset do voice quando a sessão tem datasetId. ──
+
+  const startFix = () => {
+    if (t?.words.length) setDraftWords(t.words.map((w) => ({ ...w })));
+    else setDraftText(t?.text ?? "");
+    setFixing(true);
+  };
+
+  const cancelFix = () => {
+    setFixing(false);
+    setDraftWords(null);
+    setDraftText(null);
+  };
+
+  const saveFix = async () => {
+    let req: { correctedText: string; edits: ReturnType<typeof diffWords> };
+    if (draftWords && t?.words.length) {
+      req = { correctedText: wordsText(draftWords), edits: diffWords(t.words, draftWords) };
+    } else {
+      const corrected = (draftText ?? "").replace(/\s+/g, " ").trim();
+      if (!corrected) return notify("correção vazia");
+      req = { correctedText: corrected, edits: [] };
+    }
+    const r: CorrectionResult = await window.voicecast.saveCorrection(DIR, NAME, req);
+    notify(correctionMsg(r));
+    if (r.ok) {
+      cancelFix();
+      const d = await window.voicecast.getSession(DIR, NAME);
+      if (d) setDetail(d);
+    }
+  };
+
   if (!detail) return <div className="app muted">carregando sessão…</div>;
 
   const t = detail.transcript;
@@ -205,6 +246,9 @@ export function EditorApp() {
         </span>
         <button className="go big" onClick={doContext} title="Gera markdown com paths WSL e copia">
           ⧉ Copiar contexto p/ ZCode
+        </button>
+        <button onClick={() => void window.voicecast.openCorpus()} title="corrigir ditados do histórico (dataset do voice)">
+          📚 dataset
         </button>
       </header>
 
@@ -286,13 +330,47 @@ export function EditorApp() {
                 {t.language ?? "?"} · {t.words.length} palavras
               </span>
             )}
+            {detail.meta.correction && (
+              <span className="ok" title={`corrigida em ${detail.meta.correction.correctedAt}`}>
+                ✓ corrigido ({detail.meta.correction.nEdits} edições
+                {detail.meta.correction.dataset === "ok" ? " · dataset" : ""})
+              </span>
+            )}
+            {t && !fixing && detail.meta.mode === "ditado" && (
+              <button onClick={startFix} title="editar palavras erradas (timings preservados; dataset quando linkado)">
+                ✏️ corrigir
+              </button>
+            )}
+            {fixing && (
+              <>
+                <button className="go" onClick={() => void saveFix()}>💾 salvar correção</button>
+                <button onClick={cancelFix}>cancelar</button>
+              </>
+            )}
             {t && t.text.trim() && (
               <button className="copy-text" onClick={doCopyText} title="copiar somente o texto da transcrição">
                 📋 copiar texto
               </button>
             )}
           </div>
-          {t && t.words.length > 0 && (
+          {fixing && t && t.words.length > 0 && (
+            <p className="muted" style={{ marginTop: 0 }}>
+              clique na palavra errada, corrija e Enter — os timings são preservados
+            </p>
+          )}
+          {fixing && t && t.words.length > 0 && (
+            <WordFixer words={draftWords ?? []} activeIndex={-1} onChange={setDraftWords} />
+          )}
+          {fixing && t && t.words.length === 0 && (
+            <textarea
+              className="fix-text"
+              value={draftText ?? ""}
+              rows={8}
+              onChange={(e) => setDraftText(e.target.value)}
+              placeholder="texto corrigido (ditado sem words — a correção é do texto inteiro)"
+            />
+          )}
+          {!fixing && t && t.words.length > 0 && (
             <p className="words">
               {t.words.map((w, i) => (
                 <span
@@ -307,7 +385,7 @@ export function EditorApp() {
               ))}
             </p>
           )}
-          {t && t.words.length === 0 && <p className="muted">{t.text}</p>}
+          {!fixing && t && t.words.length === 0 && <p className="muted">{t.text}</p>}
           {!t && (
             <p className="muted">
               Sem transcrição ainda. {detail.meta.transcriptStatus === "sem-asr" && "ASR estava fora do ar quando a sessão terminou."}
