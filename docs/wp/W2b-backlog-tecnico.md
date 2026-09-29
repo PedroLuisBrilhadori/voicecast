@@ -42,4 +42,33 @@ está em paralelo NOUTROS arquivos — não mexer em EditorApp/library.ts).
 Commits convencionais (`fix(w2b): …` um por item), sem push. Preencher Resultado.
 
 ## Resultado (preenche o piloto)
-- (pendente)
+**Entregue 2026-09-29 — 4/4 itens, `pnpm ci:local` verde (185 testes passando,
+0 falhas; 4 skipped = smokes sob pedido). Commits (sem push):**
+
+1. **req.cwd no caminho Windows** — fe4b44c. `goalSpawnArgs` ganha `cwd`: no
+   Windows o path é resolvido p/ WSL (`winPathToWsl`, shared/paths.ts) e vai
+   por ENV `VOICECAST_CWD` — nunca interpolado no argv do wsl.exe (mesmo
+   contrato do goal). Os dois scripts WSL (legado e runtime) fazem `cd` no
+   início com guarda p/ vazio e exit 86 distinto (87 segue = pré-requisito).
+   Direto segue com o cwd do spawn. *Testes:* goalSpawnArgs windows nos dois
+   modos (runtime/legado) com `C:\...` → `/mnt/c/...` no ENV, path ausente do
+   argv e `cd`/exit 86 no script; runGoal com `FAKE_PWD` no fake-agent prova o
+   cwd no caminho direto/WSL (paridade dos dois caminhos coberta).
+2. **goalSummary dedupe** — d45e2a6. Fonte única em shared/agent-goal.ts; a
+   cópia do runner.ts saiu e virou re-export. *Teste:* identidade de função
+   (`goalSummaryDoRunner === goalSummaryDaFonte`).
+3. **idle+15s do init de telemetria** — 50096f3. Agendamento extraído p/
+   `src/shared/telemetry-schedule.ts` (puro): delay inicial 15s → **2s**
+   (pós-W1 o SDK roda em worker_thread; init não bloqueia o event loop),
+   guarda de idle mantida (retry 5s). index.ts só consome — desenho do worker
+   (W1) intocado; testes do W1 (bridge + worker real) verdes. *Testes:* fake
+   timers (dispara em 2s com idle; adia em retry enquanto gravação ativa).
+4. **fmtTs "0:60"** — bb0afcd. Arredonda o TOTAL de segundos antes de quebrar
+   m:ss. *Testes:* 59.7→"1:00", 59.4→"0:59", 119.5→"2:00" (+ regressão
+   existente intacta).
+
+**Nada tocado:** EditorApp/library.ts/ditado.ts (W2a), captura, contrato IPC,
+desenho do worker W1 (só o agendamento do init). Achados novos: nenhum.
+**Pendências/gates:** validação do mantenedor no Windows (`pnpm dev:win` +
+`--agenttest`) — o item 1 é exercido de verdade só lá (exit 86 p/ cwd
+inacessível aparece no stderr do goal).
