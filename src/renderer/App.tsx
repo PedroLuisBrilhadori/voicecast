@@ -320,6 +320,14 @@ export function App() {
           value={sessionSearch}
           onChange={(e) => setSessionSearch(e.target.value)}
         />
+        <div className="lib-tools">
+          <button
+            onClick={() => void window.voicecast.openCorpus()}
+            title="corrigir ditados do histórico (dataset de treino do voice — substitui o painel :8700)"
+          >
+            📚 dataset de treino
+          </button>
+        </div>
         <div className="grid sessions">
           {sessions
             .filter((s) =>

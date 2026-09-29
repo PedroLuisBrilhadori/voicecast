@@ -328,3 +328,4 @@ body.bar-body { background: transparent; overflow: hidden; }
   font-size: 13.5px;
 }
 .app.corpus { display: flex; flex-direction: column; min-height: 0; height: 100vh; }
+.lib-tools { display: flex; gap: 8px; margin: 4px 0 2px; }
