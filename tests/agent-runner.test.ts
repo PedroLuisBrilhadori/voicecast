@@ -109,6 +109,37 @@ describe("agentRunnerConfig", () => {
     const win2 = goalSpawnArgs({ ...cfg, runtimeDir: "/home/x/custom-rt" }, "g");
     expect(win2.env.VOICECAST_RUNTIME_DIR).toBe("/home/x/custom-rt");
   });
+
+  // W2b item 1: o goal roda no req.cwd nos DOIS caminhos (paridade WSL/Windows).
+  it("W2b goalSpawnArgs windows: cwd resolvido p/ WSL vai por ENV (nunca argv) e o script faz cd", () => {
+    const cfg: RunnerConfig = {
+      enabled: true,
+      agentBin: "$HOME/.local/state/voicecast/zcode-runtime/zcode",
+      nodeBin: "$HOME/.local/state/voicecast/zcode-runtime/node24/bin/node",
+      runtime: true,
+      timeoutMs: 1,
+      direct: false,
+    };
+    // modo runtime: path Windows vira /mnt/c/... no ENV
+    const winRt = goalSpawnArgs(cfg, "g", undefined, "C:\\Users\\pedro\\Meu Proj");
+    expect(winRt.env.VOICECAST_CWD).toBe("/mnt/c/Users/pedro/Meu Proj");
+    const scriptRt = winRt.args[winRt.args.indexOf("-lc") + 1];
+    expect(scriptRt.startsWith('if [ -n "$VOICECAST_CWD" ]; then cd "$VOICECAST_CWD"')).toBe(true);
+    expect(scriptRt).toContain("exit 86"); // cd falhou → exit distinto do 87
+    // modo legado (override): mesmo contrato
+    const legacy: RunnerConfig = { enabled: true, agentBin: "/x/agent", timeoutMs: 1, direct: false };
+    const winLegacy = goalSpawnArgs(legacy, "g", undefined, "C:\\Users\\pedro\\proj");
+    expect(winLegacy.env.VOICECAST_CWD).toBe("/mnt/c/Users/pedro/proj");
+    // path nunca interpolado no argv do wsl.exe (só o placeholder ENV no script)
+    expect(winRt.args.join(" ")).not.toContain("/mnt/c");
+    expect(winRt.args.join(" ")).not.toMatch(/[A-Za-z]:\\\\/);
+    // sem cwd → sem ENV (script pula o cd pela guarda -n)
+    const noCwd = goalSpawnArgs(cfg, "g");
+    expect(noCwd.env.VOICECAST_CWD).toBeUndefined();
+    // caminho direto: cwd é do spawn (runGoal), não do ENV
+    const direct: RunnerConfig = { enabled: true, agentBin: "/x/agent", timeoutMs: 1, direct: true };
+    expect(goalSpawnArgs(direct, "g", undefined, "/home/x/proj").env.VOICECAST_CWD).toBeUndefined();
+  });
 });
 
 const setEnv = (key: string, value: string | undefined) => {
@@ -135,6 +166,15 @@ describe("runGoal (agente fake)", () => {
     expect(r.exitCode).toBe(0);
     expect(r.stdout).toContain("ok do agente");
     expect(r.durationMs).toBeGreaterThan(0);
+  });
+
+  it("W2b: goal roda no cwd pedido (caminho direto/WSL)", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vc-cwd-"));
+    process.env.FAKE_PWD = "1";
+    const r = await runGoal({ id: "w2b-cwd", goal: "x", cwd: dir }, cfg);
+    delete process.env.FAKE_PWD;
+    expect(r.phase).toBe("completed");
+    expect(r.stdout).toContain(`pwd: ${dir}`);
   });
 
   it("exit != 0 → failed com stderr na cauda", async () => {

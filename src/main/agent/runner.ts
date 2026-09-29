@@ -15,6 +15,10 @@
  *   aspas/injeção no shell do WSL) e paths WSL ($HOME expandido dentro do
  *   WSL — nunca paths Windows); o self-heal de credentials roda dentro do
  *   WSL via node24 -e (SETUP_CREDENTIALS_JS).
+ * - W2b: o goal roda no `req.cwd` nos DOIS caminhos — direto usa o cwd do
+ *   spawn; Windows resolve o path p/ WSL (winPathToWsl) e vai por ENV
+ *   (VOICECAST_CWD), com `cd` no script (nunca argv interpolado — igual ao
+ *   goal). cd falhou → exit 86 (distinto do 87 de pré-requisito).
  * - Fila de 1 goal por vez; timeout com kill; kill-switch VOICECAST_AGENT_BRIDGE=0.
  * - C3: o goal pode ser ENRIQUECIDO com o contexto bounded da última sessão
  *   (`req.enrich`, injetado pelo chamador — goal-context.ts; aqui só o
@@ -39,6 +43,7 @@ import {
   type GoalState,
 } from "../../shared/agent-goal";
 import type { EnrichedGoal, GoalEnricher } from "../../shared/agent-context";
+import { winPathToWsl } from "../../shared/paths";
 
 const M_GOALS = counter("voicecast_agent_goals_total", "goals por desfecho");
 const H_GOAL = histogram("voicecast_agent_goal_seconds", "duração do goal");
@@ -85,7 +90,14 @@ export function agentRunnerConfig(env: NodeJS.ProcessEnv = process.env, platform
   };
 }
 
-const WSL_GOAL_SH = 'exec "$VOICECAST_AGENT_BIN" --surface terminal -p "$VOICECAST_GOAL"';
+/** Prefixo dos scripts WSL (W2b): cd no diretório do goal — path chega por
+ * ENV (VOICECAST_CWD, já resolvido p/ WSL pelo caller), nunca argv interpolado.
+ * Vazio → pula (mantém o cwd default do wsl.exe); falhou → exit 86 distinto. */
+const WSL_CD_SH =
+  'if [ -n "$VOICECAST_CWD" ]; then cd "$VOICECAST_CWD" || { echo "voicecast-agent: cwd inacessivel: $VOICECAST_CWD" >&2; exit 86; }; fi; ';
+
+const WSL_GOAL_SH =
+  WSL_CD_SH + 'exec "$VOICECAST_AGENT_BIN" --surface terminal -p "$VOICECAST_GOAL"';
 
 /**
  * Script do modo runtime (Windows): garante binários (copia do build U1 se
@@ -94,6 +106,7 @@ const WSL_GOAL_SH = 'exec "$VOICECAST_AGENT_BIN" --surface terminal -p "$VOICECA
  * line de propósito: argv do wsl.exe não leva newlines.
  */
 const WSL_RUNTIME_SH =
+  WSL_CD_SH +
   'RT="${VOICECAST_RUNTIME_DIR:-$HOME/.local/state/voicecast/zcode-runtime}"; ' +
   'BUILD="${VOICECAST_ZCODE_BUILD_DIR:-/tmp/zcode-cli-build}"; ' +
   'if [ ! -x "$RT/node24/bin/node" ] || [ ! -f "$RT/zcode" ]; then ' +
@@ -111,11 +124,15 @@ const WSL_RUNTIME_SH =
   '[ -f "$HOME/.zcode/v2/provider_config.json" ] && export ZCODE_PERSONAL_PROVIDER_CONFIG_FILE="$HOME/.zcode/v2/provider_config.json"; ' +
   'exec "$RT/node24/bin/node" "$RT/zcode" --surface terminal -p "$VOICECAST_GOAL"';
 
-/** argv do spawn (sem o goal — ele vai por env). rtEnv = envs do runtime setup (modo direto). */
+/** argv do spawn (sem o goal — ele vai por env). rtEnv = envs do runtime setup
+ * (modo direto). W2b: `cwd` do goal — no caminho Windows é resolvido p/ WSL e
+ * vai por ENV (VOICECAST_CWD) p/ o `cd` do script; no direto quem aplica é o
+ * cwd do spawn (runGoal). */
 export function goalSpawnArgs(
   cfg: RunnerConfig,
   goal: string,
   rtEnv?: Record<string, string>,
+  cwd?: string,
 ): { cmd: string; args: string[]; env: NodeJS.ProcessEnv } {
   const goalArgs = ["--surface", "terminal", "-p", goal];
   if (cfg.direct) {
@@ -127,16 +144,22 @@ export function goalSpawnArgs(
     const bin = cfg.agentBin.replace(/^\$HOME/, process.env.HOME ?? "~");
     return { cmd: bin, args: goalArgs, env: {} };
   }
+  // W2b: diretório do goal nos DOIS modos Windows — path resolvido p/ WSL
+  // (winPathToWsl) e por ENV, nunca interpolado no argv do wsl.exe.
+  const env: NodeJS.ProcessEnv = cwd ? { VOICECAST_CWD: winPathToWsl(cwd) } : {};
   if (cfg.runtime) {
     // Windows + runtime: script resolve paths WSL ($HOME) e roda o self-heal dentro do WSL
-    const env: NodeJS.ProcessEnv = { VOICECAST_GOAL: goal, VOICECAST_SETUP_JS: SETUP_CREDENTIALS_JS };
+    env.VOICECAST_GOAL = goal;
+    env.VOICECAST_SETUP_JS = SETUP_CREDENTIALS_JS;
     if (cfg.runtimeDir) env.VOICECAST_RUNTIME_DIR = cfg.runtimeDir;
     return { cmd: "wsl.exe", args: ["--exec", "/bin/sh", "-lc", WSL_RUNTIME_SH], env };
   }
+  env.VOICECAST_AGENT_BIN = cfg.agentBin;
+  env.VOICECAST_GOAL = goal;
   return {
     cmd: "wsl.exe",
     args: ["--exec", "/bin/sh", "-lc", WSL_GOAL_SH],
-    env: { VOICECAST_AGENT_BIN: cfg.agentBin, VOICECAST_GOAL: goal },
+    env,
   };
 }
 
@@ -207,7 +230,7 @@ export async function runGoal(req: RunGoalRequest, cfg: RunnerConfig = agentRunn
         return result;
       }
     }
-    const { cmd, args, env } = goalSpawnArgs(cfg, goalFinal, rt?.env);
+    const { cmd, args, env } = goalSpawnArgs(cfg, goalFinal, rt?.env, req.cwd);
     const child = spawn(cmd, args, {
       cwd: cfg.direct ? req.cwd : undefined,
       env: { ...process.env, ...env },
