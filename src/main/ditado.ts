@@ -7,7 +7,7 @@
  * :8700 (v2 transição); sem daemon, funciona igual (nada para suspender).
  */
 import { BrowserWindow, clipboard, globalShortcut, ipcMain } from "electron";
-import { transcribeAudioFile } from "./asr";
+import { asrModelStatus, transcribeAudioFile } from "./asr";
 import { logError, logInfo } from "./logging";
 import { createDitado, createBar, loadSavedBarBounds } from "./windows";
 import { saveDictationSession } from "./library";
@@ -22,6 +22,7 @@ import { annotations } from "./annotations";
 import { sessionDirs } from "./storage";
 
 const M_DICTATIONS = counter("voicecast_dictations_total", "ditados por status");
+const M_ASR_COLD = counter("voicecast_asr_model_cold_total", "transcrições que esperaram o load do modelo (cold start pós-boot)");
 const H_TRANSCRIBE = histogram("voicecast_transcribe_seconds", "duração da transcrição ASR");
 
 function broadcast(e: CaptureEvent): void {
@@ -276,13 +277,22 @@ async function pasteToFocused(text: string, hwnd: number): Promise<void> {
 
 export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
   if (state === "idle") {
-    if (await daemonRecording()) {
-      return { ok: false, error: "ditado do daemon em andamento — espere terminar" };
-    }
-    const held = await daemonHold(true);
-    logInfo(`ditado: início (daemon hold ${held ? "aplicado" : "ausente"})`);
+    // BARRA PRIMEIRO: os checks do daemon (aposentado) custavam até ~4,5s de
+    // timeout ANTES da barra nascer — no cold start o F9 parecia morto. Os
+    // checks seguem, mas sem bloquear a UX (daemon vivo é caso histórico).
     state = "recording";
     ditadoStartedAt = Date.now();
+    void (async () => {
+      if (await daemonRecording()) {
+        logError("ditado: daemon gravando — abortando captura por segurança");
+        state = "idle";
+        closeDitadoBar();
+        broadcast({ type: "ditado-state", phase: "done" });
+        return;
+      }
+      const held = await daemonHold(true);
+      logInfo(`ditado: início (daemon hold ${held ? "aplicado" : "ausente"})`);
+    })();
     // HWND da janela em foco AGORA — a colagem refoca ela, mesmo que você
     // mude de janela enquanto o whisper transcreve (comportamento do daemon)
     void captureForegroundHwnd().then((h) => {
@@ -309,7 +319,26 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
   if (state === "recording") {
     state = "transcribing";
     const startedAt = ditadoStartedAt;
-    broadcast({ type: "ditado-state", phase: "transcribing" });
+    // Visibilidade do cold start (pedido do mantenedor): se o modelo do ASR
+    // ainda está carregando (primeira uso pós-boot), a barra diz POR QUÊ a
+    // transcrição está lenta — com a estimativa que o próprio serviço calibra.
+    const model = await asrModelStatus();
+    const asrLoading = model ? !model.loaded : false;
+    if (asrLoading) M_ASR_COLD?.add(1);
+    broadcast({
+      type: "ditado-state",
+      phase: "transcribing",
+      asrLoading,
+      expectedLoadS: model?.expectedLoadS,
+    });
+    const poll = setInterval(async () => {
+      if (state !== "transcribing") return clearInterval(poll);
+      const m = await asrModelStatus();
+      if (m && m.loaded) {
+        clearInterval(poll);
+        broadcast({ type: "ditado-state", phase: "transcribing", asrLoading: false });
+      }
+    }, 2500);
     try {
       await withSpan("ditado.stop", { duration_s: +((Date.now() - startedAt) / 1000).toFixed(1) }, async () => {
         recorderWin?.webContents.executeJavaScript("window.vcStopDictation()", true).catch(() => {});
@@ -391,6 +420,7 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
       if (annotations.active) await annotations.detach();
       return { ok: false, error: String(e) };
     } finally {
+      clearInterval(poll);
       await daemonHold(false);
       closeDitadoBar();
       state = "idle";

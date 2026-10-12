@@ -44,9 +44,9 @@ function asrUrls(): { name: string; url: string }[] {
     });
 }
 
+/** Espera o host subir antes de desistir (warmup do spawn: a porta abre
+ *  em segundos; o load do modelo continua em background no serviço). */
 export async function asrHealth(opts?: {
-  /** Espera o host subir antes de desistir (warmup do spawn: a porta abre
-   *  em segundos; o load do modelo continua em background no serviço). */
   waitMs?: number;
 }): Promise<{ ok: boolean; source?: string }> {
   const deadline = Date.now() + (opts?.waitMs ?? 0);
@@ -60,6 +60,24 @@ export async function asrHealth(opts?: {
     if (Date.now() >= deadline) return { ok: false };
     await new Promise((res) => setTimeout(res, 1000));
   }
+}
+
+/** Estado do modelo no ASR (/v1/model-status) — usado para mostrar na barra
+ *  POR QUE a primeira transcrição após o boot é lenta (load do modelo na
+ *  GPU). Fail-soft: null quando o serviço não responde. */
+export async function asrModelStatus(): Promise<{
+  loaded: boolean;
+  expectedLoadS: number;
+} | null> {
+  for (const ep of asrUrls()) {
+    try {
+      const r = await fetch(`${ep.url}/v1/model-status`, { signal: AbortSignal.timeout(2500) });
+      if (!r.ok) continue;
+      const j = (await r.json()) as { loaded?: boolean; expected_load_s?: number };
+      return { loaded: Boolean(j.loaded), expectedLoadS: Number(j.expected_load_s) || 0 };
+    } catch {}
+  }
+  return null;
 }
 
 /** Extrai o áudio do mp4 da sessão para wav 16k mono (padrão do uniscraper/asr.ts). */

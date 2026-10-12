@@ -46,6 +46,9 @@ export function BarApp() {
   const noDrag = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
   const [elapsed, setElapsed] = useState(0);
   const [transcribing, setTranscribing] = useState(false);
+  const [asrLoading, setAsrLoading] = useState(false);
+  const [expectedLoadS, setExpectedLoadS] = useState<number | null>(null);
+  const [transcribingS, setTranscribingS] = useState(0);
   const [resultado, setResultado] = useState<{ rota?: string; conf?: number; colado?: boolean } | null>(null);
   const [markers, setMarkers] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -73,9 +76,12 @@ export function BarApp() {
       } else if (e.type === "ditado-state") {
         if (e.phase === "done") {
           setTranscribing(false);
+          setAsrLoading(false);
           setResultado({ rota: e.rota, conf: e.conf, colado: e.colado });
         } else {
           setTranscribing(e.phase === "transcribing");
+          setAsrLoading(e.phase === "transcribing" && !!e.asrLoading);
+          setExpectedLoadS(e.expectedLoadS ?? null);
         }
       } else if (e.type === "agent-state") {
         setGoal(e.state);
@@ -100,6 +106,7 @@ export function BarApp() {
       const t0 = Date.now();
       const iv = window.setInterval(() => {
         if (!transcribing) setElapsed((Date.now() - t0) / 1000);
+        else setTranscribingS((Date.now() - t0) / 1000);
       }, 500);
       return () => clearInterval(iv);
     }
@@ -150,7 +157,14 @@ export function BarApp() {
             {desfechoDitado(resultado)}
           </span>
         ) : transcribing ? (
-          <span style={{ color: "#f4b942", fontSize: 12.5, fontWeight: 600 }}>⏳ transcrevendo…</span>
+          <span style={{ color: "#f4b942", fontSize: 12.5, fontWeight: 600 }}>
+            ⏳ transcrevendo · {Math.floor(transcribingS)}s
+            {asrLoading && (
+              <span title="o modelo de transcrição carrega na GPU na primeira uso após o boot — as próximas são rápidas">
+                {" "}· ASR carregando modelo{expectedLoadS ? ` (≈${Math.round(expectedLoadS)}s)` : ""}
+              </span>
+            )}
+          </span>
         ) : arming && !isDitado ? (
           <span style={{ color: "#f4b942", fontSize: 12.5, fontWeight: 600 }}>⏳ preparando captura…</span>
         ) : (

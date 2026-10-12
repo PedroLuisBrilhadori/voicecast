@@ -193,6 +193,10 @@ export type CaptureEvent =
       rota?: string;
       conf?: number;
       colado?: boolean;
+      /** transcrevendo: modelo do ASR ainda carregando (cold start pós-boot) */
+      asrLoading?: boolean;
+      /** estimativa do serviço p/ concluir o load (s) */
+      expectedLoadS?: number;
     }
   /** C4: transição do goal do cockpit (worker → bridge → broadcast). */
   | { type: "agent-state"; state: GoalState };
