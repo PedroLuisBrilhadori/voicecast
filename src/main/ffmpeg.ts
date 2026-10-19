@@ -64,6 +64,12 @@ export async function resolveFfmpeg(): Promise<Ffmpeg> {
     return cached;
   }
 
+  // Linux/Arch: ffmpeg do PATH (o where.exe abaixo é o lookup do Windows)
+  if (await tryRun("ffmpeg", ["-version"])) {
+    cached = { cmd: "ffmpeg", isWsl: false };
+    return cached;
+  }
+
   try {
     const r = await pExec("where.exe", ["ffmpeg"]);
     const first = (r.stdout || "").split(/\r?\n/).find((l) => l.trim());

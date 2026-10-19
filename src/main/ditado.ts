@@ -8,6 +8,7 @@
  */
 import { BrowserWindow, clipboard, globalShortcut, ipcMain } from "electron";
 import { asrModelStatus, transcribeAudioFile } from "./asr";
+import { backendPython, backendSrc } from "./asr-host";
 import { logError, logInfo } from "./logging";
 import { createDitado, createBar, loadSavedBarBounds } from "./windows";
 import { saveDictationSession } from "./library";
@@ -175,21 +176,21 @@ async function stopCaptureWindow(): Promise<void> {
 // unicode. Mesmo comportamento do F9 antigo, literalmente o mesmo código.
 
 function voicePython(): string | null {
-  // backend do voicecast primeiro; legado voice-dictation como fallback
+  // backend do voicecast primeiro (win: %LOCALAPPDATA%, linux: XDG_DATA_HOME —
+  // asr-host.ts é a fonte da verdade do layout); legado voice-dictation como
+  // fallback no Windows
+  const viaBackend = backendPython();
+  if (viaBackend) return viaBackend;
   const local = process.env.LOCALAPPDATA ?? "";
-  const candidates = [
-    path.join(local, "voicecast", "asr-backend", ".venv", "Scripts", "python.exe"),
-    path.join(local, "voice-dictation", ".venv", "Scripts", "python.exe"),
-  ];
-  return candidates.find((p) => fs.existsSync(p)) ?? null;
+  const legado = path.join(local, "voice-dictation", ".venv", "Scripts", "python.exe");
+  return fs.existsSync(legado) ? legado : null;
 }
 
 function voiceSrc(): string {
+  const viaBackend = backendSrc();
+  if (viaBackend) return viaBackend;
   const local = process.env.LOCALAPPDATA ?? "";
-  const backend = path.join(local, "voicecast", "asr-backend", "src");
-  return fs.existsSync(backend)
-    ? backend
-    : path.join(local, "voice-dictation", "src");
+  return path.join(local, "voice-dictation", "src");
 }
 
 export function pythonEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {

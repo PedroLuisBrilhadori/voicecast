@@ -350,19 +350,50 @@ def _wtype(args: list[str]) -> bool:
         return False
 
 
+# KWin (KDE) não implementa o protocolo de teclado virtual do wtype — o
+# fallback é o ydotool (uinput, via ydotoold do usuário; unit ydotool.service)
+_YDOTOOL_SOCKET = os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000"), ".ydotool_socket"
+)
+
+
+def _ydotool(args: list[str]) -> bool:
+    if not _have("ydotool"):
+        return False
+    try:
+        proc = subprocess.run(
+            ["ydotool", *args],
+            capture_output=True,
+            timeout=10,
+            env={**os.environ, "YDOTOOL_SOCKET": _YDOTOOL_SOCKET},
+        )
+        return proc.returncode == 0
+    except Exception:
+        log.exception("ydotool falhou")
+        return False
+
+
+def _paste_ctrl_v() -> bool:
+    if _wtype(["-M", "Ctrl", "-k", "v", "-m", "Ctrl"]):
+        return True
+    # evdev: 29=LeftCtrl, 25=V
+    return _ydotool(["key", "29:1", "25:1", "25:0", "29:0"])
+
+
 def _paste_clipboard(text: str) -> str:
     if not set_clipboard(text):
         return "clipboard-set-falhou"
     # pequena espera: o compositor precisa registrar o clipboard antes do Ctrl+V
     time.sleep(0.05)
-    # nomes de modificador do wtype: Ctrl/Alt/Logo/Shift (não é keysym XKB)
-    if not _wtype(["-M", "Ctrl", "-k", "v", "-m", "Ctrl"]):
+    if not _paste_ctrl_v():
         return "ctrl-v-bloqueado"
     return "clipboard"
 
 
 def _paste_unicode(text: str) -> str:
-    return "unicode" if _wtype([text]) else "unicode-falhou"
+    if _wtype([text]):
+        return "unicode"
+    return "unicode" if _ydotool(["type", "--", text]) else "unicode-falhou"
 
 
 def paste_into_focused(text: str, mode: str, target_hwnd: int) -> str:
