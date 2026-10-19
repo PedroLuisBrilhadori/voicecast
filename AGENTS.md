@@ -7,11 +7,14 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 
 - Código/app vive AQUI (repo próprio); nada de código de app na raiz do
   workspace `projetos/`.
-- **Convenção dois ambientes** (padrão voice-dictation): o repo roda no WSL
-  (typecheck/testes/build); a execução com captura real acontece na cópia do
-  Windows (`%LOCALAPPDATA%\voicecast\src`, sincronizada por
-  `scripts/sync-to-host.ps1`). NUNCA instalar node_modules do Windows dentro
-  do repo do WSL.
+- **Ambientes** (padrão voice-dictation): no **pchome Arch (desde 2026-10-19)**
+  o repo roda NATIVO — dev e execução na mesma máquina (`pnpm install
+  --ignore-workspace` — o workspace da raiz do projetos não declara packages e
+  o pnpm 10 pula o install; `scripts/run-linux.sh` executa com Wayland/portal).
+  Legado Windows: execução na cópia `%LOCALAPPDATA%\voicecast\src`
+  (`scripts/sync-to-host.ps1`); NUNCA instalar node_modules de um SO dentro do
+  checkout do outro. Backend ASR: `scripts/setup-asr-backend.sh` (Linux) /
+  `.ps1` (Windows).
 
 ## Mapa
 

@@ -66,9 +66,18 @@ except Exception:
 MODEL_DEFAULT = os.environ.get("VOICE_ASR_MODEL", "large-v3-turbo")
 HOST = os.environ.get("VOICE_ASR_HOST", "127.0.0.1")
 PORT = int(os.environ.get("VOICE_ASR_PORT", "8701"))
-DEVICE = os.environ.get("VOICE_ASR_DEVICE", "cuda" if sys.platform == "win32" else "cpu")
+def _tem_cuda() -> bool:
+    try:
+        import ctranslate2
+
+        return ctranslate2.get_cuda_device_count() > 0
+    except Exception:
+        return False
+
+
+DEVICE = os.environ.get("VOICE_ASR_DEVICE", "cuda" if _tem_cuda() else "cpu")
 COMPUTE_TYPE = os.environ.get(
-    "VOICE_ASR_COMPUTE", "float16" if sys.platform == "win32" else "int8"
+    "VOICE_ASR_COMPUTE", "float16" if DEVICE == "cuda" else "int8"
 )
 LANGUAGE = os.environ.get("VOICE_ASR_LANGUAGE", "pt")
 # threads de CPU para ctranslate2 (só usado quando device=cpu; 0 = default do lib)

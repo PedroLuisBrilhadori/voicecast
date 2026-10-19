@@ -24,7 +24,8 @@ const PROBE_INTERVAL_MS = 20_000;
 export function asrBackendDir(): string {
   const base =
     process.env.LOCALAPPDATA ??
-    path.join(process.env.USERPROFILE ?? "", ".local", "share");
+    process.env.XDG_DATA_HOME ??
+    path.join(process.env.HOME ?? process.env.USERPROFILE ?? "", ".local", "share");
   return path.join(base, "voicecast", "asr-backend");
 }
 

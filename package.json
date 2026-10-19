@@ -15,6 +15,12 @@
     "ci:local": "pnpm typecheck && pnpm test && pnpm build"
   },
   "packageManager": "pnpm@10.18.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  },
   "devDependencies": {
     "@types/node": "^22",
     "@types/react": "^19",
