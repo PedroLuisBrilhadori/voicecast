@@ -237,7 +237,18 @@ if (!gotLock) {
   logInfo("outra instância já roda — saindo");
   app.quit();
 } else {
-  app.on("second-instance", () => {
+  app.on("second-instance", (_e, argv) => {
+    // ganchos KDE: atalhos customizados do kcm_keys chamam run-linux.sh com
+    // --ditado/--rec; a 2ª instância sinaliza esta e sai (paridade com o exe
+    // Windows --mostrar/--soltar)
+    if (argv.includes("--ditado")) {
+      void toggleDitado();
+      return;
+    }
+    if (argv.includes("--rec")) {
+      void recordFullscreen();
+      return;
+    }
     const w = pickerWindow();
     w.show();
     w.focus();
@@ -283,14 +294,31 @@ if (!gotLock) {
     if (!globalShortcut.register("Control+F9", togglePicker)) {
       logError("Ctrl+F9 não pôde ser registrado");
     }
-    globalShortcut.register("Control+Shift+F9", () => {
+    const recordFullscreenHotkey = (): void => {
       void recordFullscreen();
-    });
+    };
+    globalShortcut.register("Control+Shift+F9", recordFullscreenHotkey);
     // Ctrl+Alt+H é global do app (não só com overlay ativa): sem painel abre o
     // painel standalone (fora de sessão); com painel, oculta/mostra a paleta
     if (!globalShortcut.register("Control+Alt+H", () => annotations.onPaletteHotkey())) {
       logError("Ctrl+Alt+H não pôde ser registrado");
     }
+
+    // Wayland/portal: o backend de GlobalShortcutsPortal só está pronto depois
+    // do boot — atalho registrado cedo demais escorre pro caminho X11 (no-op
+    // no Wayland) e morre sem erro (as anotações, registradas tarde, sempre
+    // funcionaram). Re-registra os principais quando o portal já estiver de pé.
+    setTimeout(() => {
+      globalShortcut.unregister("Control+F9");
+      globalShortcut.unregister("Control+Shift+F9");
+      globalShortcut.unregister("Control+Alt+H");
+      const ok = globalShortcut.register("Control+F9", togglePicker)
+        && globalShortcut.register("Control+Shift+F9", recordFullscreenHotkey)
+        && globalShortcut.register("Control+Alt+H", () => annotations.onPaletteHotkey());
+      logInfo(`atalhos principais re-registrados via portal (ok=${ok})`);
+      globalShortcut.unregister("F9");
+      registerDitadoHotkey();
+    }, 2500);
 
     // Ditado F9 (v2): só assume o F9 se o daemon suportar hold (patch novo)
     // ou não existir. Daemon velho (sem endpoint) → F9 fica com ele.
