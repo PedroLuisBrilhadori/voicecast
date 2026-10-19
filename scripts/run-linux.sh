@@ -14,9 +14,12 @@ if [ ! -f dist/main/index.js ]; then
   exit 2
 fi
 
-# ozone-hint: Wayland nativo no KDE; GlobalShortcutsPortal: Ctrl+F9 etc. via
-# portal xdg-desktop-portal-kde (globalShortcut não existe em Wayland sem ele)
+# GlobalShortcut no KDE Wayland: o portal precisa de binding manual no KCM
+# (o app registra, o KWin não amarra sozinho) — sob XWayland o XGrabKey
+# funciona como no Windows, determinístico. VOICECAST_OZONE=wayland para o
+# modo nativo (atalhos viram config manual no kcm_keys).
+OZONE="${VOICECAST_OZONE:-x11}"
 exec "$ELECTRON" . \
-  --ozone-platform-hint=auto \
+  --ozone-platform="$OZONE" \
   --enable-features=GlobalShortcutsPortal \
   "$@"

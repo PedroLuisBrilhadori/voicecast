@@ -5,7 +5,7 @@
   "description": "Sessões de contexto: voz + tela gravadas localmente, transcritas (ASR local) e transformadas em referências para agentes de código.",
   "main": "dist/main/index.js",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.json --noEmit",
     "build:main": "tsc -p tsconfig.node.json",
     "build:preload": "esbuild src/preload/index.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload/index.js",
     "build:renderer": "vite build",

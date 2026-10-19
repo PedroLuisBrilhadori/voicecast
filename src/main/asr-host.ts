@@ -70,6 +70,27 @@ let stableSince = 0;
 let monitor: ReturnType<typeof setInterval> | null = null;
 let respawnTimer: ReturnType<typeof setTimeout> | null = null;
 
+/** Dirs de libs CUDA das wheels nvidia pip (cublas/cudnn) no venv — o
+ * ctranslate2 dlopen-as no primeiro uso e precisa de LD_LIBRARY_PATH. */
+function cudaLibDirs(): string[] {
+  try {
+    const libRoot = path.join(asrBackendDir(), ".venv", "lib");
+    const dirs: string[] = [];
+    for (const py of fs.readdirSync(libRoot).filter((d) => d.startsWith("python"))) {
+      const nvidia = path.join(libRoot, py, "site-packages", "nvidia");
+      for (const pkg of fs.readdirSync(nvidia)) {
+        for (const sub of ["lib", "lib64"]) {
+          const dir = path.join(nvidia, pkg, sub);
+          if (fs.existsSync(dir)) dirs.push(dir);
+        }
+      }
+    }
+    return dirs;
+  } catch {
+    return [];
+  }
+}
+
 function spawnBackend(): void {
   const py = backendPython();
   const src = backendSrc();
@@ -81,6 +102,15 @@ function spawnBackend(): void {
     VOICE_ASR_MODEL: process.env.VOICE_ASR_MODEL ?? "large-v3-turbo",
     OTEL_ENABLED: "0", // venv próprio não instala deps OTel; telemetria do serviço fica off
   };
+  // libcublas/libcudnn das wheels pip (senão o transcribe 500 com
+  // "Library libcublas.so.12 is not found" — health diz cuda e a inferência
+  // falha, achado 19/10)
+  const cuda = cudaLibDirs();
+  if (cuda.length) {
+    env.LD_LIBRARY_PATH = [...cuda, env.LD_LIBRARY_PATH ?? ""]
+      .filter(Boolean)
+      .join(":");
+  }
   const logFd = fs.openSync(childLogFile(), "a");
   child = spawn(py, ["-m", "voice.asr_service", "--port", String(asrPort())], {
     cwd: asrBackendDir(),
