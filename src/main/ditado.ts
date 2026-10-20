@@ -230,10 +230,15 @@ async function captureForegroundHwnd(): Promise<number> {
   });
 }
 
-/** Cola via paste_into_focused do daemon (stdin = texto, argv1 = hwnd alvo). */
-async function pasteViaDaemonCode(text: string, hwnd: number): Promise<boolean> {
+/**
+ * Cola via paste_into_focused do daemon (stdin = texto, argv1 = hwnd alvo).
+ * Retorna o modo USADO ("clipboard"/"unicode") ou null se o python nem rodou —
+ * o texto do stdout ("usado: <modo>") é a verdade: exit 0 sozinho não garante
+ * que o Ctrl+V chegou (modos "...-falhou"/"ctrl-v-bloqueado" saem com exit 0).
+ */
+async function pasteViaDaemonCode(text: string, hwnd: number): Promise<string | null> {
   const py = voicePython();
-  if (!py) return false;
+  if (!py) return null;
   return new Promise((res) => {
     const script =
       `import sys; sys.path.insert(0, r"${voiceSrc()}"); ` +
@@ -242,36 +247,50 @@ async function pasteViaDaemonCode(text: string, hwnd: number): Promise<boolean> 
       `used = get_backend().paste_into_focused(text, "auto", ${hwnd})\n` +
       'print("usado:", used, "chars:", len(text))';
     const child = spawnHidden(py, ["-c", script]);
+    let out = "";
     let err = "";
-    child.stdout?.on("data", (d: Buffer) => logInfo(`[paste] ${d.toString().trim()}`));
+    child.stdout?.on("data", (d: Buffer) => (out += d.toString()));
     child.stderr?.on("data", (d: Buffer) => (err += d.toString()));
     child.stdin?.end(text);
-    child.on("error", () => res(false));
+    child.on("error", () => res(null));
     child.on("exit", (code) => {
+      const m = out.match(/usado:\s*(\S+)/);
       if (code !== 0) logError(`[paste] python saiu ${code}: ${err.slice(-300)}`);
-      res(code === 0);
+      else if (m) logInfo(`[paste] ${m[1]} chars: ${text.length}`);
+      res(code === 0 && m ? m[1] : null);
     });
   });
 }
 
 async function pasteToFocused(text: string, hwnd: number): Promise<void> {
   // caminho principal: código provado do daemon (refoco do HWND + SendInput)
-  if (await pasteViaDaemonCode(text, hwnd)) return;
-  // fallback: clipboard + SendKeys (sem janela de console — windowsHide)
-  clipboard.writeText(text);
-  logInfo("ditado: paste do daemon indisponível — fallback SendKeys");
-  const ps = spawn(
-    "powershell.exe",
-    [
-      "-NoProfile",
-      "-WindowStyle", "Hidden",
-      "-Command",
-      "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^v')",
-    ],
-    { stdio: "ignore", detached: true, windowsHide: true },
+  const used = await pasteViaDaemonCode(text, hwnd);
+  if (used && !/falhou|bloqueado/.test(used)) return;
+  // daemon indisponível ou falhou: último recurso só no Windows (clipboard +
+  // SendKeys). No Linux não existe esse fallback (powershell = ENOENT) — os
+  // modos de falha do daemon deixam o texto NO CLIPBOARD, colável à mão.
+  if (process.platform === "win32") {
+    clipboard.writeText(text);
+    logInfo("ditado: paste do daemon indisponível — fallback SendKeys");
+    const ps = spawn(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-WindowStyle", "Hidden",
+        "-Command",
+        "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('^v')",
+      ],
+      { stdio: "ignore", detached: true, windowsHide: true },
+    );
+    ps.on("error", (e) => logError("ditado: fallback SendKeys falhou:", e));
+    ps.unref();
+    logInfo(`ditado: fallback colou ${text.length} chars`);
+    return;
+  }
+  logError(
+    `[paste] colagem NÃO confirmada na janela focada (modo=${used ?? "python ausente"}) — ` +
+    "texto ficou no clipboard, cole com Ctrl+V",
   );
-  ps.unref();
-  logInfo(`ditado: fallback colou ${text.length} chars`);
 }
 
 // ── toggle F9 ──────────────────────────────────────────────────

@@ -49,6 +49,17 @@ const AUTO_PRINT_DEBOUNCE_MS = 2000;
 const LASER_RECENT_MS = 1500; // lasers recentes entram no print queimado
 const HOTKEYS = ["Control+Alt+G", "Control+Alt+B", "Control+Alt+E", "Control+Alt+C", "Control+Alt+X", "Control+Alt+Space", "Control+Alt+P"];
 
+/**
+ * A overlay (fullscreen, sempre-no-topo) só sobe onde o pass-through é
+ * confiável. No Linux/Wayland o setIgnoreMouseEvents não aplica a input
+ * region de forma estável (electron#51808 — XWayland/KWin): a overlay em
+ * "pass-through" ENGOLE todos os cliques da tela durante ditado/REC.
+ * VOICECAST_ANNOTATION_OVERLAY=1 força (teste, ex. com ozone=wayland).
+ */
+function overlaySuportada(): boolean {
+  return process.platform === "win32" || process.env.VOICECAST_ANNOTATION_OVERLAY === "1";
+}
+
 /** Engine de anotações — uma instância por processo (sessão corrente). */
 class AnnotationEngine {
   events: AnnotationEvent[] = [];
@@ -95,10 +106,19 @@ class AnnotationEngine {
     this.seq = 0;
     this.bufferedPrints = [];
     this.recentLasers = [];
+    // bounds da paleta são da overlay ANTERIOR — sem reset, o poll de cursor
+    // ligaria o mouse da overlay nova sobre um retângulo que não existe mais
+    this.paletteBounds = null;
     // paleta sob demanda (Ctrl+Alt+H) — decisão do mantenedor (2026-09-23):
     // não abrir junto com a gravação; overlay segue viva (prints/hotkeys ok)
     this.paletteOn = opts.paletteOn ?? false;
     this.standalone = false;
+    if (!overlaySuportada()) {
+      // sem overlay (e sem hotkeys/poll): o log de anotações fica vazio e o
+      // detach no stop apenas não escreve nada — ditado/REC seguem normais
+      logInfo("anotações: overlay desligada neste SO (pass-through não confiável no Wayland)");
+      return;
+    }
     this.createOverlay();
     this.registerHotkeys();
     this.sendMode();
@@ -131,6 +151,10 @@ class AnnotationEngine {
   open(): void {
     if (this.overlay) {
       this.togglePalette();
+      return;
+    }
+    if (!overlaySuportada()) {
+      logInfo("anotações: painel standalone indisponível neste SO (overlay desligada)");
       return;
     }
     this.standalone = true;
@@ -227,6 +251,10 @@ class AnnotationEngine {
       transparent: true,
       resizable: false,
       movable: false,
+      // não-focável DESDE o mapa: se nascer focável, o KWin pode entregar o
+      // foco a ela no map (corrida com o setFocusable do pass-through) e o
+      // Ctrl+V do ditado cairia na overlay em vez da janela do usuário
+      focusable: false,
       enableLargerThanScreen: true,
       skipTaskbar: true,
       hasShadow: false,
