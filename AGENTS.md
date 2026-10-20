@@ -78,7 +78,12 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 - **Anotações em tela (AN — PLANO-ANOTACOES-TELA)**: durante REC e no ditado,
   overlay transparente com laser/pincel/borracha. Log vetorial
   `annotations.jsonl` por sessão (px físicos, t relativo — fonte da verdade;
-  motor puro em `src/shared/annotations.ts`). Hotkeys `Ctrl+Alt+L/B/E/C`
+  motor puro em `src/shared/annotations.ts`). **Overlay desligada no Linux
+  (2026-10-20)**: o pass-through do `setIgnoreMouseEvents` não é confiável no
+  Wayland/XWayland (electron#51808) — a overlay fullscreen, mesmo em
+  pass-through, engolia TODOS os cliques do KDE durante ditado/REC e o foco
+  que o KWin dava a ela no map fazia o Ctrl+V do paste cair na overlay.
+  Força com `VOICECAST_ANNOTATION_OVERLAY=1` (teste). Hotkeys `Ctrl+Alt+L/B/E/C`
   ferramentas, `Ctrl+Alt+C` ou `Ctrl+Alt+X` limpar tudo, `Ctrl+Alt+Espaço` desenho↔pass-through, `Ctrl+Alt+P` print.
   `Ctrl+Alt+H` é global do app: sem painel aberto, abre o painel standalone
   (fora de sessão, com botão `✕ fechar` que descarta o rascunho); com painel,
