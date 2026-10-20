@@ -177,7 +177,11 @@ export function createBar(
   };
   w.on("moved", persist);
   w.on("close", persist);
-  w.show();
+  // ditado: NUNCA show() — no KWin/XWayland a barra mapeada com show() toma o
+  // foco do teclado (apesar de focusable:false) e o Ctrl+V do paste cai nela
+  // em vez do campo do usuário. showInactive mapeia sem ativar.
+  if (opts.ditado) w.showInactive();
+  else w.show();
   return w;
 }
 

@@ -411,17 +411,52 @@ def _paste_ctrl_v() -> bool:
     log.info("colagem: foco ativo: %s", _foco_ativo())
     if _wtype(["-M", "Ctrl", "-k", "v", "-m", "Ctrl"]):
         return True
-    # evdev: 29=LeftCtrl, 25=V
-    ok = _ydotool(["key", "29:1", "25:1", "25:0", "29:0"])
+    # evdev: 29=LeftCtrl, 47=KEY_V (25 é KEY_P — "Ctrl+V" com 25 apertava
+    # Ctrl+P e o paste nunca chegava; erro vindo da migração para o ydotool)
+    ok = _ydotool(["key", "29:1", "47:1", "47:0", "29:0"])
     log.info("colagem: ydotool ctrl+v ok=%s", ok)
     return ok
+
+
+def _clipboard_registrado(text: str, timeout_s: float = 0.6) -> bool:
+    """Espera o wl-copy aparecer como fonte do clipboard (poll com wl-paste).
+
+    O Ctrl+V só cola o que o compositor já registrou: se a injeção vence o
+    registro, o alvo recebe o clipboard ANTIGO (ou nada) — e o paste manual
+    posterior do usuário funciona, pois aí a fonte já está no ar. Retorna
+    False por timeout (o chamador decide: injeta assim mesmo, fail-soft).
+    """
+    if not _have("wl-paste"):
+        log.warning("wl-paste não encontrado — sem verificação de registro")
+        time.sleep(0.1)
+        return False
+    deadline = time.monotonic() + timeout_s
+    attempt, delay = 0, 0.03
+    while time.monotonic() < deadline:
+        try:
+            cur = subprocess.run(
+                ["wl-paste", "--no-newline"],
+                capture_output=True, timeout=2,
+            )
+            if cur.returncode == 0 and cur.stdout.decode("utf-8", "replace") == text:
+                log.info("clipboard registrado após %.0fms (%d polls)",
+                         (timeout_s - (deadline - time.monotonic())) * 1000, attempt)
+                return True
+        except Exception:
+            pass
+        attempt += 1
+        time.sleep(delay)
+        delay = min(delay * 1.6, 0.08)
+    log.warning("clipboard não confirmou registro em %.0fs (%d polls) — injetando assim mesmo", timeout_s, attempt)
+    return False
 
 
 def _paste_clipboard(text: str) -> str:
     if not set_clipboard(text):
         return "clipboard-set-falhou"
-    # pequena espera: o compositor precisa registrar o clipboard antes do Ctrl+V
-    time.sleep(0.05)
+    # espera o registro real da fonte no compositor antes do Ctrl+V (o sleep
+    # fixo de 50ms perdia a corrida e o alvo colava clipboard velho/vazio)
+    _clipboard_registrado(text)
     if not _paste_ctrl_v():
         return "ctrl-v-bloqueado"
     return "clipboard"

@@ -241,7 +241,11 @@ async function pasteViaDaemonCode(text: string, hwnd: number): Promise<string | 
   if (!py) return null;
   return new Promise((res) => {
     const script =
-      `import sys; sys.path.insert(0, r"${voiceSrc()}"); ` +
+      "import logging, sys\n" +
+      // sem basicConfig o log.info do platform é descartado (sem handler) —
+      // e é ele que traz o diagnóstico do foco/registro do clipboard
+      "logging.basicConfig(level=logging.INFO, stream=sys.stderr, format='%(message)s')\n" +
+      `sys.path.insert(0, r"${voiceSrc()}"); ` +
       "from voice.platform import get_backend\n" +
       "text = sys.stdin.read()\n" +
       `used = get_backend().paste_into_focused(text, "auto", ${hwnd})\n` +
@@ -257,12 +261,19 @@ async function pasteViaDaemonCode(text: string, hwnd: number): Promise<string | 
       const m = out.match(/usado:\s*(\S+)/);
       if (code !== 0) logError(`[paste] python saiu ${code}: ${err.slice(-300)}`);
       else if (m) logInfo(`[paste] ${m[1]} chars: ${text.length}`);
+      // o python loga diagnóstico valioso no stderr (foco ativo no momento do
+      // paste, registro do clipboard, rc de wtype/ydotool) — sempre registrar
+      if (err.trim() && code === 0) logInfo(`[paste] diag: ${err.trim().slice(-400).replace(/\n+/g, " | ")}`);
       res(code === 0 && m ? m[1] : null);
     });
   });
 }
 
 async function pasteToFocused(text: string, hwnd: number): Promise<void> {
+  // semeia o clipboard também pelo Electron (X11/XWayland): alvos X recebem
+  // o paste nativo, e o KWin espelha para o Wayland — cinturão + suspensório
+  // com o wl-copy do backend (o outro namespace pode ganhar a corrida)
+  clipboard.writeText(text);
   // caminho principal: código provado do daemon (refoco do HWND + SendInput)
   const used = await pasteViaDaemonCode(text, hwnd);
   if (used && !/falhou|bloqueado/.test(used)) return;
