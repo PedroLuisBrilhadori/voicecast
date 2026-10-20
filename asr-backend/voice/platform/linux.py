@@ -344,6 +344,11 @@ def _wtype(args: list[str]) -> bool:
         return False
     try:
         proc = subprocess.run(["wtype", *args], capture_output=True, timeout=10)
+        if proc.returncode != 0:
+            log.info(
+                "wtype rc=%s stderr=%s", proc.returncode,
+                proc.stderr.decode(errors="replace").strip()[:160],
+            )
         return proc.returncode == 0
     except Exception:
         log.exception("wtype falhou")
@@ -359,6 +364,7 @@ _YDOTOOL_SOCKET = os.path.join(
 
 def _ydotool(args: list[str]) -> bool:
     if not _have("ydotool"):
+        log.info("ydotool ausente no PATH")
         return False
     try:
         proc = subprocess.run(
@@ -367,17 +373,48 @@ def _ydotool(args: list[str]) -> bool:
             timeout=10,
             env={**os.environ, "YDOTOOL_SOCKET": _YDOTOOL_SOCKET},
         )
+        if proc.returncode != 0:
+            log.info(
+                "ydotool rc=%s stderr=%s", proc.returncode,
+                proc.stderr.decode(errors="replace").strip()[:160],
+            )
         return proc.returncode == 0
     except Exception:
         log.exception("ydotool falhou")
         return False
 
 
+def _foco_ativo() -> str:
+    """Nome da janela ativa X11/XWayland — diagnóstico da colagem (foco vazio
+    = foco em janela Wayland nativa, invisível pro xprop)."""
+    try:
+        out = subprocess.run(
+            ["xprop", "-root", "_NET_ACTIVE_WINDOW"],
+            capture_output=True, timeout=2,
+        )
+        win = out.stdout.decode(errors="replace").split("=")[-1].strip()
+    except Exception as exc:
+        return f"(xprop indisponível: {exc})"
+    if win in ("0x0", ""):
+        return "nenhuma (foco em janela Wayland nativa ou tela de bloqueio)"
+    try:
+        nome = subprocess.run(
+            ["xdotool", "getwindowname", win],
+            capture_output=True, timeout=2,
+        )
+        return f"{win} «{nome.stdout.decode(errors='replace').strip()}»"
+    except Exception:
+        return win
+
+
 def _paste_ctrl_v() -> bool:
+    log.info("colagem: foco ativo: %s", _foco_ativo())
     if _wtype(["-M", "Ctrl", "-k", "v", "-m", "Ctrl"]):
         return True
     # evdev: 29=LeftCtrl, 25=V
-    return _ydotool(["key", "29:1", "25:1", "25:0", "29:0"])
+    ok = _ydotool(["key", "29:1", "25:1", "25:0", "29:0"])
+    log.info("colagem: ydotool ctrl+v ok=%s", ok)
+    return ok
 
 
 def _paste_clipboard(text: str) -> str:
