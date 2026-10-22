@@ -57,6 +57,8 @@ const bridge: VoicecastBridge = {
   openCorpus: (id?: string) => ipcRenderer.invoke(IPC.openCorpus, id),
   ditadoToggle: () => ipcRenderer.invoke(IPC.ditadoToggle),
   asrStatus: () => ipcRenderer.invoke(IPC.asrStatus),
+  asrHostGet: () => ipcRenderer.invoke(IPC.asrHostGet),
+  asrHostSet: (enabled: boolean) => ipcRenderer.invoke(IPC.asrHostSet, enabled),
   // W2a — dataset de treino do voice
   listDatasetItems: (query?: string, labeled?: DatasetLabeledFilter) =>
     ipcRenderer.invoke(IPC.listDatasetItems, query, labeled),

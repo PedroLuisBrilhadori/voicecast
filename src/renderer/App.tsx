@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Bootstrap, RecordingState, SessionSummary, SourceInfo, StartRecordingRequest } from "../shared/ipc";
+import type { AsrHostStatus, Bootstrap, RecordingState, SessionSummary, SourceInfo, StartRecordingRequest } from "../shared/ipc";
 import { goalSummary, type GoalState } from "../shared/agent-goal";
 
 declare global {
@@ -29,6 +29,8 @@ export function App() {
   const [goalText, setGoalText] = useState("");
   const [goalState, setGoalState] = useState<GoalState | null>(null);
   const [goalBusy, setGoalBusy] = useState(false);
+  // switch do modelo de transcrição (ASR local) — settings.json
+  const [asr, setAsr] = useState<AsrHostStatus | null>(null);
 
   const refreshSessions = useCallback(() => {
     window.voicecast.listSessions(sessionSearch).then(setSessions).catch(console.error);
@@ -58,6 +60,7 @@ export function App() {
     });
     window.voicecast.getState().then(setState);
     window.voicecast.agentGetState().then((s) => s && setGoalState(s)).catch(() => {});
+    window.voicecast.asrHostGet().then(setAsr).catch(() => {});
     return off;
   }, []);
 
@@ -266,6 +269,29 @@ export function App() {
             disabled={recording}
           />
           🎙 microfone
+        </label>
+
+        <label
+          className="mic"
+          title={
+            asr?.source === "env"
+              ? "desligado por env (VOICECAST_ASR_HOST=0) — o settings não pode ligar"
+              : asr?.enabled
+                ? "modelo de transcrição local ligado (settings.json asrHost)"
+                : "modelo de transcrição local DESLIGADO — ditado/sessões ficam sem fala"
+          }
+        >
+          <input
+            type="checkbox"
+            checked={asr?.enabled ?? true}
+            disabled={!asr || asr.source === "env"}
+            onChange={(e) => {
+              const on = e.target.checked;
+              setAsr(on ? { enabled: true, source: "settings", external: asr?.external ?? false, hosted: asr?.hosted ?? false } : { enabled: false, source: "settings", external: asr?.external ?? false, hosted: false });
+              window.voicecast.asrHostSet(on).then((r) => r.ok && setAsr(r.status)).catch(() => {});
+            }}
+          />
+          🗣 transcrição{asr && !asr.enabled ? " (off)" : ""}
         </label>
 
         {tab === "screen" && (

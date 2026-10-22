@@ -68,6 +68,10 @@ export const IPC = {
   openCorpus: "library:open-corpus",
   ditadoToggle: "ditado:toggle",
   asrStatus: "library:asr-status",
+  /** Switch do modelo de transcrição: estado efetivo (settings+env). */
+  asrHostGet: "asr:host-get",
+  /** Switch do modelo de transcrição: liga/desliga (persiste no settings.json). */
+  asrHostSet: "asr:host-set",
 
   // ── dataset de treino do voice (W2a — issue #3) ───────────────
   /** Lista o histórico do corpus (transcriptions) — busca + filtro rotuladas. */
@@ -300,6 +304,10 @@ export interface VoicecastBridge {
   /** Liga/desliga o ditado (usado pela barra do ditado). */
   ditadoToggle(): Promise<{ ok: boolean; error?: string }>;
   asrStatus(): Promise<{ ok: boolean; source?: string }>;
+  /** Estado efetivo do switch do modelo de transcrição (settings+env+host). */
+  asrHostGet(): Promise<AsrHostStatus>;
+  /** Liga/desliga o modelo de transcrição (persiste; desligar derruba o serviço). */
+  asrHostSet(enabled: boolean): Promise<{ ok: true; status: AsrHostStatus } | { ok: false; error: string }>;
 
   // W2a — dataset de treino do voice (substitui o painel :8700)
   listDatasetItems(query?: string, labeled?: DatasetLabeledFilter): Promise<DatasetItemSummary[]>;
@@ -311,6 +319,20 @@ export interface VoicecastBridge {
   agentRunGoal(goal: string): Promise<{ ok: true; id: string } | { ok: false; error: string }>;
   /** Estado atual do goal (ou null se nunca houve) — snapshot inicial da barra/painel. */
   agentGetState(): Promise<GoalState | null>;
+}
+
+// ── switch do modelo de transcrição (ASR local) ────────────────
+
+/** Estado do host do ASR — o que o painel mostra no switch. */
+export interface AsrHostStatus {
+  /** Switch efetivo: false = modelo local não sobe (env ganha do settings). */
+  enabled: boolean;
+  /** De onde veio o estado efetivo: env (VOICECAST_ASR_HOST=0), settings.json ou default. */
+  source: "env" | "settings" | "default";
+  /** Endpoint externo configurado (VOICECAST_ASR_URLS/VOICE_ASR_URLS) — o host não é nosso. */
+  external: boolean;
+  /** Nosso processo filho do serviço está de pé agora. */
+  hosted: boolean;
 }
 
 // ── biblioteca / pós-produção (M2) ─────────────────────────────

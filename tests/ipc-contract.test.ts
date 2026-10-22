@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   IPC,
   type AnnotationWheelRequest,
+  type AsrHostStatus,
   type Bootstrap,
   type CaptureEvent,
   type ClipInfo,
@@ -83,6 +84,17 @@ describe("contrato IPC", () => {
   it("canais do cockpit (C4) estáveis", () => {
     expect(IPC.agentRunGoal).toBe("agent:run-goal");
     expect(IPC.agentGetState).toBe("agent:get-state");
+  });
+
+  it("canais do switch do modelo de transcrição estáveis + status serializável", () => {
+    expect(IPC.asrHostGet).toBe("asr:host-get");
+    expect(IPC.asrHostSet).toBe("asr:host-set");
+    const off: AsrHostStatus = { enabled: false, source: "settings", external: false, hosted: false };
+    const on: AsrHostStatus = { enabled: true, source: "default", external: false, hosted: true };
+    for (const st of [off, on]) {
+      expect(JSON.parse(JSON.stringify(st))).toEqual(st);
+    }
+    expect(Object.keys(off).sort()).toEqual(["enabled", "external", "hosted", "source"]);
   });
 
   it("evento agent-state e GoalState serializáveis (C4) — payload puro cruza a porta", () => {

@@ -31,3 +31,21 @@ export function backoffDelayMs(crashes: number): number {
 export function backoffShouldReset(stableMs: number): boolean {
   return stableMs >= 60_000;
 }
+
+// ── switch do modelo de transcrição (settings.json + env) ──────
+
+export interface AsrSwitchSnapshot {
+  /** env VOICECAST_ASR_HOST=0 (kill-switch de máquina — ganha de tudo). */
+  envOff: boolean;
+  /** settings.json `asrHost` — undefined = nunca tocado (default ligado). */
+  settingsOn: boolean | undefined;
+}
+
+export type AsrSwitchSource = "env" | "settings" | "default";
+
+/** Estado efetivo do switch: env desliga sempre; settings desliga por escolha do usuário. */
+export function asrSwitch(s: AsrSwitchSnapshot): { enabled: boolean; source: AsrSwitchSource } {
+  if (s.envOff) return { enabled: false, source: "env" };
+  if (s.settingsOn === false) return { enabled: false, source: "settings" };
+  return { enabled: true, source: "default" };
+}

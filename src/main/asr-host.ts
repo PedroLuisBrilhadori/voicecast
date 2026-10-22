@@ -9,14 +9,25 @@
  * Regras: probe de /health antes de qualquer spawn (nunca duplica serviço que
  * já responde — inclusive um externo, que é adotado), respawn com backoff
  * 5s→60s resetando após 60s estável, logs do filho em logs/asr-backend.log.
- * Kill-switch: VOICECAST_ASR_HOST=0. Com VOICECAST_ASR_URLS/VOICE_ASR_URLS
- * configurado (endpoint externo), não hospeda.
+ * Kill-switch: VOICECAST_ASR_HOST=0 (env — ganha de tudo). Switch persistente
+ * do usuário: settings.json `asrHost:false` (painel → "transcrição", IPC
+ * asr:host-set) — desligar em runtime derruba o serviço na hora.
+ * Com VOICECAST_ASR_URLS/VOICE_ASR_URLS configurado (endpoint externo), não
+ * hospeda.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
-import { backoffDelayMs, backoffShouldReset, hostAction } from "../shared/asr-host-logic.js";
+import {
+  asrSwitch,
+  backoffDelayMs,
+  backoffShouldReset,
+  hostAction,
+} from "../shared/asr-host-logic.js";
+import type { AsrHostStatus } from "../shared/ipc.js";
+import { readSettings, writeSettings } from "../shared/settings.js";
+import { appDataDir } from "./storage.js";
 import { logError, logInfo } from "./logging.js";
 
 const PROBE_INTERVAL_MS = 20_000;
@@ -69,6 +80,35 @@ let crashes = 0;
 let stableSince = 0;
 let monitor: ReturnType<typeof setInterval> | null = null;
 let respawnTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Estado efetivo do switch do modelo de transcrição (env + settings + runtime). */
+export function asrHostStatus(): AsrHostStatus {
+  const sw = asrSwitch({
+    envOff: process.env.VOICECAST_ASR_HOST === "0",
+    settingsOn: readSettings(appDataDir()).asrHost,
+  });
+  return {
+    enabled: sw.enabled,
+    source: sw.source,
+    external: Boolean(process.env.VOICECAST_ASR_URLS || process.env.VOICE_ASR_URLS),
+    hosted: child !== null,
+  };
+}
+
+/**
+ * Liga/desliga o modelo de transcrição (persiste no settings.json). Desligar
+ * derruba o serviço NA HORA (stopAsrHost — filho morto, monitor parado).
+ * Ligar sobe o host (spawn com warmup em background). Com env
+ * VOICECAST_ASR_HOST=0, o pedido de ligar é persistido mas o env segue
+ * ganhando (status reflete).
+ */
+export async function setAsrHostEnabled(on: boolean): Promise<AsrHostStatus> {
+  writeSettings(appDataDir(), { asrHost: on });
+  logInfo(`ASR host: switch do usuário → ${on ? "LIGADO" : "DESLIGADO"} (settings.json)`);
+  if (on) await ensureAsrHost();
+  else stopAsrHost();
+  return asrHostStatus();
+}
 
 /** Dirs de libs CUDA das wheels nvidia pip (cublas/cudnn) no venv — o
  * ctranslate2 dlopen-as no primeiro uso e precisa de LD_LIBRARY_PATH. */
@@ -176,8 +216,16 @@ export async function ensureAsrHost(): Promise<void> {
       logInfo("ASR host: VOICECAST_ASR_URLS/VOICE_ASR_URLS configurado — backend externo, não hospedo");
       return;
     }
-    if (process.env.VOICECAST_ASR_HOST === "0") {
-      logInfo("ASR host: desligado via VOICECAST_ASR_HOST=0");
+    const sw = asrSwitch({
+      envOff: process.env.VOICECAST_ASR_HOST === "0",
+      settingsOn: readSettings(appDataDir()).asrHost,
+    });
+    if (!sw.enabled) {
+      logInfo(
+        sw.source === "env"
+          ? "ASR host: desligado via VOICECAST_ASR_HOST=0"
+          : "ASR host: desligado pelo usuário (settings.json asrHost=false) — sem modelo de transcrição",
+      );
       return;
     }
     if (!backendPython() || !backendSrc()) {

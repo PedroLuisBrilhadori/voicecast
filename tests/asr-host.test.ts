@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { backoffDelayMs, backoffShouldReset, hostAction } from "../src/shared/asr-host-logic";
+import {
+  asrSwitch,
+  backoffDelayMs,
+  backoffShouldReset,
+  hostAction,
+} from "../src/shared/asr-host-logic";
 
 describe("hostAction", () => {
   it("filho vivo → wait (nada a fazer)", () => {
@@ -32,5 +37,22 @@ describe("backoffShouldReset", () => {
   it("zera depois de 60s estável", () => {
     expect(backoffShouldReset(59_999)).toBe(false);
     expect(backoffShouldReset(60_000)).toBe(true);
+  });
+});
+
+describe("asrSwitch (modelo de transcrição on/off)", () => {
+  it("env VOICECAST_ASR_HOST=0 ganha de tudo", () => {
+    expect(asrSwitch({ envOff: true, settingsOn: true }).enabled).toBe(false);
+    expect(asrSwitch({ envOff: true, settingsOn: true }).source).toBe("env");
+    expect(asrSwitch({ envOff: true, settingsOn: undefined }).source).toBe("env");
+  });
+  it("settings asrHost:false desliga (fonte settings)", () => {
+    const r = asrSwitch({ envOff: false, settingsOn: false });
+    expect(r.enabled).toBe(false);
+    expect(r.source).toBe("settings");
+  });
+  it("sem env e sem settings (ou asrHost:true) → ligado", () => {
+    expect(asrSwitch({ envOff: false, settingsOn: undefined })).toEqual({ enabled: true, source: "default" });
+    expect(asrSwitch({ envOff: false, settingsOn: true })).toEqual({ enabled: true, source: "default" });
   });
 });

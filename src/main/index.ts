@@ -37,7 +37,7 @@ import { initLogging, logError, logInfo } from "./logging";
 import { registerDitadoHotkey, claimHotkey, toggleDitado } from "./ditado";
 import { initTelemetry, stopTelemetry } from "./telemetry";
 import { scheduleTelemetryInit } from "../shared/telemetry-schedule";
-import { ensureAsrHost, stopAsrHost } from "./asr-host";
+import { asrHostStatus, ensureAsrHost, setAsrHostEnabled, stopAsrHost } from "./asr-host";
 import {
   asrHealth,
 } from "./asr";
@@ -134,6 +134,9 @@ function registerIpc(agent: AgentBridge): void {
   });
   ipcMain.handle(IPC.getState, () => getState());
   ipcMain.handle(IPC.asrStatus, () => asrHealth());
+  // switch do modelo de transcrição (settings.json; desligar derruba o serviço)
+  ipcMain.handle(IPC.asrHostGet, () => asrHostStatus());
+  ipcMain.handle(IPC.asrHostSet, (_e, on: boolean) => setAsrHostEnabled(Boolean(on)));
   ipcMain.handle(IPC.listSessions, (_e, query?: string) => searchSessions(query ?? ""));
   ipcMain.handle(IPC.getSession, (_e, dir: string, name: string) => {
     const d = getSessionDetail(dir, name);

@@ -57,8 +57,11 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
   serviço** — `src/main/asr-host.ts` spawna/supervisiona o python vendorizado
   em `asr-backend/` (instalação: `scripts/setup-asr-backend.ps1`, dados em
   `%LOCALAPPDATA%\voicecast\asr-backend`, log em `logs/asr-backend.log`).
-  Nunca duplica serviço que já responde na porta. Kill-switch:
-  `VOICECAST_ASR_HOST=0`; com `VOICECAST_ASR_URLS`/`VOICE_ASR_URLS`
+  Nunca duplica serviço que já responde na porta. Switch do modelo de
+  transcrição: settings.json `asrHost:false` (painel → 🗣 transcrição, IPC
+  `asr:host-get`/`asr:host-set`; desligar em runtime derruba o serviço na
+  hora). Kill-switch de máquina (ganha do settings): `VOICECAST_ASR_HOST=0`;
+  com `VOICECAST_ASR_URLS`/`VOICE_ASR_URLS`
   configurado, usa o externo e não hospeda.
 - **Jev (Etapa 2)**: F9 roteia a intenção ANTES de colar — comando pro agente,
   anotação e conversa (conf ≥ 0.9) NÃO são colados na janela focada; a barra

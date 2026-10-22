@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased] - 2026-10-22
+
+### Added
+
+- **Switch do modelo de transcrição**: settings.json `asrHost` (painel →
+  🗣 transcrição, IPC `asr:host-get`/`asr:host-set`) liga/desliga o host do ASR
+  local — desligar em runtime derruba o serviço python na hora (GPU liberada) e
+  o boot sem o switch ligado não sobe o modelo. Decisão pura em
+  `asr-host-logic.ts` (`asrSwitch`); env `VOICECAST_ASR_HOST=0` continua
+  ganhando de tudo.
+
 ## [Unreleased] - 2026-09-23
 
 ### Added
