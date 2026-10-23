@@ -110,6 +110,21 @@ export async function setAsrHostEnabled(on: boolean): Promise<AsrHostStatus> {
   return asrHostStatus();
 }
 
+/**
+ * Pedido EXPLÍCITO de transcrição (F9 do ditado, botão "transcrever agora",
+ * --transcribe) com o switch off → religa o modelo sozinho. Só quando o
+ * desligamento veio do settings (escolha reversível); env
+ * VOICECAST_ASR_HOST=0 é kill-switch de máquina e não é sobrescrito.
+ * Retorna true quando religou.
+ */
+export async function asrAutoEnableIfNeeded(): Promise<boolean> {
+  const st = asrHostStatus();
+  if (st.enabled || st.source === "env") return false;
+  logInfo("ASR host: pedido de transcrição com o switch off — religando o modelo");
+  await setAsrHostEnabled(true);
+  return true;
+}
+
 /** Dirs de libs CUDA das wheels nvidia pip (cublas/cudnn) no venv — o
  * ctranslate2 dlopen-as no primeiro uso e precisa de LD_LIBRARY_PATH. */
 function cudaLibDirs(): string[] {
@@ -209,8 +224,20 @@ function startMonitor(): void {
   }, PROBE_INTERVAL_MS);
 }
 
-/** Sobe o host se for dele (chamado no whenReady; fail-soft — nunca derruba o app). */
-export async function ensureAsrHost(): Promise<void> {
+/** Sobe o host se for dele (chamado no whenReady; fail-soft — nunca derruba o app).
+ * Chamadas concorrentes compartilham a mesma promessa (F9 e transcrição explícita
+ * podem pedir junto — sem isso, dois spawns brigam pela porta). */
+let ensureInProgress: Promise<void> | null = null;
+export function ensureAsrHost(): Promise<void> {
+  if (!ensureInProgress) {
+    ensureInProgress = ensureAsrHostOnce().finally(() => {
+      ensureInProgress = null;
+    });
+  }
+  return ensureInProgress;
+}
+
+async function ensureAsrHostOnce(): Promise<void> {
   try {
     if (process.env.VOICECAST_ASR_URLS || process.env.VOICE_ASR_URLS) {
       logInfo("ASR host: VOICECAST_ASR_URLS/VOICE_ASR_URLS configurado — backend externo, não hospedo");

@@ -175,12 +175,17 @@ export function getSessionDetail(
   return { meta, transcript, mp4: videoFile ?? "", audio: audioFile };
 }
 
-/** Persiste um ditado como sessão de áudio na biblioteca (mesmo layout). */
+/**
+ * Persiste um ditado como sessão de áudio na biblioteca (mesmo layout).
+ * `transcript: null` salva SÓ o áudio (transcriptStatus "pending") — a fala
+ * não pode ser descartada porque o ASR estava off/fora do ar; o botão
+ * "transcrever agora" do editor recupera depois.
+ */
 export function saveDictationSession(
   startedAt: number,
   ext: string,
   audioB64: string,
-  transcript: Transcript,
+  transcript: Transcript | null,
   jev?: DictationJudgment | null,
 ): { dir: string; name: string } {
   const now = new Date(startedAt);
@@ -192,8 +197,8 @@ export function saveDictationSession(
   fs.mkdirSync(dirs.root, { recursive: true });
 
   fs.writeFileSync(dirs.audio, Buffer.from(audioB64, "base64"));
-  fs.writeFileSync(dirs.transcript, JSON.stringify(transcript, null, 2));
-  const preview = transcript.text.replace(/\s+/g, " ").trim().slice(0, 60);
+  if (transcript) fs.writeFileSync(dirs.transcript, JSON.stringify(transcript, null, 2));
+  const preview = transcript?.text.replace(/\s+/g, " ").trim().slice(0, 60) ?? "";
   writeMeta(dirs.meta, {
     status: "finalizada",
     startedAt: new Date(startedAt).toISOString(),
@@ -201,15 +206,18 @@ export function saveDictationSession(
     durationS: +((Date.now() - startedAt) / 1000).toFixed(1),
     mode: "ditado",
     sourceLabel: "mic",
-    title: preview || "Ditado vazio",
+    title: preview || "Ditado (sem transcrição)",
     textPreview: preview,
-    transcriptStatus: "done",
+    transcriptStatus: transcript ? "done" : "pending",
     sizeBytes: fs.statSync(dirs.audio).size,
     ...(jev
       ? { jev: { model: jev.model, judgedAt: new Date().toISOString(), rota: jev.rota, conf: jev.confidence } }
       : {}),
   });
-  logInfo(`ditado salvo na biblioteca: ${dayDir}/${name} "${preview}"`);
+  logInfo(
+    `ditado salvo na biblioteca: ${dayDir}/${name} "${preview}"` +
+      (transcript ? "" : " — áudio pendente de transcrição (ASR indisponível no momento)"),
+  );
   return { dir: dayDir, name };
 }
 
@@ -217,7 +225,10 @@ export function saveDictationSession(
 
 export async function transcribeAndStore(dir: string, name: string): Promise<boolean> {
   const dirs = sessionDirs(dir, name);
-  if (!fs.existsSync(dirs.mp4)) return false;
+  // sessão de vídeo (mp4) OU de ditado (audio.webm) — a retranscrição do
+  // ditado salvo sem fala depende do áudio, não do mp4
+  const media = fs.existsSync(dirs.mp4) ? dirs.mp4 : fs.existsSync(dirs.audio) ? dirs.audio : null;
+  if (!media) return false;
   const patch = (p: Partial<Meta>) => {
     const m = JSON.parse(fs.readFileSync(dirs.meta, "utf8")) as Meta;
     writeMeta(dirs.meta, { ...m, ...p });
@@ -234,7 +245,7 @@ export async function transcribeAndStore(dir: string, name: string): Promise<boo
   }
   const t0 = Date.now();
   try {
-    const t = await transcribeSession(dirs.mp4);
+    const t = await transcribeSession(media);
     fs.writeFileSync(dirs.transcript, JSON.stringify(t, null, 2));
     patch({ transcriptStatus: "done" });
     H_TRANSCRIBE?.record((Date.now() - t0) / 1000, { kind: "sessao" });

@@ -7,8 +7,8 @@
  * :8700 (v2 transição); sem daemon, funciona igual (nada para suspender).
  */
 import { BrowserWindow, clipboard, globalShortcut, ipcMain } from "electron";
-import { asrModelStatus, transcribeAudioFile } from "./asr";
-import { backendPython, backendSrc } from "./asr-host";
+import { asrHealth, asrModelStatus, transcribeAudioFile, type Transcript } from "./asr";
+import { asrAutoEnableIfNeeded, asrHostStatus, backendPython, backendSrc } from "./asr-host";
 import { logError, logInfo } from "./logging";
 import { createDitado, createBar, loadSavedBarBounds } from "./windows";
 import { saveDictationSession } from "./library";
@@ -41,6 +41,9 @@ let blobPromise: Promise<{ b64: string; ext: string }> | null = null;
 let ditadoStartedAt = 0;
 let ditadoHwnd = 0;
 let hotkeyRegistered = false;
+/** O F9 religou o modelo de transcrição neste ditado (spawn em background
+ *  desde o start) — o stop espera a porta abrir antes de transcrever. */
+let ditadoAsrLigadoAgora = false;
 
 export function ditadoState(): DictationState {
   return state;
@@ -313,6 +316,15 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
     // checks seguem, mas sem bloquear a UX (daemon vivo é caso histórico).
     state = "recording";
     ditadoStartedAt = Date.now();
+    // F9 é pedido EXPLÍCITO de transcrição: com o switch off (fonte settings),
+    // religa o modelo sozinho — o spawn corre enquanto o usuário fala. Env
+    // VOICECAST_ASR_HOST=0 não é sobrescrito (kill-switch de máquina).
+    const st = asrHostStatus();
+    if (!st.enabled && st.source === "settings") {
+      ditadoAsrLigadoAgora = true;
+      logInfo("ditado: transcrição estava desligada — religando o modelo (switch settings)");
+      void asrAutoEnableIfNeeded();
+    }
     void (async () => {
       if (await daemonRecording()) {
         logError("ditado: daemon gravando — abortando captura por segurança");
@@ -372,6 +384,13 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
     }, 2500);
     try {
       await withSpan("ditado.stop", { duration_s: +((Date.now() - startedAt) / 1000).toFixed(1) }, async () => {
+        // religamos o modelo no start? espera a porta abrir (spawn roda desde
+        // lá; o load do modelo continua depois — a barra mostra "carregando")
+        if (ditadoAsrLigadoAgora) {
+          const h = await asrHealth({ waitMs: 25_000 });
+          if (!h.ok) logError("ditado: ASR não abriu a porta após religar — áudio segue pendente");
+        }
+        ditadoAsrLigadoAgora = false;
         recorderWin?.webContents.executeJavaScript("window.vcStopDictation()", true).catch(() => {});
         const payload = await (blobPromise ?? Promise.resolve({ b64: "", ext: "webm" }));
         await stopCaptureWindow();
@@ -386,19 +405,27 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
       const t0 = Date.now();
       // gancho de teste E2E: VOICECAST_DITADO_FAKE_TEXT pula o ASR (texto fixo)
       const fake = process.env.VOICECAST_DITADO_FAKE_TEXT;
-      const t = fake
-        ? {
-            text: fake,
-            language: "pt",
-            words: [],
-            segments: [],
-            transcribedAt: new Date().toISOString(),
-            model: "fake",
-          }
-        : await transcribeAudioFile(src);
-      H_TRANSCRIBE?.record((Date.now() - t0) / 1000, { kind: "ditado" });
+      // transcrição que falha NÃO descarta a fala: t = null → áudio salvo pendente
+      let t: Transcript | null = null;
+      let asrErro: string | null = null;
+      try {
+        t = fake
+          ? {
+              text: fake,
+              language: "pt",
+              words: [],
+              segments: [],
+              transcribedAt: new Date().toISOString(),
+              model: "fake",
+            }
+          : await transcribeAudioFile(src);
+      } catch (e) {
+        asrErro = String(e);
+        logError("ditado: transcrição falhou — áudio vai p/ biblioteca pendente:", e);
+      }
+      if (t) H_TRANSCRIBE?.record((Date.now() - t0) / 1000, { kind: "ditado" });
         rmSync(tmpDir, { recursive: true, force: true });
-        const text = t.text.trim();
+        const text = t?.text.trim() ?? "";
 
         // Jev (Etapa 2 do PLANO-JEV-CU): roteia a intenção ANTES de colar —
         // comando pro agente, anotação e conversa não pertencem à janela focada.
@@ -406,9 +433,10 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
         const j = text ? await judgeDictation(text) : null;
         const acao = decidePaste(j);
 
-        // v2: ditado com fala vira sessão de áudio na biblioteca; silêncio descarta
+        // v2: ditado com fala vira sessão de áudio na biblioteca; silêncio
+        // descarta; ASR indisponível salva SÓ o áudio (pendente de transcrição)
         let saved: { dir: string; name: string } | null = null;
-        if (text) {
+        if (text || asrErro) {
           try {
             saved = saveDictationSession(startedAt, payload.ext, payload.b64, t, j);
           } catch (e) {
@@ -430,17 +458,20 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
         } else if (text) {
           logInfo(`ditado: NÃO colado — rota ${j?.rota} (conf ${j?.confidence?.toFixed(2) ?? "?"})`);
         }
-        M_DICTATIONS?.add(1, { status: text ? (acao.paste ? "ok" : `rota:${j?.rota ?? "?"}`) : "vazio" });
+        const pendente = !text && asrErro && saved !== null;
+        M_DICTATIONS?.add(1, { status: text ? (acao.paste ? "ok" : `rota:${j?.rota ?? "?"}`) : pendente ? "sem-asr" : "vazio" });
         // a barra mostra o desfecho antes de fechar (finally) — quando nada é
-        // colado, o usuário precisa saber POR QUÊ
+        // colado (ou a transcrição falhou), o usuário precisa saber POR QUÊ
         broadcast({
           type: "ditado-state",
           phase: "done",
           rota: j?.rota,
           conf: j?.confidence,
           colado: text ? acao.paste : undefined,
+          pendente: pendente || undefined,
         });
         if (text) await new Promise((r) => setTimeout(r, acao.paste ? 350 : 2200));
+        else if (pendente) await new Promise((r) => setTimeout(r, 2500));
       });
       return { ok: true };
     } catch (e) {

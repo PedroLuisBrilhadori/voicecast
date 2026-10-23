@@ -197,6 +197,8 @@ export type CaptureEvent =
       rota?: string;
       conf?: number;
       colado?: boolean;
+      /** done: ASR estava off/fora — áudio SALVO na biblioteca, transcrição pendente */
+      pendente?: boolean;
       /** transcrevendo: modelo do ASR ainda carregando (cold start pós-boot) */
       asrLoading?: boolean;
       /** estimativa do serviço p/ concluir o load (s) */

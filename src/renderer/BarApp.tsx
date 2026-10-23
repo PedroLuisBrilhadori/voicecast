@@ -31,8 +31,9 @@ const ROTA_UI: Record<string, string> = {
   conversa_social: "— conversa (ignorada)",
 };
 
-function desfechoDitado(r: { rota?: string; colado?: boolean }): string {
+function desfechoDitado(r: { rota?: string; colado?: boolean; pendente?: boolean }): string {
   if (r.colado) return "✓ colado";
+  if (r.pendente) return "🎙 áudio salvo — transcrição pendente";
   return (r.rota && ROTA_UI[r.rota]) || "não colado";
 }
 
@@ -49,7 +50,7 @@ export function BarApp() {
   const [asrLoading, setAsrLoading] = useState(false);
   const [expectedLoadS, setExpectedLoadS] = useState<number | null>(null);
   const [transcribingS, setTranscribingS] = useState(0);
-  const [resultado, setResultado] = useState<{ rota?: string; conf?: number; colado?: boolean } | null>(null);
+  const [resultado, setResultado] = useState<{ rota?: string; conf?: number; colado?: boolean; pendente?: boolean } | null>(null);
   const [markers, setMarkers] = useState(0);
   const [paused, setPaused] = useState(false);
   /** C4: estado do goal do cockpit (linha dedicada, mesma linguagem do ditado-state). */
@@ -77,7 +78,7 @@ export function BarApp() {
         if (e.phase === "done") {
           setTranscribing(false);
           setAsrLoading(false);
-          setResultado({ rota: e.rota, conf: e.conf, colado: e.colado });
+          setResultado({ rota: e.rota, conf: e.conf, colado: e.colado, pendente: e.pendente });
         } else {
           setTranscribing(e.phase === "transcribing");
           setAsrLoading(e.phase === "transcribing" && !!e.asrLoading);
@@ -149,7 +150,7 @@ export function BarApp() {
         {resultado ? (
           <span
             style={{
-              color: resultado.colado ? "#3ecf8e" : "#7c4dff",
+              color: resultado.colado ? "#3ecf8e" : resultado.pendente ? "#f4b942" : "#7c4dff",
               fontSize: 12.5,
               fontWeight: 600,
             }}

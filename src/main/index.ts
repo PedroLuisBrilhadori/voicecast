@@ -37,7 +37,7 @@ import { initLogging, logError, logInfo } from "./logging";
 import { registerDitadoHotkey, claimHotkey, toggleDitado } from "./ditado";
 import { initTelemetry, stopTelemetry } from "./telemetry";
 import { scheduleTelemetryInit } from "../shared/telemetry-schedule";
-import { asrHostStatus, ensureAsrHost, setAsrHostEnabled, stopAsrHost } from "./asr-host";
+import { asrAutoEnableIfNeeded, asrHostStatus, ensureAsrHost, setAsrHostEnabled, stopAsrHost } from "./asr-host";
 import {
   asrHealth,
 } from "./asr";
@@ -160,6 +160,8 @@ function registerIpc(agent: AgentBridge): void {
     return { ok: true } as const;
   });
   ipcMain.handle(IPC.transcribeSession, async (_e, dir: string, name: string) => {
+    // pedido EXPLÍCITO de transcrição religa o modelo (switch settings; env não)
+    await asrAutoEnableIfNeeded();
     const ok = await transcribeAndStore(dir, name);
     return ok ? { ok: true } as const : { ok: false, error: "transcrição falhou (ASR indisponível?)" };
   });
@@ -371,10 +373,12 @@ if (!gotLock) {
     const tr = process.argv.find((a) => a.startsWith("--transcribe="));
     if (tr) {
       const [dir, name] = tr.split("=")[1]!.split("/");
-      void transcribeAndStore(dir, name).then((ok) => {
-        logInfo(`--transcribe ${dir}/${name}: ${ok ? "ok" : "falhou"}`);
-        void stopTelemetry().finally(() => app.exit(ok ? 0 : 1));
-      });
+      void asrAutoEnableIfNeeded()
+        .then(() => transcribeAndStore(dir, name))
+        .then((ok) => {
+          logInfo(`--transcribe ${dir}/${name}: ${ok ? "ok" : "falhou"}`);
+          void stopTelemetry().finally(() => app.exit(ok ? 0 : 1));
+        });
     }
 
     // gancho de teste determinístico das anotações (AN): simula ditado com
