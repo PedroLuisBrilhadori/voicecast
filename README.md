@@ -1,95 +1,95 @@
 # voicecast
 
-Sessões de contexto: você fala e mostra a tela — o voicecast grava **voz + vídeo**
-localmente, transcreve com o ASR local (faster-whisper servido em `127.0.0.1:8701`)
-e transforma a sessão em **referências consumíveis por agentes de código**
-(trechos, prints, transcrição com timestamps, contexto pronto para colar).
+Context sessions: you talk and show your screen — voicecast records **voice + video**
+locally, transcribes with the local ASR engine (faster-whisper served at `127.0.0.1:8701`)
+and turns the session into **references consumable by coding agents**
+(named excerpts, screenshots, transcripts with timestamps, ready-to-paste context).
 
-Tudo 100% local (nada sai da máquina).
+Everything is 100% local (nothing leaves the machine).
 
-**Para quem é:** desenvolvedores que trabalham com agentes de codificação
-(Claude Code, ZCode, Copilot...) e precisam explicar contexto ao vivo —
-demonstrar um bug na tela, ditar um requisito, mostrar um comportamento —
-e querem que isso vire material aproveitável (transcrição, prints, clipes)
-sem copiar/colar na mão.
+**Who it's for:** developers who work with coding agents
+(Claude Code, ZCode, Copilot...) and need to explain context live —
+demonstrating a bug on screen, dictating a requirement, showing a behavior —
+and want it to turn into reusable material (transcript, screenshots, clips)
+without manual copy/paste.
 
-## Como funciona
+## How it works
 
-1. **Grava** — atalho global abre o picker: tela cheia, janela ou região.
-   Barra REC flutuante, pipeline ffmpeg (fMP4 → MP4).
-2. **Transcreve** — ao parar a gravação, o backend ASR embutido
-   (faster-whisper + FastAPI, GPU quando disponível) gera a transcrição
-   com timestamps por palavra.
-3. **Edita** — editor sincronizado com o player: trechos nomeados, cortes
-   exportados, prints, correção de transcrição clicável.
-4. **Consome** — "copiar contexto" monta um bloco com transcrição, trechos,
-   paths de arquivos e prints, pronto para colar na conversa com o agente.
+1. **Record** — a global shortcut opens the picker: full screen, window, or region.
+   Floating REC bar, ffmpeg pipeline (fMP4 → MP4).
+2. **Transcribe** — when the recording stops, the bundled ASR backend
+   (faster-whisper + FastAPI, GPU when available) generates the transcript
+   with per-word timestamps.
+3. **Edit** — editor synced with the player: named excerpts, exported cuts,
+   screenshots, clickable transcript correction.
+4. **Consume** — "copy context" builds a block with the transcript, excerpts,
+   file paths, and screenshots, ready to paste into your conversation with the agent.
 
-Inclui ainda: **ditado por voz** (F9, cola direto no app em foco),
-**anotações em tela** (laser/pincel/borracha sobrepostas à gravação) e
-**biblioteca** de sessões com busca full-text.
+Also included: **voice dictation** (F9, pastes directly into the focused app),
+**on-screen annotations** (laser/brush/eraser overlaid on the recording), and a
+searchable full-text session **library**.
 
 ## Stack
 
-- **Electron** (main: janelas, captura, ffmpeg, IPC tipado; renderer: React 19 + Vite + TS)
-- **ffmpeg** para gravação/remux/cortes
-- **Python** (faster-whisper + FastAPI) no backend ASR vendorizado em `asr-backend/`
+- **Electron** (main: windows, capture, ffmpeg, typed IPC; renderer: React 19 + Vite + TS)
+- **ffmpeg** for recording/remux/cuts
+- **Python** (faster-whisper + FastAPI) in the ASR backend vendored at `asr-backend/`
+- **OpenTelemetry** optional (OTLP HTTP metrics/traces)
+- Tests: **Vitest** (IPC contract, paths, session layout, pure engines)
 
-> **Sobre o ASR:** o `asr-backend/` é um **motor de transcrição que roda
-> localmente, no computador do usuário** — o voicecast não é (nem pretende
-> ser) um serviço de IA: não serve modelos para terceiros, não hospeda
-> inferência remota e não envia nada para fora da máquina. O motor é um
-> detalhe de implementação: o roadmap prevê o provedor de transcrição
-> **plugável** (outro modelo local, ou uma API à escolha do usuário).
-- **OpenTelemetry** opcional (métricas/traces OTLP HTTP)
-- Testes: **Vitest** (contrato IPC, paths, layout de sessão, motores puros)
+> **About the ASR:** the `asr-backend/` is a **transcription engine that runs
+> locally, on the user's machine** — voicecast is not (and does not intend to be)
+> an AI-serving product: it does not serve models to third parties, does not host
+> remote inference, and does not send anything off the machine. The engine is an
+> implementation detail: the roadmap includes a **pluggable** transcription
+> provider (another local model, or an API of the user's choice).
 
-## Rodando
+## Running
 
-Requisitos: Node 22+, pnpm 10, ffmpeg no PATH, Python 3.11+ com CUDA
-(opcional — sem GPU o ASR roda em CPU, mais lento).
+Requirements: Node 22+, pnpm 10, ffmpeg on PATH, Python 3.11+ with CUDA
+(optional — without a GPU the ASR runs on CPU, which is slower).
 
 ```bash
-pnpm install          # (--ignore-workspace se estiver num workspace pnpm)
+pnpm install          # (--ignore-workspace if you're inside a pnpm workspace)
 pnpm build            # main + preload + renderer
 
-# Linux (Arch/KDE Wayland — máquina de desenvolvimento atual)
-scripts/setup-asr-backend.sh   # instala o backend ASR (uma vez)
-scripts/run-linux.sh           # sobe o app (VOICECAST_OZONE=wayland p/ modo nativo)
+# Linux (Arch/KDE Wayland — current dev machine)
+scripts/setup-asr-backend.sh   # installs the ASR backend (once)
+scripts/run-linux.sh           # starts the app (VOICECAST_OZONE=wayland for native mode)
 
-# Windows (legado, era WSL — build no WSL, execução no host)
+# Windows (legacy, WSL era — build in WSL, run on the host)
 pnpm dev:win
 ```
 
-Atalhos: **Ctrl+F9** painel · **Ctrl+Shift+F9** gravar tela cheia ·
-**F9** ditado · **Ctrl+Alt+H** painel de anotações.
-No KDE Wayland os atalhos globais exigem binding manual no KCM
-(`kcm_keys`) — o app registra, o KWin não amarra sozinho.
+Shortcuts: **Ctrl+F9** panel · **Ctrl+Shift+F9** record full screen ·
+**F9** dictation · **Ctrl+Alt+H** annotation panel.
+On KDE Wayland, global shortcuts require a manual binding in the KCM
+(`kcm_keys`) — the app registers them, but KWin won't bind them on its own.
 
-### Dados
+### Data
 
-Sessões ficam no userData do Electron, uma pasta por sessão
-(`sessions/YYYY-MM-DD/<hhmm-hash>/` com `session.mp4`, `meta.json`,
+Sessions live in Electron's userData, one folder per session
+(`sessions/YYYY-MM-DD/<hhmm-hash>/` with `session.mp4`, `meta.json`,
 `transcript.json`, `clips/`, `frames/`, `thumbs/`):
 
 - Linux: `~/.config/voicecast/sessions/`
 - Windows: `%APPDATA%\voicecast\sessions\`
 
-Configurações em `settings.json` ao lado (ex.: `asrHost` liga/desliga o
-backend ASR em runtime, liberando a GPU).
+Settings live in `settings.json` next to it (e.g. `asrHost` toggles the
+ASR backend at runtime, freeing up the GPU).
 
-## Desenvolvimento
+## Development
 
 ```bash
-pnpm ci:local   # typecheck + testes + build — o gate de todo commit
+pnpm ci:local   # typecheck + tests + build — the gate for every commit
 pnpm test       # vitest
 ```
 
-A anatomia do projeto (janelas, IPC, storage, convenções de commit) está em
-[AGENTS.md](AGENTS.md); decisões e relatórios por fase em [docs/](docs/).
+The project anatomy (windows, IPC, storage, commit conventions) is in
+[AGENTS.md](AGENTS.md); decisions and per-phase reports in [docs/](docs/).
 
-Planos de trabalho futuro: [ROADMAP.md](ROADMAP.md).
+Future work plans: [ROADMAP.md](ROADMAP.md).
 
-## Licença
+## License
 
 [MIT](LICENSE)

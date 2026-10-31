@@ -1,35 +1,35 @@
 # ROADMAP
 
-Trabalho planejado (o "espaço para crescer"). Concluídos e relatórios por
-fase: [docs/](docs/) e [CHANGELOG.md](CHANGELOG.md).
+Planned work (the "room to grow"). Completed work and per-phase reports:
+[docs/](docs/) and [CHANGELOG.md](CHANGELOG.md).
 
-## Em curso
+## In progress
 
 ### M4 — Polish
-- [ ] Import de sessão externa (arrastar mp4 → biblioteca)
-- [ ] Telemetria OTel: dashboards locais (paridade voice v2) — SDK ✅
-- [ ] Wayland/note: rodada final de QA multi-monitor no modo região
+- [ ] External session import (drag mp4 → library)
+- [ ] OTel telemetry: local dashboards (voice v2 parity) — SDK ✅
+- [ ] Wayland/note: final multi-monitor QA round for region mode
 
-## Próximos
+## Next up
 
-### M3 — Modo ao vivo
-- [ ] Spike → UI: sessão ao vivo consumível pelo agente enquanto grava
-- [ ] Gate Jev: roteamento F9 → julgamento antes de colar (MVP ✅, faltam regras finas)
-- [ ] TTS no painel (feedback falado)
+### M3 — Live mode
+- [ ] Spike → UI: live session consumable by the agent while recording
+- [ ] Jev gate: F9 routing → judgment before pasting (MVP ✅, fine-grained rules still missing)
+- [ ] TTS in the panel (spoken feedback)
 
-### W2 — Correção de transcrição e dataset
-- [x] Motor puro de correção + escrita atômica no corpus
-- [x] Editor: palavra clicável → input inline, preservando timings
-- [x] Painel do dataset (lista/busca/filtro, detalhe com áudio, rotulação)
-- [ ] Fine-tuning consumindo o corpus rotulado (loop treino → avaliação)
+### W2 — Transcription correction and dataset
+- [x] Pure correction engine + atomic writes to the corpus
+- [x] Editor: clickable word → inline input, preserving timings
+- [x] Dataset panel (list/search/filter, detail view with audio, labeling)
+- [ ] Fine-tuning consuming the labeled corpus (training → evaluation loop)
 
-### ASR plugável
-- [ ] Abstrair o provedor de transcrição (hoje: faster-whisper local via `asr-backend/`)
-- [ ] Suportar modelo local alternativo e API externa escolhida pelo usuário
-- [ ] Settings: seleção de provedor/modelo no painel (par do toggle `asrHost`)
+### Pluggable ASR
+- [ ] Abstract the transcription provider (currently: local faster-whisper via `asr-backend/`)
+- [ ] Support an alternative local model and a user-chosen external API
+- [ ] Settings: provider/model selection in the panel (counterpart to the `asrHost` toggle)
 
-### Dívida / qualidade
-- [ ] Empacotamento (electron-builder: AppImage/DEB no Linux, NSIS no Windows)
-- [ ] CI remoto (GitHub Actions) espelhando o `ci:local`
-- [ ] Documentar o contrato IPC (`src/shared/ipc.ts`) gerando referência
-- [ ] Testes E2E do fluxo REC → transcreve → contexto (hoje os E2E são manuais via `--autotest`)
+### Debt / quality
+- [ ] Packaging (electron-builder: AppImage/DEB on Linux, NSIS on Windows)
+- [ ] Remote CI (GitHub Actions) mirroring `ci:local`
+- [ ] Document the IPC contract (`src/shared/ipc.ts`) generating reference docs
+- [ ] E2E tests for the REC → transcribe → context flow (currently E2E is manual via `--autotest`)
