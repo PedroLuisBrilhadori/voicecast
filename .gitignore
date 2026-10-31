@@ -2,5 +2,10 @@ node_modules/
 dist/
 *.log
 .env
+.env.*
+!.env.example
 .DS_Store
 __pycache__/
+asr-backend/voice/models/
+*.pt
+*.bin
