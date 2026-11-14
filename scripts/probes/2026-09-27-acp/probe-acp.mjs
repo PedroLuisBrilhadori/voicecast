@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * probe-acp.mjs — C1 do PLANO-COCKPIT: conversa com o zcode-server pelo
- * stdio (ndjson) e documenta o protocolo REAL (envelope, schemas, eventos).
+ * probe-acp.mjs — C1 of PLANO-COCKPIT: talks to the zcode-server over
+ * stdio (ndjson) and documents the REAL protocol (envelope, schemas, events).
  *
- * Sequência: initialize → session/create {cwd} → send do goal mínimo →
- * espera de turn.*. Transcript completo em probe-log.jsonl (fonte do
- * RESULTADOS.md). Exit 0 se viu turn.completed (ou equivalente).
+ * Sequence: initialize → session/create {cwd} → send the minimal goal →
+ * wait for turn.*. Full transcript in probe-log.jsonl (source of
+ * RESULTADOS.md). Exit 0 if it saw turn.completed (or equivalent).
  *
- * Uso: node probe-acp.mjs [--cwd DIR] [--goal "texto"]
- * Env: ZCODE_SERVER_NODE / ZCODE_SERVER_CJS (defaults de ~/.zcode).
+ * Usage: node probe-acp.mjs [--cwd DIR] [--goal "text"]
+ * Env: ZCODE_SERVER_NODE / ZCODE_SERVER_CJS (defaults from ~/.zcode).
  */
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
@@ -51,9 +51,9 @@ const onLine = (line) => {
   try {
     msg = JSON.parse(line);
   } catch {
-    return; // linha não-JSON (banner etc.)
+    return; // non-JSON line (banner etc.)
   }
-  // handshake: o server saúda primeiro; cliente responde zcode-hello-ack
+  // handshake: the server greets first; client replies with zcode-hello-ack
   if (msg.type === "zcode-hello" && !helloAcked) {
     helloAcked = true;
     send({ type: "zcode-hello-ack", version: "1.0.0-voicecast-probe", clientId: "voicecast-probe" });
@@ -98,12 +98,12 @@ const rpc = (method, params, timeoutMs = 20000) =>
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// ── sequência do probe ─────────────────────────────────────────
+// ── probe sequence ─────────────────────────────────────────────
 console.log(`# probe-acp · server=${CJS}\n# cwd=${CWD} · goal="${GOAL}"`);
 
-await sleep(1500); // linhas espontâneas (banner/hello?)
+await sleep(1500); // spontaneous lines (banner/hello?)
 
-// varre candidatos de entrada — quem responder define a superfície viva
+// sweep entry-point candidates — whoever answers defines the live surface
 const candidates = [
   ["runtime/capabilities", {}],
   ["session/list", {}],
@@ -117,7 +117,7 @@ for (const [m, p] of candidates) {
   if (ok) alive.push(m);
 }
 if (!alive.length) {
-  console.log("\n# nenhum método respondeu — transcript acima é a evidência");
+  console.log("\n# no method answered — the transcript above is the evidence");
   child.kill();
   process.exit(2);
 }
@@ -127,7 +127,7 @@ console.log(`\n== session/create → ${JSON.stringify(created).slice(0, 400)}`);
 const sessionId = created?.result?.sessionId ?? created?.result?.id ?? null;
 
 if (!sessionId) {
-  console.log("\n# sem sessionId — transcript acima documenta o schema de create");
+  console.log("\n# no sessionId — the transcript above documents the create schema");
   child.kill();
   process.exit(2);
 }
@@ -136,10 +136,10 @@ await rpc("session/subscribe", { sessionId }).catch(() => {});
 const sent = await rpc("session/send", { sessionId, text: GOAL });
 console.log(`\n== session/send → ${JSON.stringify(sent).slice(0, 400)}`);
 
-// espera eventos de turno (até 90s)
+// wait for turn events (up to 90s)
 const deadline = Date.now() + 90_000;
 while (!sawTurnCompleted && Date.now() < deadline) await sleep(1000);
 
-console.log(`\n== fim · sawTurnCompleted=${sawTurnCompleted} · eventos vistos: ${[...new Set(lastEvents)].join(", ") || "(nenhum)"}`);
+console.log(`\n== end · sawTurnCompleted=${sawTurnCompleted} · events seen: ${[...new Set(lastEvents)].join(", ") || "(none)"}`);
 child.kill();
 process.exit(sawTurnCompleted ? 0 : 2);

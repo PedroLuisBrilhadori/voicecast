@@ -1,8 +1,8 @@
-"""Camada de plataforma do voice-dictation.
+"""Platform layer of voice-dictation.
 
-`get_backend()` devolve um `Backend` imutável com as funções específicas de
-SO usadas pelo daemon/ASR. O resto do código é agnóstico — a seleção é feita
-por `sys.platform` ("win32" → win32; qualquer outro → linux).
+`get_backend()` returns an immutable `Backend` with the OS-specific functions
+used by the daemon/ASR. The rest of the code is agnostic — selection is done
+by `sys.platform` ("win32" → win32; anything else → linux).
 """
 
 from __future__ import annotations

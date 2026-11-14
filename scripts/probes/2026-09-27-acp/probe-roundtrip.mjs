@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * probe-roundtrip.mjs — C2 de-risk: roundtrip REAL contra o zcode-server
- * (initialize → createSession → sendText → eventos de turno).
+ * probe-roundtrip.mjs — C2 de-risk: REAL roundtrip against the zcode-server
+ * (initialize → createSession → sendText → turn events).
  *
- * Protocolo decodificado no probe-acp (RESULTADOS.md): handshake ndjson
- * (zcode-hello/ack) + framing binário VS Code (13B) + payload vscode-rpc
- * (2 valores serializados: header array + body). Este arquivo carrega uma
- * cópia mínima do serializer — a fonte da verdade testável é
+ * Protocol decoded in probe-acp (RESULTADOS.md): ndjson handshake
+ * (zcode-hello/ack) + VS Code binary framing (13B) + vscode-rpc payload
+ * (2 serialized values: header array + body). This file carries a
+ * minimal copy of the serializer — the testable source of truth is
  * src/main/agent/protocol.ts (+ tests/agent-protocol.test.ts).
  *
- * Uso: node probe-roundtrip.mjs [--cwd DIR] [--goal "texto"]
- * Exit: 0 = turn.completed observado · 2 = evidência coletada, sem turn.
+ * Usage: node probe-roundtrip.mjs [--cwd DIR] [--goal "text"]
+ * Exit: 0 = turn.completed observed · 2 = evidence collected, no turn.
  */
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -26,7 +26,7 @@ const rec = (dir, data) => {
   if (s && s.length < 400) console.log(`${dir === "in" ? "◀" : "▶"} ${s}`);
 };
 
-// ── cópia mínima do serializer (espelho de src/main/agent/protocol.ts) ──
+// ── minimal copy of the serializer (mirror of src/main/agent/protocol.ts) ──
 const TAG = { UNDEFINED: 0, STRING: 1, BUFFER: 2, VSBUFFER: 3, ARRAY: 4, OBJECT: 5, INT: 6 };
 const vql = (n) => {
   const out = [];
@@ -52,7 +52,7 @@ function deser(buf, cur) {
   if (tag === TAG.ARRAY) { const n = readVql(buf, cur); const a = []; for (let i = 0; i < n; i++) a.push(deser(buf, cur)); return a; }
   if (tag === TAG.INT) return readVql(buf, cur);
   if (tag === TAG.OBJECT) { const n = readVql(buf, cur); const v = JSON.parse(buf.subarray(cur.o, cur.o + n).toString("utf8")); cur.o += n; return v; }
-  throw new Error(`tag rpc desconhecida: ${tag} @${cur.o - 1}`);
+  throw new Error(`unknown rpc tag: ${tag} @${cur.o - 1}`);
 }
 function readVql(buf, cur) {
   let value = 0, n = 0;
@@ -66,11 +66,11 @@ const writeFrame = (payload, type = 1) => {
   return f;
 };
 const rpcFrame = (header, body) => writeFrame(serializeRpc(header, body));
-// body = ARRAY de args posicionais (fromService faz target.apply(handler, args))
+// body = ARRAY of positional args (fromService does target.apply(handler, args))
 const requestFrame = (id, channel, method, arg) => rpcFrame([100, id, channel, method], [arg]);
 const listenFrame = (id, channel, event, arg) => rpcFrame([102, id, channel, event], [arg]);
 
-// ── sessão com o server ────────────────────────────────────────
+// ── session with the server ────────────────────────────────────
 const argv = process.argv.slice(2);
 const flag = (name, dflt) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : dflt; };
 const CWD = flag("--cwd", path.join(os.homedir(), "programing/projetos"));
@@ -112,13 +112,13 @@ const onFrames = () => {
     const cur = { o: 0 };
     let header, payload;
     try { header = deser(body, cur); payload = deser(body, cur); }
-    catch (e) { rec("err", `deser falhou: ${e.message}`); continue; }
+    catch (e) { rec("err", `deser failed: ${e.message}`); continue; }
     const [type, id, channel, name] = header;
     if (type === 100) rec("in", { srvRequest: name, id, channel, args: payload });
     if (type === 201 || type === 202 || type === 203 || type === 204) rec("in", { type, id, data: payload });
     if (type === 204 && listeners.has(id)) listeners.get(id)(payload);
     if (pending.has(id)) { const p = pending.get(id); pending.delete(id); p.resolve({ type, data: payload }); }
-    // direção reversa: o server age como cliente — responde requests dele
+    // reverse direction: the server acts as a client — answer its requests
     if (type === 100) {
       if (name === "session/requestRuntimePreferences") {
         const result = {
@@ -128,10 +128,10 @@ const onFrames = () => {
           modelContextBudgetStrategy: "preflight-v1",
         };
         send(rpcFrame([201, id], result));
-        rec("out", `respondido requestRuntimePreferences id=${id}`);
+        rec("out", `answered requestRuntimePreferences id=${id}`);
       } else {
-        send(rpcFrame([202, id], { message: `voicecast-probe: método reverso não suportado: ${name}` }));
-        rec("out", `negado request reverso ${name} id=${id}`);
+        send(rpcFrame([202, id], { message: `voicecast-probe: unsupported reverse method: ${name}` }));
+        rec("out", `denied reverse request ${name} id=${id}`);
       }
     }
     const str = JSON.stringify(payload) ?? "";
@@ -147,7 +147,7 @@ child.stdout.on("data", (chunk) => {
     frameBuf = Buffer.from(helloBuf.subarray(nl + 1));
     helloDone = true;
     rec("in", line);
-    // ack é LINHA ndjson crua (waitForAck lê até \n) — só depois vira binário
+    // ack is a RAW ndjson line (waitForAck reads up to \n) — binary only after that
     child.stdin.write(JSON.stringify({ type: "zcode-hello-ack", version: "1.0.0-voicecast", clientId: "voicecast-roundtrip" }) + "\n");
     rec("out", "zcode-hello-ack (ndjson)");
     onFrames();
@@ -161,9 +161,9 @@ child.stderr.on("data", (d) => {
   if (/stdio mode ready|Provider Registry|client connected/.test(l)) console.log(`  [srv] ${l.trim().slice(0, 120)}`);
   rec("err-srv", l.slice(0, 500));
 });
-child.on("exit", (code) => { rec("exit", `code=${code}`); console.log(`\n== fim · sawTurn=${sawTurn}`); process.exit(sawTurn ? 0 : 2); });
+child.on("exit", (code) => { rec("exit", `code=${code}`); console.log(`\n== end · sawTurn=${sawTurn}`); process.exit(sawTurn ? 0 : 2); });
 
-// Initialize ([200]) assim que o hello for respondido
+// Initialize ([200]) as soon as the hello is acked
 const waitReady = new Promise((r) => {
   const t = setInterval(() => { if (helloDone) { clearInterval(t); r(); } }, 50);
 });
@@ -173,25 +173,25 @@ send(rpcFrame([200], undefined));
 await new Promise((r) => setTimeout(r, 300));
 
 console.log(`# roundtrip · cwd=${CWD} · goal="${GOAL}"`);
-// nível de SERVIÇO (canal zcode-agent): createSession {workspacePath} → sendPrompt {sessionId, workspacePath, text}
+// SERVICE level (zcode-agent channel): createSession {workspacePath} → sendPrompt {sessionId, workspacePath, text}
 const created = await request("zcode-agent", "createSession", { workspacePath: CWD }, 45000);
-console.log(`\n== createSession → tipo ${created.type ?? "?"}: ${JSON.stringify(created).slice(0, 700)}`);
+console.log(`\n== createSession → type ${created.type ?? "?"}: ${JSON.stringify(created).slice(0, 700)}`);
 
 if (created.type !== 201) {
-  console.log("\n# createSession não aceitou — evidência acima (erro orienta o próximo passo)");
+  console.log("\n# createSession not accepted — evidence above (the error points to the next step)");
   child.kill();
   process.exit(2);
 }
 const d = created.data ?? {};
 const sessionId = d.sessionId ?? d.session?.id ?? d.snapshot?.session?.id ?? null;
-console.log(`\n== sessionId extraído: ${sessionId} (keys: ${Object.keys(d).join(",")})`);
+console.log(`\n== sessionId extracted: ${sessionId} (keys: ${Object.keys(d).join(",")})`);
 
-// tenta assinar eventos da conversa (nome/arg exatos são descoberta do probe)
+// tries to subscribe to conversation events (exact name/args are probe discoveries)
 const sub = await request("zcode-agent", "v4/conversation/subscribe", { sessionId }, 8000);
-console.log(`== subscribe → tipo ${sub.type}: ${JSON.stringify(sub.data).slice(0, 300)}`);
+console.log(`== subscribe → type ${sub.type}: ${JSON.stringify(sub.data).slice(0, 300)}`);
 
 const sent = await request("zcode-agent", "sendPrompt", { sessionId, workspacePath: CWD, text: GOAL }, 45000);
-console.log(`== sendPrompt → tipo ${sent.type}: ${JSON.stringify(sent.data).slice(0, 500)}`);
+console.log(`== sendPrompt → type ${sent.type}: ${JSON.stringify(sent.data).slice(0, 500)}`);
 
 const deadline = Date.now() + 90_000;
 while (!sawTurn && Date.now() < deadline) await new Promise((r) => setTimeout(r, 1000));

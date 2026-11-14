@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""atalho-ditado — vigia evdev do F9 que dispara o toggle do voicecast.
+"""atalho-ditado — evdev watcher for the F9 key that triggers the voicecast toggle.
 
-O portal de GlobalShortcuts do KDE Wayland não é determinístico com Electron
-(register ok=true, KWin não amarra a tecla) — este watcher lê o F9 DIRETO do
-evdev (read-only, sem grab: o teclado segue normal pra todo o sistema) e
-executa `kde-toggle.sh ditado` (2ª instância sinaliza a viva e sai).
+The KDE Wayland GlobalShortcuts portal is not deterministic with Electron
+(register ok=true, KWin never binds the key) — this watcher reads F9 DIRECTLY
+from evdev (read-only, no grab: the keyboard keeps working normally for the
+whole system) and runs `kde-toggle.sh ditado` (2nd instance signals the live
+one and exits).
 
-Modos: (default) vigia · --check (pré-requisitos, read-only) · --selftest.
-Exit: 0 ok · 1 erro · 2 pré-requisito ausente.
+Modes: (default) watch · --check (prerequisites, read-only) · --selftest.
+Exit: 0 ok · 1 error · 2 missing prerequisite.
 """
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ EVIOCGBIT_KEY = _ioc(ord("E"), 0x20 + EV_KEY, 96)
 
 
 def teclados() -> list[str]:
-    """Paths de devices com cara de teclado (KEY_A/KEY_ENTER/KEY_SPACE)."""
+    """Paths of devices that look like keyboards (KEY_A/KEY_ENTER/KEY_SPACE)."""
     out: list[str] = []
     for path in sorted(glob.glob("/dev/input/event*")):
         try:
@@ -76,7 +77,7 @@ def vigia(log=print) -> int:
     fds: dict[int, str] = {}
     ultimo = 0.0
     ultimo_scan = 0.0
-    log(f"vigia F9 ativo → {KDE_TOGGLE} ditado")
+    log(f"F9 watcher active → {KDE_TOGGLE} ditado")
     while True:
         agora = time.monotonic()
         if agora - ultimo_scan >= 5.0:
@@ -115,18 +116,18 @@ def vigia(log=print) -> int:
                 if ev_tipo == EV_KEY and codigo == KEY_F9 and valor == 1:
                     if time.monotonic() - ultimo >= DEBOUNCE_S:
                         ultimo = time.monotonic()
-                        log("F9 → toggle ditado")
+                        log("F9 → ditado toggle")
                         dispara()
 
 
 def cmd_check() -> int:
     t = teclados()
     ok_grp = bool(t)
-    print(f"[{'✓' if ok_grp else '✗'}] teclados evdev legíveis: {len(t)}")
+    print(f"[{'✓' if ok_grp else '✗'}] evdev keyboards readable: {len(t)}")
     ok_bin = os.access(KDE_TOGGLE, os.X_OK)
-    print(f"[{'✓' if ok_bin else '✗'}] kde-toggle.sh executável: {KDE_TOGGLE}")
+    print(f"[{'✓' if ok_bin else '✗'}] kde-toggle.sh executable: {KDE_TOGGLE}")
     falha = not (ok_grp and ok_bin)
-    print("CHECK: " + ("FALHOU (grupo input? relogin)" if falha else "ok"))
+    print("CHECK: " + ("FAILED (input group? re-login)" if falha else "ok"))
     return 2 if falha else 0
 
 
@@ -137,7 +138,7 @@ def selftest() -> int:
     assert (t, c, v) == (EV_KEY, KEY_F9, 1), "pack/unpack F9"
     ev0 = _INPUT_EVENT.pack(0, 0, EV_KEY, KEY_F9, 0)
     assert _INPUT_EVENT.unpack(ev0)[4] == 0, "release"
-    assert os.path.exists(KDE_TOGGLE), "kde-toggle.sh ausente"
+    assert os.path.exists(KDE_TOGGLE), "kde-toggle.sh missing"
     print("SELFTEST: ok")
     return 0
 

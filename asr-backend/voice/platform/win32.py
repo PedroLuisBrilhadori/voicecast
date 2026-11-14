@@ -1,12 +1,12 @@
-"""Backend Windows — código Win32 (ctypes) do ditado por voz.
+"""Windows backend — Win32 (ctypes) code of the voice dictation.
 
-Movido VERBATIM de dictation_daemon.py (2026-08): SendInput (struct INPUT
-com union — cbSize 40 no x64), clipboard CF_UNICODETEXT, focus_window sem
-"ALT trick", WM_PASTE, UIA como diagnóstico, GetAsyncKeyState para a hotkey,
-kernel32.Beep e overlay do painel via PowerShell + msedge --app.
+Moved VERBATIM from dictation_daemon.py (2026-08): SendInput (INPUT struct
+with union — cbSize 40 on x64), CF_UNICODETEXT clipboard, focus_window without
+the "ALT trick", WM_PASTE, UIA as diagnostics, GetAsyncKeyState for the hotkey,
+kernel32.Beep and the panel overlay via PowerShell + msedge --app.
 
-Qualquer regressão no Windows: comparar com o histórico do arquivo
-dictation_daemon.py antes da refatoração platform/.
+Any regression on Windows: compare against the history of the
+dictation_daemon.py file before the platform/ refactor.
 """
 
 from __future__ import annotations
@@ -78,8 +78,8 @@ class _INPUTUNION(ctypes.Union):
 
 
 class INPUT(ctypes.Structure):
-    """Struct INPUT do Win32 (x64 = 40 bytes). Sem a union, o cbSize fica 32
-    (errado) e o SendInput falha com ERROR_INVALID_PARAMETER (retorna 0)."""
+    """Win32 INPUT struct (x64 = 40 bytes). Without the union, cbSize becomes 32
+    (wrong) and SendInput fails with ERROR_INVALID_PARAMETER (returns 0)."""
     _anonymous_ = ("u",)
     _fields_ = [("type", ctypes.c_ulong), ("u", _INPUTUNION)]
 
@@ -94,7 +94,7 @@ def _input(vk: int, scan: int, flags: int) -> INPUT:
 
 
 def _send_input(events: list[INPUT]) -> int:
-    """Envia eventos de teclado via SendInput. Retorna quantos foram aceitos."""
+    """Sends keyboard events via SendInput. Returns how many were accepted."""
     n = len(events)
     if n == 0:
         return 0
@@ -111,7 +111,7 @@ def key_up(vk: int) -> None:
 
 
 def type_unicode(text: str) -> None:
-    """Digita texto caractere a caractere via KEYEVENTF_UNICODE (teclado real)."""
+    """Types text character by character via KEYEVENTF_UNICODE (real keyboard)."""
     events: list[INPUT] = []
     for ch in text:
         scan = ord(ch)
@@ -125,7 +125,7 @@ def scan_code(vk: int) -> int:
 
 
 def send_ctrl_v() -> int:
-    """Ctrl+V com scan codes. Retorna quantos eventos o Windows aceitou (4 = ok)."""
+    """Ctrl+V with scan codes. Returns how many events Windows accepted (4 = ok)."""
     sc_ctrl = scan_code(VK_CONTROL)
     sc_v = scan_code(VK_V)
     events = [
@@ -146,13 +146,13 @@ VK_SHIFT = 0x10
 
 
 def shift_pressed() -> bool:
-    """Estado GLOBAL do Shift (independe da janela em foco) — Shift+F9 abre o
-    painel sem gravar. Mesma janela de polling do F9 (~12ms)."""
+    """GLOBAL Shift state (independent of the focused window) — Shift+F9 opens
+    the panel without recording. Same polling window as F9 (~12ms)."""
     return bool(user32.GetAsyncKeyState(VK_SHIFT) & 0x8000)
 
 
 def ctrl_pressed() -> bool:
-    """Estado GLOBAL do Ctrl — combos com Ctrl pertencem ao voicecast (v2)."""
+    """GLOBAL Ctrl state — Ctrl combos belong to voicecast (v2)."""
     return bool(user32.GetAsyncKeyState(VK_CONTROL) & 0x8000)
 
 
@@ -160,13 +160,13 @@ def beep(freq: int, ms: int) -> None:
     kernel32.Beep(freq, ms)
 
 
-# ── Foco / janela alvo ────────────────────────────────────────────
+# ── Focus / target window ─────────────────────────────────────────
 def foreground_hwnd() -> int:
     return int(user32.GetForegroundWindow())
 
 
 def window_info(hwnd: int) -> str:
-    """'título (pid)' da janela — para diagnóstico."""
+    """'title (pid)' of the window — for diagnostics."""
     try:
         length = user32.GetWindowTextLengthW(hwnd) + 1
         buf = ctypes.create_unicode_buffer(length)
@@ -179,11 +179,11 @@ def window_info(hwnd: int) -> str:
 
 
 def focus_window(hwnd: int) -> bool:
-    """Garante que hwnd é a janela foreground.
+    """Makes sure hwnd is the foreground window.
 
-    Se já é foreground, não faz nada (evita ALT/menus). Caso contrário usa
-    AttachThreadInput + BringWindowToTop + SetForegroundWindow — sem o "ALT
-    trick", que ativa a barra de menu em apps como o Notepad e desvia o input.
+    If it's already foreground, does nothing (avoids ALT/menus). Otherwise uses
+    AttachThreadInput + BringWindowToTop + SetForegroundWindow — without the
+    "ALT trick", which activates the menu bar in apps like Notepad and hijacks input.
     """
     if not hwnd:
         return False
@@ -203,12 +203,12 @@ def focus_window(hwnd: int) -> bool:
                 user32.AttachThreadInput(cur_tid, target_tid, False)
         return user32.GetForegroundWindow() == hwnd
     except Exception:
-        log.exception("focus_window falhou")
+        log.exception("focus_window failed")
         return False
 
 
 def pid_alive(pid: int) -> bool:
-    """True se o processo Windows com este PID ainda existe (via OpenProcess)."""
+    """True if the Windows process with this PID still exists (via OpenProcess)."""
     if pid <= 0:
         return False
     try:
@@ -225,9 +225,9 @@ def pid_alive(pid: int) -> bool:
         return False
 
 
-# ── Clipboard / colagem ───────────────────────────────────────────
-# tipos Win32 para ponteiros (GlobalAlloc/GlobalLock devolvem HGLOBAL 64-bit;
-# sem restype/argtypes o ctypes trunca para c_int e corrompe o handle)
+# ── Clipboard / pasting ───────────────────────────────────────────
+# Win32 types for pointers (GlobalAlloc/GlobalLock return 64-bit HGLOBAL;
+# without restype/argtypes ctypes truncates to c_int and corrupts the handle)
 kernel32.GlobalAlloc.restype = ctypes.c_void_p
 kernel32.GlobalAlloc.argtypes = [ctypes.c_uint, ctypes.c_size_t]
 kernel32.GlobalLock.restype = ctypes.c_void_p
@@ -240,10 +240,10 @@ user32.SetClipboardData.restype = ctypes.c_void_p
 
 
 def set_clipboard(text: str) -> bool:
-    """Coloca texto no clipboard via API Win32 (CF_UNICODETEXT), sem clip.exe."""
+    """Puts text on the clipboard via the Win32 API (CF_UNICODETEXT), no clip.exe."""
     try:
         if not user32.OpenClipboard(None):
-            log.warning("OpenClipboard falhou")
+            log.warning("OpenClipboard failed")
             return False
         try:
             user32.EmptyClipboard()
@@ -264,18 +264,18 @@ def set_clipboard(text: str) -> bool:
         finally:
             user32.CloseClipboard()
     except Exception:
-        log.exception("set_clipboard falhou")
+        log.exception("set_clipboard failed")
         return False
 
 
 def _paste_clipboard(text: str) -> str:
-    """clipboard Win32 + Ctrl+V com scan codes. Retorna 'ok' ou 'falha'."""
+    """Win32 clipboard + Ctrl+V with scan codes. Returns 'ok' or 'fail'."""
     if not set_clipboard(text):
         return "clipboard-set-falhou"
     n = send_ctrl_v()
     if n >= 4:
         return "clipboard"
-    log.warning("Ctrl+V entregou %d/4 eventos", n)
+    log.warning("Ctrl+V delivered %d/4 events", n)
     return "ctrl-v-bloqueado"
 
 
@@ -299,8 +299,8 @@ class GUITHREADINFO(ctypes.Structure):
 
 
 def _paste_wm(text: str, hwnd: int) -> str:
-    """Ultimo recurso: WM_PASTE direto no controle em foco da janela alvo
-    (apps que ignoram teclado sintetizado). Requer foco na janela."""
+    """Last resort: WM_PASTE straight to the focused control of the target window
+    (apps that ignore synthesized keyboard input). Requires window focus."""
     if not set_clipboard(text):
         return "wm-clipboard-falhou"
     try:
@@ -309,19 +309,19 @@ def _paste_wm(text: str, hwnd: int) -> str:
         info.cbSize = ctypes.sizeof(GUITHREADINFO)
         tid = user32.GetWindowThreadProcessId(hwnd, None)
         if not user32.GetGUIThreadInfo(tid, ctypes.byref(info)):
-            log.warning("GetGUIThreadInfo falhou - WM_PASTE na janela raiz")
+            log.warning("GetGUIThreadInfo failed - WM_PASTE on the root window")
             user32.SendMessageW(hwnd, WM_PASTE, 0, 0)
             return "wm_paste"
         child = int(info.hwndFocus) or hwnd
         res = user32.SendMessageW(child, WM_PASTE, 0, 0)
         return "wm_paste" if res else "wm-paste-falhou"
     except Exception:
-        log.exception("WM_PASTE falhou")
+        log.exception("WM_PASTE failed")
         return "wm-paste-falhou"
 
 
 def _focused_text() -> str:
-    """Texto do controle em foco via UIAutomation. Vazio se indisponível."""
+    """Text of the focused control via UIAutomation. Empty if unavailable."""
     try:
         import uiautomation as auto
 
@@ -342,63 +342,63 @@ def _focused_text() -> str:
 
 
 def paste_into_focused(text: str, mode: str, target_hwnd: int) -> str:
-    """Insere o texto na janela alvo. Retorna o modo efetivamente usado.
+    """Inserts the text into the target window. Returns the mode actually used.
 
-    Uma unica insercao por ditado: se o Ctrl+V foi entregue (4/4) assumimos
-    sucesso. NAO re-digitamos via unicode com base em heuristica UIA — apps
-    Electron (Discord) nao expoem o conteudo e a checagem gerava duplicacao.
+    A single insertion per dictation: if Ctrl+V was delivered (4/4) we assume
+    success. We do NOT re-type via unicode based on UIA heuristics — Electron
+    apps (Discord) don't expose their content and the check caused duplication.
     """
-    log.info("alvo da insercao: %s", window_info(target_hwnd))
+    log.info("insertion target: %s", window_info(target_hwnd))
 
     if mode == "unicode":
         return _paste_unicode(text)
 
-    # refoca a janela alvo antes de inserir (no-op se ja e foreground)
+    # refocuses the target window before inserting (no-op if already foreground)
     if target_hwnd:
         focus_window(target_hwnd)
         time.sleep(0.05)
 
     used = _paste_clipboard(text)
     if used == "clipboard":
-        # Ctrl+V foi aceito pelo sistema (4/4 eventos) — confia na entrega.
-        # Registra o que o UIA reporta so para diagnostico, sem decidir.
+        # Ctrl+V was accepted by the system (4/4 events) — trust the delivery.
+        # Logs what UIA reports for diagnostics only, without deciding.
         after = _focused_text()
         if after and text and text.strip() not in after:
-            log.warning("UIA nao confirmou o texto (diagnostico, sem fallback)")
+            log.warning("UIA did not confirm the text (diagnostic, no fallback)")
         return used
 
-    # clipboard falhou de fato (set ou Ctrl+V) -> unicode
-    log.warning("clipboard %s - fallback unicode", used)
+    # clipboard actually failed (set or Ctrl+V) -> unicode
+    log.warning("clipboard %s - unicode fallback", used)
     used = _paste_unicode(text)
     if mode == "unicode":
         return used
-    # ultimo recurso: WM_PASTE direto ao controle em foco
+    # last resort: WM_PASTE straight to the focused control
     if target_hwnd:
         used_wm = _paste_wm(text, target_hwnd)
         if used_wm == "wm_paste":
             return used_wm
-        log.warning("WM_PASTE %s - mantem unicode", used_wm)
+        log.warning("WM_PASTE %s - keeping unicode", used_wm)
     return used
 
 
-# ── Overlay do painel ─────────────────────────────────────────────
+# ── Panel overlay ─────────────────────────────────────────────────
 PANEL_URL = "http://127.0.0.1:8700"
-# fragmento do título da página (web/index.html: "Dictação por Voz") —
-# mesmo match que o antigo PS '*Voz*'
+# page title fragment (web/index.html: "Dictação por Voz") —
+# same match as the old PS '*Voz*'
 _PANEL_TITLE_FRAGMENT = "Voz"
 
 PANEL_W_COMPACT, PANEL_H_COMPACT = 860, 400
 PANEL_W_EXPANDED, PANEL_H_EXPANDED = 860, 880
-# largura acoplada a: web/src/App.tsx (resizeWindow) e platform/linux.py
+# width coupled to: web/src/App.tsx (resizeWindow) and platform/linux.py
 
 _ENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
 
 
 def _find_panel_hwnd() -> int:
-    """hwnd da janela do painel (título contém o fragmento) — 0 se não achar.
+    """hwnd of the panel window (title contains the fragment) — 0 if not found.
 
-    EnumWindows direto (ctypes) no lugar de Get-Process/MainWindowTitle: mais
-    rápido e sem depender de PowerShell para o caminho quente do F9.
+    Direct EnumWindows (ctypes) instead of Get-Process/MainWindowTitle: faster
+    and without depending on PowerShell for the F9 hot path.
     """
     found: list[int] = []
 
@@ -413,7 +413,7 @@ def _find_panel_hwnd() -> int:
             user32.GetWindowTextW(hwnd, buf, n + 1)
             if _PANEL_TITLE_FRAGMENT in buf.value:
                 found.append(int(hwnd))
-                return 0  # para a enumeração
+                return 0  # stop the enumeration
         except Exception:
             pass
         return 1
@@ -421,13 +421,13 @@ def _find_panel_hwnd() -> int:
     try:
         user32.EnumWindows(_ENUMPROC(_cb), None)
     except Exception:
-        log.exception("EnumWindows falhou")
+        log.exception("EnumWindows failed")
     return found[0] if found else 0
 
 
 def _move_panel(hwnd: int, w: int, h: int, reapply: bool = False) -> None:
-    """MoveWindow em (80,80). O Edge pode reaplicar bounds restaurados depois
-    do layout pronto — com reapply, repete após 500ms."""
+    """MoveWindow to (80,80). Edge may reapply restored bounds after the
+    layout is ready — with reapply, repeats after 500ms."""
     user32.MoveWindow(hwnd, 80, 80, w, h, True)
     if reapply:
         time.sleep(0.5)
@@ -435,12 +435,13 @@ def _move_panel(hwnd: int, w: int, h: int, reapply: bool = False) -> None:
 
 
 def _spawn_edge_app(w: int, h: int) -> None:
-    """Abre msedge --app (primeira abertura). PowerShell SÓ aqui — o foco da
-    janela depois é feito em Python (focus_window).
+    """Opens msedge --app (first opening). PowerShell ONLY here — the window
+    focus afterwards is done in Python (focus_window).
 
-    Perfil dedicado (edge-profile): sem ele, o Start-Process ENTREGA o comando
-    para a instância residente do Edge (StartupBoost mantém procs vivos sem
-    janela) e não honra --window-size nem separa das janelas normais.
+    Dedicated profile (edge-profile): without it, Start-Process HANDS the
+    command over to the resident Edge instance (StartupBoost keeps procs alive
+    without a window) and neither honors --window-size nor separates from
+    normal windows.
     """
     profile_dir = os.path.join(APP_DIR, "edge-profile")
     ps = (
@@ -459,14 +460,14 @@ def _spawn_edge_app(w: int, h: int) -> None:
 
 
 def show_panel_window(expanded: bool = False) -> None:
-    """Traz a janela do painel à frente; abre em modo app se não existir.
+    """Brings the panel window to the front; opens in app mode if absent.
 
-    Chamado no F9/Shift+F9 e quando a gravação começa. Falha silenciosa —
-    nunca pode atrapalhar o ditado.
+    Called on F9/Shift+F9 and when recording starts. Silent failure —
+    must never get in the way of dictation.
 
-    Foco via focus_window (AttachThreadInput + SetForegroundWindow — mesma
-    técnica do paste): SwitchToThisWindow puro é ignorado pelo foreground lock
-    do Windows quando o chamador está em background → só piscava na taskbar.
+    Focus via focus_window (AttachThreadInput + SetForegroundWindow — same
+    technique as paste): plain SwitchToThisWindow is ignored by the Windows
+    foreground lock when the caller is in the background → it just flashed on the taskbar.
     """
     w, h = (
         (PANEL_W_EXPANDED, PANEL_H_EXPANDED)
@@ -477,49 +478,49 @@ def show_panel_window(expanded: bool = False) -> None:
         hwnd = _find_panel_hwnd()
         if not hwnd:
             _spawn_edge_app(w, h)
-            # espera a janela surgir (poll 100ms, até 6s)
+            # waits for the window to appear (100ms poll, up to 6s)
             for _ in range(60):
                 time.sleep(0.1)
                 hwnd = _find_panel_hwnd()
                 if hwnd:
                     break
         if not hwnd:
-            log.warning("janela do painel nao encontrada apos spawn")
+            log.warning("panel window not found after spawn")
             return
         if not focus_window(hwnd):
-            # foreground ainda negado (raro) — último recurso antes do flash
-            log.info("focus_window negou; fallback SwitchToThisWindow")
+            # foreground still denied (rare) — last resort before the flash
+            log.info("focus_window denied; SwitchToThisWindow fallback")
             try:
                 user32.SwitchToThisWindow(hwnd, True)
             except Exception:
                 pass
         _move_panel(hwnd, w, h, reapply=True)
     except Exception:
-        log.exception("show_panel_window falhou (ignorado)")
+        log.exception("show_panel_window failed (ignored)")
 
 
 def resize_panel_window(width: int, height: int) -> None:
-    """Redimensiona a janela do painel (compacto ↔ expandido) via MoveWindow
-    direto — sem subprocess PowerShell (era ~200ms por toggle de layout)."""
+    """Resizes the panel window (compact ↔ expanded) via direct MoveWindow —
+    no PowerShell subprocess (used to be ~200ms per layout toggle)."""
     try:
         hwnd = _find_panel_hwnd()
         if hwnd:
             user32.MoveWindow(hwnd, 80, 80, int(width), int(height), True)
     except Exception:
-        log.exception("resize_panel_window falhou (ignorado)")
+        log.exception("resize_panel_window failed (ignored)")
 
 
-# ── Spawn do ASR (auto-retry do daemon) ───────────────────────────
-# Mesmas decisões do supervisor.py: cwd "C:\" (cwd UNC/WSL quebra o cmd.exe)
-# e CREATE_NO_WINDOW para nenhum console piscar quando o daemon respawnar
-# o serviço. O trampoline do uv é tratado pelo próprio daemon (pidfile/porta).
+# ── ASR spawn (daemon auto-retry) ─────────────────────────────────
+# Same decisions as supervisor.py: cwd "C:\" (UNC/WSL cwd breaks cmd.exe)
+# and CREATE_NO_WINDOW so no console flashes when the daemon respawns
+# the service. The uv trampoline is handled by the daemon itself (pidfile/port).
 SPAWN_CWD = "C:\\"
 
 
 def asr_command() -> list[str] | None:
     exe = venv_python()
     if not os.path.exists(exe):
-        log.error("venv não encontrado para spawn do ASR: %s", exe)
+        log.error("venv not found for ASR spawn: %s", exe)
         return None
     return [exe, "-m", "voice.asr_service", "--port", "8701"]
 

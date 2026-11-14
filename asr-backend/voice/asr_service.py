@@ -1,22 +1,22 @@
-"""ASR/TTS service local — fastapi + faster-whisper na RTX 3050.
+"""Local ASR/TTS service — fastapi + faster-whisper on the RTX 3050.
 
 Endpoints:
-  POST /v1/transcribe  multipart áudio (file) + ?model= -> {text, language, segments}
-  POST /v1/tts         {"text": "..."}                  -> wav (System.Speech no
-                                                          Windows; espeak-ng pt-BR no Linux)
+  POST /v1/transcribe  multipart audio (file) + ?model= -> {text, language, segments}
+  POST /v1/tts         {"text": "..."}                  -> wav (System.Speech on
+                                                          Windows; espeak-ng pt-BR on Linux)
   GET  /health                                          -> {status, model, cuda}
 
-Uso:
-  voice-asr                 # uvicorn em 127.0.0.1:8701
+Usage:
+  voice-asr                 # uvicorn on 127.0.0.1:8701
   voice-asr --port 8702
 
-A porta abre ANTES do modelo carregar (thread de background + evento
-MODEL_READY): o daemon/health-check enxerga o serviço de pé durante o load do
-modelo (~1.5GB) e não spawna um processo duplicado. /v1/transcribe espera o
-modelo ficar pronto (timeout 180s) ou responde 503.
+The port opens BEFORE the model loads (background thread + MODEL_READY
+event): the daemon/health-check sees the service up during the model load
+(~1.5GB) and does not spawn a duplicate process. /v1/transcribe waits for
+the model to be ready (timeout 180s) or replies 503.
 
-Telemetria: OTLP-HTTP para o collector local (ver voice/telemetry.py) —
-traces do FastAPI, duração de load do modelo e de transcrição, logs -> Loki.
+Telemetry: OTLP-HTTP to the local collector (see voice/telemetry.py) —
+FastAPI traces, model load and transcription duration, logs -> Loki.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ COMPUTE_TYPE = os.environ.get(
     "VOICE_ASR_COMPUTE", "float16" if DEVICE == "cuda" else "int8"
 )
 LANGUAGE = os.environ.get("VOICE_ASR_LANGUAGE", "pt")
-# threads de CPU para ctranslate2 (só usado quando device=cpu; 0 = default do lib)
+# CPU threads for ctranslate2 (only used when device=cpu; 0 = lib default)
 CPU_THREADS = int(os.environ.get("VOICE_ASR_CPU_THREADS", "0"))
 INITIAL_PROMPT = os.environ.get(
     "VOICE_ASR_INITIAL_PROMPT",
@@ -101,18 +101,18 @@ MODEL_READY = threading.Event()
 
 _METER = telemetry.meter()
 _METRIC_LOAD = _METER.create_histogram(
-    "voice_asr_model_load_seconds", unit="s", description="duração do load do modelo"
+    "voice_asr_model_load_seconds", unit="s", description="model load duration"
 )
 _METRIC_TRANSCRIBE = _METER.create_histogram(
-    "voice_asr_transcribe_seconds", unit="s", description="duração da transcrição"
+    "voice_asr_transcribe_seconds", unit="s", description="transcription duration"
 )
 _METRIC_REJECTS = _METER.create_counter(
     "voice_asr_transcribe_rejected_total",
-    description="transcrições recusadas (modelo carregando)",
+    description="transcriptions rejected (model loading)",
 )
 _TRACER = telemetry.tracer("asr")
 
-# ── histórico persistido de tempo de load por modelo (p/ progresso do loading) ──
+# ── persisted load-time history per model (for the loading progress) ──
 _LOAD_FILE = os.path.join(APP_DIR, "model_loads.json")
 _DEFAULT_LOAD_S = {"base": 2.0, "small": 3.5, "medium": 9.0, "large-v3-turbo": 22.0}
 
@@ -133,7 +133,7 @@ def _remember_load(model: str, seconds: float) -> None:
     try:
         m = _load_map()
         prev = m.get(model)
-        # EMA suave: média dos últimos loads pesa mais que um outlier
+        # smooth EMA: the average of recent loads outweighs an outlier
         m[model] = round(seconds * 0.4 + prev * 0.6, 2) if prev else round(seconds, 2)
         os.makedirs(APP_DIR, exist_ok=True)
         with open(_LOAD_FILE, "w", encoding="utf-8") as f:
@@ -143,9 +143,9 @@ def _remember_load(model: str, seconds: float) -> None:
 
 
 
-# ── estimativa de duração de inferência (p/ progresso honesto) ──
-# EMA de "segundos de inferência por segundo de áudio" por modelo;
-# fallback heurístico até a primeira calibração real de cada um.
+# ── inference duration estimate (for an honest progress) ──
+# EMA of "inference seconds per audio second" per model;
+# heuristic fallback until each model's first real calibration.
 _RATE_EMA: dict[str, float] = {}
 _DEFAULT_RATE = {"base": 0.12, "small": 0.35, "medium": 1.1, "large-v3-turbo": 1.9}
 
@@ -179,7 +179,7 @@ def get_model(name: str) -> WhisperModel:
             load_s = time.monotonic() - started
             _METRIC_LOAD.record(load_s, {"model": name})
             _remember_load(name, load_s)
-            log.info("modelo '%s' carregado (%.1fs)", name, time.monotonic() - started)
+            log.info("model '%s' loaded (%.1fs)", name, time.monotonic() - started)
     return _model
 
 
@@ -187,7 +187,7 @@ def _preload_default() -> None:
     try:
         get_model(MODEL_DEFAULT)
     except Exception:
-        log.exception("preload do modelo falhou")
+        log.exception("model preload failed")
     finally:
         MODEL_READY.set()
 
@@ -196,12 +196,12 @@ def _wait_model(model_name: str) -> None:
     if model_name == MODEL_DEFAULT and not MODEL_READY.wait(timeout=MODEL_WAIT_S):
         _METRIC_REJECTS.add(1, {"model": model_name, "reason": "carregando"})
         telemetry.log_event(log, "transcribe.reject", model=model_name, reason="carregando")
-        raise HTTPException(status_code=503, detail="modelo carregando")
+        raise HTTPException(status_code=503, detail="model loading")
 
 
 def _normalize(audio: np.ndarray) -> np.ndarray:
-    """Peak-normalize para ~-1dBFS. Whisper rende melhor com áudio em nível adequado
-    (o mic costuma captar em ~-60dB, o que degrada a transcrição)."""
+    """Peak-normalize to ~-1dBFS. Whisper performs better with audio at a proper level
+    (the mic usually records at ~-60dB, which degrades transcription)."""
     peak = np.max(np.abs(audio))
     if peak > 1e-6:
         audio = audio / peak * 0.89
@@ -214,7 +214,7 @@ class TTSRequest(BaseModel):
 
 
 def _tts_windows(text: str, voice: str) -> bytes:
-    """Sintetiza no Windows (System.Speech) via powershell.exe e devolve wav."""
+    """Synthesizes on Windows (System.Speech) via powershell.exe and returns wav."""
     ps = r"""
 param($text, $voice)
 Add-Type -AssemblyName System.Speech
@@ -238,16 +238,16 @@ $synth.SetOutputToNull()
         timeout=60,
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"TTS PowerShell falhou: {proc.stderr[:500]}")
+        raise RuntimeError(f"TTS PowerShell failed: {proc.stderr[:500]}")
     b64 = proc.stdout.strip().splitlines()[-1].strip()
     return __import__("base64").b64decode(b64)
 
 
 def _tts_linux(text: str, voice: str) -> bytes:
-    """Sintetiza via espeak-ng pt-BR e devolve wav.
+    """Synthesizes via espeak-ng pt-BR and returns wav.
 
-    O campo `voice` do request é ignorado no Linux (o espeak-ng usa a voz
-    pt-br do sistema). Qualidade superior: Piper (melhoria futura, ver README).
+    The `voice` field of the request is ignored on Linux (espeak-ng uses the
+    system pt-br voice). Higher quality: Piper (future improvement, see README).
     """
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         out_path = tmp.name
@@ -258,7 +258,7 @@ def _tts_linux(text: str, voice: str) -> bytes:
             timeout=60,
         )
         if proc.returncode != 0:
-            raise RuntimeError(f"TTS espeak-ng falhou: {proc.stderr[:500]}")
+            raise RuntimeError(f"TTS espeak-ng failed: {proc.stderr[:500]}")
         with open(out_path, "rb") as f:
             return f.read()
     finally:
@@ -276,7 +276,7 @@ def _tts(text: str, voice: str) -> bytes:
 
 @app.get("/v1/model-status")
 def model_status(model: str = Query(default=MODEL_DEFAULT)) -> dict:
-    """Estado de carregamento de um modelo (p/ barra de loading do painel)."""
+    """Loading state of a model (for the panel's loading bar)."""
     loaded = bool(MODEL_READY.is_set() and _model is not None and _model_name == model)
     return {
         "model": model,
@@ -291,17 +291,17 @@ def health() -> dict:
     ready = MODEL_READY.is_set()
     return {
         "status": "ok" if ready else "loading",
-        "model": _model_name if ready else f"{MODEL_DEFAULT} (carregando)",
+        "model": _model_name if ready else f"{MODEL_DEFAULT} (loading)",
         "device": DEVICE,
         "compute_type": COMPUTE_TYPE,
     }
 
 
 def _prepare_transcribe(file: UploadFile, model: str) -> tuple:
-    """Valida modelo/áudio comuns aos endpoints de transcrição.
+    """Validates model/audio common to the transcription endpoints.
 
-    Devolve (whisper, audio_normalized). Levanta 503 claro se o modelo não
-    carrega (ex.: HF_HUB_OFFLINE=1 e nunca baixado).
+    Returns (whisper, audio_normalized). Raises a clear 503 if the model
+    fails to load (e.g. HF_HUB_OFFLINE=1 and never downloaded).
     """
     raw = file.file.read()
     data = np.frombuffer(raw, dtype=np.int16)
@@ -314,15 +314,15 @@ def _prepare_transcribe(file: UploadFile, model: str) -> tuple:
     except HTTPException:
         raise
     except Exception as e:
-        # causa mais comum: HF_HUB_OFFLINE=1 e modelo nunca baixado
+        # most common cause: HF_HUB_OFFLINE=1 and model never downloaded
         _METRIC_REJECTS.add(1, {"model": model, "reason": "offline"})
         telemetry.log_event(log, "transcribe.reject", model=model, reason="offline")
-        log.exception("falha ao carregar modelo '%s'", model)
+        log.exception("failed to load model '%s'", model)
         raise HTTPException(
             status_code=503,
             detail=(
-                f"modelo '{model}' indisponível no cache local "
-                f"(serviço roda offline). Baixe uma vez online: "
+                f"model '{model}' unavailable in the local cache "
+                f"(service runs offline). Download it once while online: "
                 f"HF_HUB_OFFLINE=0 python -c \"from faster_whisper import "
                 f"WhisperModel; WhisperModel('{model}', device='{DEVICE}')\""
             ),
@@ -331,8 +331,8 @@ def _prepare_transcribe(file: UploadFile, model: str) -> tuple:
 
 
 def _normalize_language(language: str | None) -> str | None:
-    """"" ou "auto" → None (auto-detecção do whisper). Integradores externos
-    (ex.: uniscraper transcrevendo vídeos) pedem auto; o ditado segue pt."""
+    """"" or "auto" → None (whisper auto-detection). External integrators
+    (e.g. uniscraper transcribing videos) ask for auto; dictation stays pt."""
     if language in ("", "auto"):
         return None
     return language
@@ -346,12 +346,12 @@ def transcribe_stream(
     initial_prompt: str | None = Query(default=None),
     vad: bool = Query(default=True),
 ):
-    """Variante NDJSON do /v1/transcribe com progresso incremental.
+    """NDJSON variant of /v1/transcribe with incremental progress.
 
-    Linhas emitidas: {"type":"start","duration_s":s,"model":m} →
-    {"type":"seg","end":t,"text":...} por segmento →
-    {"type":"done", ...resultado final} (mesmo schema do endpoint síncrono).
-    Erros: {"type":"error","detail":...}.
+    Lines emitted: {"type":"start","duration_s":s,"model":m} →
+    {"type":"seg","end":t,"text":...} per segment →
+    {"type":"done", ...final result} (same schema as the synchronous endpoint).
+    Errors: {"type":"error","detail":...}.
     """
     from fastapi.responses import StreamingResponse
     language = _normalize_language(language)
@@ -393,7 +393,7 @@ def transcribe_stream(
                 all_words.extend(words)
                 text_parts.append(s.text.strip())
                 logprobs.append(s.avg_logprob)
-                _METRIC_TRANSCRIBE.record(0.0, {"model": model})  # heartbeat barato
+                _METRIC_TRANSCRIBE.record(0.0, {"model": model})  # cheap heartbeat
                 yield json.dumps({"type": "seg", "end": round(s.end, 2),
                                   "text": s.text.strip()}, ensure_ascii=False) + "\n"
             elapsed = time.monotonic() - started
@@ -434,8 +434,8 @@ def transcribe(
                     "model": model}
 
         started = time.monotonic()
-        # vad=False (voice-11): re-transcrição de rascunhos cuja fala o VAD
-        # descartou por nível baixo (ex.: mic virtual do hub de áudio)
+        # vad=False (voice-11): re-transcription of drafts whose speech the VAD
+        # discarded for being too quiet (e.g. the audio hub's virtual mic)
         segments, info = whisper.transcribe(
             audio,
             language=language,
@@ -480,8 +480,8 @@ def transcribe(
         )
         span.set_attribute("asr.audio_seconds", round(len(audio) / 16000, 2))
         span.set_attribute("asr.duration_s", round(elapsed, 2))
-        # confiança média (avg_logprob; ~0 = ótimo, < -0.6 = suspeito) —
-        # usada pelo dataset/validation para marcar amostras duvidosas
+        # average confidence (avg_logprob; ~0 = great, < -0.6 = suspicious) —
+        # used by dataset/validation to flag dubious samples
         confidence = round(sum(logprobs) / len(logprobs), 3) if logprobs else None
         vad_removed_s = round(
             info.duration - getattr(info, "duration_after_vad", info.duration), 2
@@ -514,7 +514,7 @@ def _write_pidfile() -> None:
         with open(PID_FILE, "w", encoding="ascii") as f:
             f.write(f"{os.getpid()}\n{datetime.datetime.now().isoformat()}\n")
     except Exception:
-        log.warning(" nao consegui escrever pidfile %s", PID_FILE, exc_info=True)
+        log.warning(" could not write pidfile %s", PID_FILE, exc_info=True)
 
 
 def _remove_pidfile() -> None:
@@ -526,7 +526,7 @@ def _remove_pidfile() -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Servico ASR/TTS local")
+    parser = argparse.ArgumentParser(description="Local ASR/TTS service")
     parser.add_argument("--host", default=HOST)
     parser.add_argument("--port", type=int, default=PORT)
     args = parser.parse_args()
@@ -535,9 +535,9 @@ def main() -> None:
     atexit.register(_remove_pidfile)
     try:
         log.info(
-            "asr service iniciando (modelo=%s device=%s/%s)", MODEL_DEFAULT, DEVICE, COMPUTE_TYPE
+            "asr service starting (model=%s device=%s/%s)", MODEL_DEFAULT, DEVICE, COMPUTE_TYPE
         )
-        # porta abre ANTES do load — health responde 'loading' e o daemon nao duplica
+        # port opens BEFORE the load — health replies 'loading' and the daemon doesn't duplicate
         threading.Thread(target=_preload_default, daemon=True).start()
         uvicorn.run(app, host=args.host, port=args.port)
     finally:

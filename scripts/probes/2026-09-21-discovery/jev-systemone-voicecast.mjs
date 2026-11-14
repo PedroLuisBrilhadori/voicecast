@@ -1,6 +1,6 @@
-// Probe v2: schema correto da API TypeSafe (noul/choice/score) — cenário voicecast.
-// Diferenças vs jev-judge.ts local: sem "boolean" (API não aceita), noul.criteria
-// é {true,false}, choice.criteria é map opção→descrição, score.criteria é array ordenado.
+// Probe v2: correct schema of the TypeSafe API (noul/choice/score) — voicecast scenario.
+// Differences vs the local jev-judge.ts: no "boolean" (API doesn't accept it), noul.criteria
+// is {true,false}, choice.criteria is an option→description map, score.criteria is an ordered array.
 import { readFileSync } from "node:fs";
 const key = readFileSync("/home/pedro/programing/projetos/.env", "utf8").match(/^TYPESAFE_API_KEY=(\S+)/m)[1];
 
