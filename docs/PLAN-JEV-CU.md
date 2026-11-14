@@ -171,7 +171,7 @@ E1 ──► E2 ──► E3 ─────────────► E5
 ```
 
 Relative size: E1 S · E2 M · E3 M · E4 L (FD.n sub-milestones) · E5 S/M.
-Each stage closes with a report in the `docs/` folder (RELATORIO-F0 pattern) and, when
+Each stage closes with a report in the `docs/` folder (REPORT-F0 pattern) and, when
 there is durable learning, a note in the vault via the `capturar-nota` skill.
 
 ## Out of scope (for now)

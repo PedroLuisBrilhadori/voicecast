@@ -20,7 +20,7 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 
 | Path | Papel |
 |---|---|
-| `docs/DELEGACAO.md` | **Protocolo de WPs pilotados por subagents** + estado dos WPs + briefings em `docs/wp/` — agente delegado começa por aqui |
+| `docs/DELEGATION.md` | **Protocolo de WPs pilotados por subagents** + estado dos WPs + briefings em `docs/wp/` — agente delegado começa por aqui |
 
 | Path | Papel |
 |---|---|
@@ -77,7 +77,7 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
   sai) + `--agenttest "goal"` (C4/cockpit: enfileira o goal na ponte do
   utilityProcess, imprime os estados no stdout e sai — exit 0 = completed;
   determinístico com `ZCODE_AGENT_BIN` apontando um agente fake).
-  Rotina de validação no Windows documentada em docs/RELATORIO-E2.md.
+  Rotina de validação no Windows documentada em docs/REPORT-E2.md.
 - **Anotações em tela (AN — PLANO-ANOTACOES-TELA)**: durante REC e no ditado,
   overlay transparente com laser/pincel/borracha. Log vetorial
   `annotations.jsonl` por sessão (px físicos, t relativo — fonte da verdade;
@@ -109,7 +109,7 @@ referências para agentes). Guia para agentes de código trabalhando neste repo.
 - **React/react-dom devem ficar na MESMA versão exata** (ex.: 19.2.7 +
   19.2.7) — minors diferentes (^19) resolveram 19.2.7/19.3.0 e quebraram a
   barra em runtime (React error #527, silencioso no build).
-- **Telemetria OTel** (ver docs/RELATORIO-TELEMETRIA.md): métricas via core
+- **Telemetria OTel** (ver docs/REPORT-TELEMETRY.md): métricas via core
   lazy `src/shared/telemetry-core.ts` — counters/histograms declarados no
   module-load resolvem o instrumento no primeiro emit (init do SDK é 3s
   pós-ready; emit antes disso é descartado). Endpoint `localhost:4318`

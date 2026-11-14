@@ -14,7 +14,7 @@ at `server-docs/workstations/shared/scripts/voice/src/voice/`. voicecast
 | `voice/telemetry.py` | Imported by asr_service (best-effort; we run with `OTEL_ENABLED=0`) |
 | `voice/platform/{__init__,common,win32,linux}.py` | `get_backend()` — dictation glue (`paste_into_focused`) and paths |
 
-The daemon/panel/dataset modules did NOT come along (retired — VISAO-V2).
+The daemon/panel/dataset modules did NOT come along (retired — VISION-V2).
 
 ## Divergence from server-docs
 

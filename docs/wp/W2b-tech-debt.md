@@ -5,7 +5,7 @@ Close the 4 neighboring findings that the Wave 1 pilots noted and the tower
 queued — all small, all with an owner now.
 
 ## Required context (read first)
-- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocol)
+- `/home/pedro/programing/projetos/voicecast/docs/DELEGATION.md` (protocol)
 - The repo's `AGENTS.md`
 - The items (references in the source briefings):
   1. **runner ignores `req.cwd` on the Windows path** — briefing C4 (Result);

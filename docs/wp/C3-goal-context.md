@@ -6,8 +6,8 @@ Every spoken/typed goal carries the BOUNDED context of the last voicecast sessio
 seeing/saying — without you pasting anything.
 
 ## Required context (read first)
-- `/home/pedro/programing/projetos/voicecast/docs/PLANO-COCKPIT.md` (C3 + ratified decisions)
-- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocol)
+- `/home/pedro/programing/projetos/voicecast/docs/PLAN-COCKPIT.md` (C3 + ratified decisions)
+- `/home/pedro/programing/projetos/voicecast/docs/DELEGATION.md` (protocol)
 - `/home/pedro/programing/projetos/voicecast/src/main/library.ts` — `buildContext`
   (reuse; do NOT duplicate the markdown-assembly logic)
 - `/home/pedro/programing/projetos/voicecast/src/main/agent/runner.ts` — where the

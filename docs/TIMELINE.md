@@ -2,8 +2,8 @@
 
 Date: 2026-09-23 · Status: **proposal** (maintainer ratifies it by validating Wave 0)
 
-Consolidates what's left: Stages 3–5 of [PLANO-JEV-CU](PLANO-JEV-CU.md), M3/M4 from
-the original vision, telemetry pending items ([RELATORIO-TELEMETRIA](RELATORIO-TELEMETRIA.md)),
+Consolidates what's left: Stages 3–5 of [PLANO-JEV-CU](PLAN-JEV-CU.md), M3/M4 from
+the original vision, telemetry pending items ([REPORT-TELEMETRY](REPORT-TELEMETRY.md)),
 the AN.4 pending item from the annotation plan and issues #3/#4/#5.
 
 ## Pace assumptions
@@ -35,7 +35,7 @@ end to end ✅.
 
 ## Wave 1 — Harness metamorphosis: voicecast as the agent's cockpit · M/L · 27/09–02/10
 
-> Detailed, **ratified** plan: **[PLANO-COCKPIT](PLANO-COCKPIT.md)** (WPs
+> Detailed, **ratified** plan: **[PLANO-COCKPIT](PLAN-COCKPIT.md)** (WPs
 > C1–C7, testing, security, decisions closed on 2026-09-27). FD.0 resolved
 > (2026-09-27): the ZCode engine is drivable over **stdio** (`zcode-server.cjs`,
 > protocol `session/create/send/subscribe` + `turn.*` + `permission.respond`)

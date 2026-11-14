@@ -2,7 +2,7 @@
 
 Date: 2026-09-22 · Status: **proposed** (open decisions at the end)
 New track (AN) — parallel to the Jev Stages (E1–E5 of
-[PLANO-JEV-CU.md](./PLANO-JEV-CU.md)); consumes their infrastructure in buildContext/MCP.
+[PLAN-JEV-CU.md](./PLAN-JEV-CU.md)); consumes their infrastructure in buildContext/MCP.
 
 ## Objective
 

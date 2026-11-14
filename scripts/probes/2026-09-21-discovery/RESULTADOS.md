@@ -49,7 +49,7 @@ also has no `choice`. Official SDK: `@typesafe-ai/sdk@0.6.0` (npm, TS) /
 - sample: Command palette, New task, `[Invoke]` buttons, task list
 - ⇒ Electron exposes UIA without extra flags; InvokePattern = the AXPress equivalent
 - remaining action: SendInput (precedent `voice/platform/win32.py`, port via
-  koffi planned in VISAO-V2)
+  koffi planned in VISION-V2)
 
 Estimated cost per CU loop step (perception ~0.6s + Jev ~0.7s):
 ≈ **1.5s and <$0.0003** — in the ballpark of the macOS project (~$0.0002/step).

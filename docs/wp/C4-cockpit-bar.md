@@ -6,8 +6,8 @@ running → done | error`, with the result appearing at the end. The bridge runs
 in a utilityProcess (ratified decision): its crash doesn't take down recording/dictation.
 
 ## Required context (read first)
-- `/home/pedro/programing/projetos/voicecast/docs/PLANO-COCKPIT.md` (C2/C4 + decisions)
-- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocol)
+- `/home/pedro/programing/projetos/voicecast/docs/PLAN-COCKPIT.md` (C2/C4 + decisions)
+- `/home/pedro/programing/projetos/voicecast/docs/DELEGATION.md` (protocol)
 - `/home/pedro/programing/projetos/voicecast/src/main/agent/runner.ts` —
   runGoal/GoalQueue (the worker will host THAT logic; don't duplicate)
 - `/home/pedro/programing/projetos/voicecast/src/shared/agent-goal.ts` —

@@ -1,4 +1,4 @@
-# RELATORIO-TELEMETRIA — OTel working + REC delay fix (2026-09-22)
+# REPORT-TELEMETRY — OTel working + REC delay fix (2026-09-22)
 
 Milestone: voicecast's OTel telemetry **actually working** (the metrics
 existed in the code but none reached Grafana) + instrumentation of the

@@ -11,7 +11,7 @@ utilityProcess, justify the choice) so the main process never blocks.
   (waits idle+15s, 5s retry; `stopTelemetry` with flush on will-quit)
 - `/home/pedro/programing/projetos/voicecast/src/shared/telemetry-core.ts` — lazy
   core (counters/histograms resolve on first emit)
-- `/home/pedro/programing/projetos/voicecast/docs/RELATORIO-TELEMETRIA.md` —
+- `/home/pedro/programing/projetos/voicecast/docs/REPORT-TELEMETRY.md` —
   delay diagnosis (cause 2) and SDK gotchas (metricReaders, flush,
   VOICECAST_OTEL_DEBUG)
 

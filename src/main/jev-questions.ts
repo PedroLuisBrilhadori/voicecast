@@ -1,7 +1,7 @@
 /**
  * Jev questions and thresholds for voicecast — single reviewable file
  * (mirror of the workspace pattern: scripts/lib/jev-questions.mjs; here the
- * texts come from the probe validated on 2026-09-21, see docs/RELATORIO-E1.md).
+ * texts come from the probe validated on 2026-09-21, see docs/REPORT-E1.md).
  *
  * Do not edit the texts without revalidating with the smoke test
  * (VOICECAST_JEV_SMOKE=1 pnpm vitest run tests/jev.smoke.test.ts).

@@ -3,7 +3,7 @@
  * UNDER the overlay when it is in drawing mode. The Windows hit-test
  * hands the wheel to the overlay (normal window covering the screen) and Electron has
  * no way to pass it through — setIgnoreMouseEvents({forward:true}) only covers
- * mousemove (and even that isn't reliable on this machine, see RELATORIO-AN.md).
+ * mousemove (and even that isn't reliable on this machine, see REPORT-AN.md).
  *
  * Technique: removes the overlay from the hit-test for an instant (WS_EX_TRANSPARENT in
  * the exstyle — on a layered window it affects hit-test only, not painting), asks

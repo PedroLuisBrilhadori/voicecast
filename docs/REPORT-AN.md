@@ -1,6 +1,6 @@
 # Report AN.1/AN.2 — On-screen annotations + auto-print/burned marker
 
-Date: 2026-09-22 · Plan: [PLANO-ANOTACOES-TELA.md](./PLANO-ANOTACOES-TELA.md)
+Date: 2026-09-22 · Plan: [PLAN-SCREEN-ANNOTATIONS.md](./PLAN-SCREEN-ANNOTATIONS.md)
 Validity: engine + persistence + screenshots validated on real Windows (`--anotest`
 and `--autotest`); interactive UX (drawing with the mouse) pending a human pass.
 
@@ -108,7 +108,7 @@ real use) only the maintainer can assess — everything else is validated.
 ## Demands from the 2026-09-22 0933 video + maintainer follow-up (implemented)
 
 The session `2026-09-22/0933-7329b0fb` (transcribed after the hosted ASR — see
-RELATORIO-ASR-HOST.md) registered 3 demands; the maintainer asked for 2 extras on the
+REPORT-ASR-HOST.md) registered 3 demands; the maintainer asked for 2 extras on the
 same day. Everything implemented and validated (fix 3 with log-based E2E; 1, 2 and extras
 with green build+suite and the usage pass owned by the maintainer):
 

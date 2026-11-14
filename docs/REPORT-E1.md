@@ -1,7 +1,7 @@
 # Stage 1 Report — Jev foundation: a single client
 
 Date: 2026-09-21 · Scope: `projetos` workspace (root scripts) · Plan:
-[PLANO-JEV-CU.md](./PLANO-JEV-CU.md)
+[PLAN-JEV-CU.md](./PLAN-JEV-CU.md)
 
 ## Summary
 

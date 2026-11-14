@@ -1,7 +1,7 @@
 /**
  * Tests of the Jev module (src/main/jev.ts) — no network: the SDK accepts an
  * injectable fetch (judgeDictation/judgeSession expose the parameter), and the
- * fixtures mirror real API responses (probe 2026-09-21, docs/RELATORIO-E1.md).
+ * fixtures mirror real API responses (probe 2026-09-21, docs/REPORT-E1.md).
  * decidePaste is the heart of F9: the truth table below is the UX contract.
  */
 import { describe, expect, it } from "vitest";

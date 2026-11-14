@@ -1,8 +1,8 @@
 # Plan — Voice cockpit: voicecast as the agent's front door (Wave 1)
 
 Date: 2026-09-27 · Status: **ratified by the maintainer** (decisions below)
-References: [CRONOGRAMA](CRONOGRAMA.md) Wave 1 · [PLANO-JEV-CU](PLANO-JEV-CU.md)
-Stage 2 (`comando_agente` route) · [RELATORIO-E2](RELATORIO-E2.md)
+References: [TIMELINE](TIMELINE.md) Wave 1 · [PLANO-JEV-CU](PLAN-JEV-CU.md)
+Stage 2 (`comando_agente` route) · [REPORT-E2](REPORT-E2.md)
 
 ## FD.0 discovery (2026-09-27) — the engine is drivable, no hacks
 

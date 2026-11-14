@@ -1,7 +1,7 @@
 # Stage 2 Report (MVP) — Jev judgment inside voicecast
 
-Date: 2026-09-21 · Plan: [PLANO-JEV-CU.md](./PLANO-JEV-CU.md) · Previous:
-[RELATORIO-E1.md](./RELATORIO-E1.md) (workspace foundation)
+Date: 2026-09-21 · Plan: [PLAN-JEV-CU.md](./PLAN-JEV-CU.md) · Previous:
+[REPORT-E1.md](./REPORT-E1.md) (workspace foundation)
 
 ## Summary
 

@@ -13,7 +13,7 @@ agent knows WHAT was highlighted on screen, beyond audio/transcription.
   engine: event types and log fold (source of truth of the format)
 - `/home/pedro/programing/projetos/voicecast/src/main/annotations.ts` — how
   `annotations.jsonl` is written (field by field) and where burned screenshots live
-- `/home/pedro/programing/projetos/voicecast/docs/PLANO-ANOTACOES-TELA.md` —
+- `/home/pedro/programing/projetos/voicecast/docs/PLAN-SCREEN-ANNOTATIONS.md` —
   plan decisions (WYSIWYG, D6/D7 screenshots)
 
 ## Scope

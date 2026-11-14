@@ -6,7 +6,7 @@ The session `2026-09-22/0933-7329b0fb` (recording test) ended with
 `transcriptStatus: "sem-asr"`: voicecast was merely an HTTP client of the
 shared `:8701` service of voice-dictation, and that service was killed at ~09:33
 during the hangs diagnostic session (voice-dictation retirement).
-VISAO-V2 promised "voicecast absorbs the voice-dictation", but the absorption
+VISION-V2 promised "voicecast absorbs the voice-dictation", but the absorption
 never reached the transcription backend — it stayed at UI/capture/F9/library only.
 
 ## What changed
@@ -68,7 +68,7 @@ endpoints via `VOICECAST_ASR_URLS`/`VOICE_ASR_URLS` disable hosting.
 ## Pending items
 
 - Pasting still spawns the backend's python (proven code from win32.py). Port
-  to native FFI (koffi) remains as an evolution — it was a VISAO-V2 item, but
+  to native FFI (koffi) remains as an evolution — it was a VISION-V2 item, but
   rewriting the canonical SendInput reopens the INPUT struct bug; python kept
   until there's a real reason.
 - voice-dictation launcher mystery at logon (session

@@ -13,7 +13,7 @@ real goal runs end to end via `runGoal` (evidence recorded).
   every start).
 - `/home/pedro/programing/projetos/voicecast/src/main/agent/runner.ts` —
   `agentRunnerConfig`/`goalSpawnArgs` (this is where the wiring goes)
-- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocol)
+- `/home/pedro/programing/projetos/voicecast/docs/DELEGATION.md` (protocol)
 - The repo's `AGENTS.md`
 
 ## Scope

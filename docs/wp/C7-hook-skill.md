@@ -6,8 +6,8 @@ context arrives on its own: the `UserPromptSubmit` hook injects a bounded
 digest (Jev relevance ≥2) and a skill teaches the agent to consume the artifacts.
 
 ## Required context (read first)
-- `/home/pedro/programing/projetos/voicecast/docs/PLANO-COCKPIT.md` (item C7)
-- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocol)
+- `/home/pedro/programing/projetos/voicecast/docs/PLAN-COCKPIT.md` (item C7)
+- `/home/pedro/programing/projetos/voicecast/docs/DELEGATION.md` (protocol)
 - `/home/pedro/programing/projetos/zcode.json` (workspace) — how house hooks
   are registered (follow the pattern of the existing hooks; EVERY new hook enters
   this file with `enabled: false` until the human gate)

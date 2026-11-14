@@ -1,7 +1,7 @@
 /**
  * OTel telemetry worker (W1) — the WHOLE SDK lives HERE, never in main.
  *
- * Why: the SDK import stalls the event loop for ~9s (RELATORIO-TELEMETRIA,
+ * Why: the SDK import stalls the event loop for ~9s (REPORT-TELEMETRY.md,
  * REC delay cause 2). In this worker the import/init blocks only this
  * thread; main stays free and sends the emits as messages
  * (src/shared/telemetry-protocol.ts). The lazy core is the SAME

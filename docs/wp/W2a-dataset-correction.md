@@ -6,10 +6,10 @@ dictations INSIDE voicecast (the :8700 panel died with the daemon) and talk
 to the historical training dataset (same corpus, words/corrections layout).
 
 ## Required context (read first)
-- `/home/pedro/programing/projetos/voicecast/docs/VISAO-V2.md` — the dataset
+- `/home/pedro/programing/projetos/voicecast/docs/VISION-V2.md` — the dataset
   integration decision (item 3) and the correction screen (replaces the panel)
 - `/home/pedro/programing/projetos/voicecast/AGENTS.md` (repo rules)
-- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocol)
+- `/home/pedro/programing/projetos/voicecast/docs/DELEGATION.md` (protocol)
 - Voice dataset layout (historical corpus): datasets in
   `/mnt/c/Users/pedro/AppData/Local/voice-dictation/datasets/` — INSPECT
   (read-only!) the real schema of `transcriptions/` and `corrections/` (words,
@@ -114,7 +114,7 @@ green: 219 tests (185→219, +34 from W2a), typecheck and build ok. No push.
 ### Pending items / findings
 - Maintainer's gate (Windows): validate the 📚 dataset screen against the real corpus
   (read-only in WSL here) and an F9→correct end to end.
-- Writing NEW dictations to the corpus (full VISAO-V2 item 3: wav in raw/ +
+- Writing NEW dictations to the corpus (full VISION-V2 item 3: wav in raw/ +
   words + automatic meta.datasetId link) — issue #3 doesn't close 100% without it;
   requires webm→wav conversion and touching the capture pipeline (forbidden here).
 - Neighboring finding (not fixed, strict scope): `EditorApp.tsx` hardcodes
