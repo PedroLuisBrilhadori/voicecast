@@ -1,6 +1,6 @@
 /**
- * Log do processo main em arquivo (appDataDir/logs/main.log) + stderr.
- * Instrumentação mínima para debugar o app rodando no Windows sem console.
+ * Main process log to file (appDataDir/logs/main.log) + stderr.
+ * Minimal instrumentation to debug the app running on Windows without a console.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -11,7 +11,7 @@ let stream: fs.WriteStream | null = null;
 function logFile(): string {
   const dir = path.join(app.getPath("userData"), "..", "voicecast", "logs");
   fs.mkdirSync(dir, { recursive: true });
-  // rotate simples: mantém main.log e main.log.1
+  // simple rotation: keeps main.log and main.log.1
   const file = path.join(dir, "main.log");
   try {
     if (fs.existsSync(file) && fs.statSync(file).size > 2_000_000) {

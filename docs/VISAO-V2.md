@@ -1,47 +1,47 @@
-# voicecast — Visão v2 (decisão do mantenedor, 2026-09-19)
+# voicecast — v2 vision (maintainer's decision, 2026-09-19)
 
-## Decisão
+## Decision
 
-O **voicecast é a v2 do voice-dictation**. Não são produtos irmãos independentes:
-o voicecast **absorve o ditado** e os dois sistemas convergem. Decidido pelo
-mantenedor ao ver os dois apps capturando o mesmo microfone em paralelo sem se
-conhecerem.
+**voicecast is the v2 of voice-dictation**. They are not independent sibling products:
+voicecast **absorbs the dictation** and the two systems converge. Decided by the
+maintainer upon seeing the two apps capturing the same microphone in parallel without
+knowing about each other.
 
-### O que cada um vira
+### What each one becomes
 
-| Hoje (voice-dictation) | Na v2 (voicecast) |
+| Today (voice-dictation) | In v2 (voicecast) |
 |---|---|
-| Daemon Python + painel :8700 | **Aposentado gradualmente** — o app Electron assume a UI e a captura |
-| F9 ditado → ASR → cola na janela focada | **F9 vira atalho do voicecast**: ditado é um modo de captura (mic-only, sem vídeo) — mesma barra, mesma biblioteca, colagem na janela focada mantida |
-| ASR :8701 (faster-whisper local) | **Hosted pelo voicecast** (desde 2026-09-22): o app spawna e supervisiona o serviço python vendorizado (`asr-backend/`) — o acesso continua via HTTP `:8701`, mas o runtime agora é nosso. Aposentado o serviço compartilhado do voice-dictation. |
-| Dataset de treino (`datasets/raw` + `transcriptions`, correções no painel, export JSONL) | **Evolução natural**: o voicecast passa a ler/escrever o mesmo layout de dataset (mesmo schema de `words`/`corrections`) — correções e histórico de treino continuam valendo; ditados e sessões convergem num único corpo de dados |
+| Python daemon + :8700 panel | **Gradually retired** — the Electron app takes over the UI and the capture |
+| F9 dictation → ASR → pastes into the focused window | **F9 becomes a voicecast shortcut**: dictation is a capture mode (mic-only, no video) — same bar, same library, pasting into the focused window kept |
+| ASR :8701 (local faster-whisper) | **Hosted by voicecast** (since 2026-09-22): the app spawns and supervises the vendored python service (`asr-backend/`) — access continues via HTTP `:8701`, but the runtime is now ours. The shared voice-dictation service retired. |
+| Training dataset (`datasets/raw` + `transcriptions`, corrections in the panel, JSONL export) | **Natural evolution**: voicecast starts reading/writing the same dataset layout (same `words`/`corrections` schema) — corrections and training history keep counting; dictations and sessions converge into a single body of data |
 
-### Por quê
+### Why
 
-- Hoje a mesma frase pode virar dois artefatos em dois projetos (dataset do ditado
-  + faixa de áudio do mp4 da sessão) sem ligação entre si.
-- Duas UIs para a mesma voz (barra :8700 vs barra voicecast) divide a experiência.
-- O voicecast já entrega a barra always-on-top, o pipeline de mídia e o storage
-  que o ditado precisa — duplicar em Python não faz sentido.
+- Today the same sentence can become two artifacts in two projects (the dictation
+  dataset + the session mp4's audio track) with no link between them.
+- Two UIs for the same voice (:8700 bar vs voicecast bar) splits the experience.
+- voicecast already delivers the always-on-top bar, the media pipeline and the
+  storage the dictation needs — duplicating it in Python makes no sense.
 
-## Transição (enquanto o daemon existir)
+## Transition (while the daemon exists)
 
-1. **Coordenação de captura via API local**: voicecast sinaliza ao daemon
-   (endpoint no :8700) "sessão ativa" → daemon suspende o F9 (painel mostra
-   "voicecast gravando"); se o ditado estiver capturando, o voicecast avisa na UI.
-   Fim da captura dupla acidental. (barato, faz parte do M2)
-2. **Ditado no voicecast** (marco próprio, após M2): F9 global → captura mic-only
-   no Electron → detecção de fim de fala → `POST :8701/v1/transcribe` → texto no
-   clipboard + `Ctrl+V` sintético na janela focada (portar o SendInput do
-   `voice/platform/win32.py` — struct INPUT com union, cbSize 40 — para FFI/koffi).
-3. **Integração de dataset**: voicecast escreve ditados no layout do voice
-   (mesmos JSONs, mesmos `words`), lê o histórico existente; export JSONL
-   (`voice-export`) continua apontando para o mesmo corpus. Painel de correção
-   do voice :8700 permanece até o voicecast ter tela equivalente.
-4. **Aposentadoria do daemon**: só quando F9 no voicecast for paridade completa
-   (hotkey global, colagem confiável nos 2 SOs, dataset intacto, runbooks atualizados).
+1. **Capture coordination via local API**: voicecast signals the daemon
+   (:8700 endpoint) "session active" → the daemon suspends the F9 (panel shows
+   "voicecast gravando" ["voicecast recording"]); if the dictation is capturing, voicecast warns in the UI.
+   End of accidental double capture. (cheap, part of M2)
+2. **Dictation in voicecast** (own milestone, after M2): F9 global → mic-only capture
+   in Electron → end-of-speech detection → `POST :8701/v1/transcribe` → text to the
+   clipboard + synthetic `Ctrl+V` in the focused window (port the SendInput from
+   `voice/platform/win32.py` — INPUT struct with union, cbSize 40 — to FFI/koffi).
+3. **Dataset integration**: voicecast writes dictations in the voice layout
+   (same JSONs, same `words`), reads the existing history; JSONL export
+   (`voice-export`) keeps pointing to the same corpus. The voice :8700 correction
+   panel stays until voicecast has an equivalent screen.
+4. **Daemon retirement**: only when F9 in voicecast reaches full parity
+   (global hotkey, reliable pasting on both OSes, dataset intact, updated runbooks).
 
-## Backlog relacionado (issues no GitHub)
+## Related backlog (issues on GitHub)
 
-- Áudio do sistema (loopback WASAPI) como faixa opcional da sessão — hoje só mic.
-- Tela de correção/rotulação de ditados dentro do voicecast (substitui o painel :8700).
+- System audio (WASAPI loopback) as an optional session track — today mic only.
+- Dictation correction/labeling screen inside voicecast (replaces the :8700 panel).

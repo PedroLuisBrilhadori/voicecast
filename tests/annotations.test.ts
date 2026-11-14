@@ -1,7 +1,7 @@
 /**
- * Testes do motor puro de anotações (src/shared/annotations.ts) — AN.2.
- * O contrato: replay do log é determinístico, undo/redo em qualquer ordem
- * reproduz o estado, e a borracha nos dois modos grava resultados invertíveis.
+ * Tests of the pure annotations engine (src/shared/annotations.ts) — AN.2.
+ * The contract: log replay is deterministic, undo/redo in any order
+ * reproduces the state, and the eraser in both modes records invertible results.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -22,8 +22,8 @@ function strokeEvent(seq: number, id: string, points: Pt[]): AnnotationEvent {
   return { t: seq, seq, type: "stroke", id, color: "#ff4444", width: 4, points };
 }
 
-describe("fold do log", () => {
-  it("adiciona strokes na ordem", () => {
+describe("log fold", () => {
+  it("adds strokes in order", () => {
     const s = foldEvents([
       strokeEvent(1, "1", [pt(0, 0), pt(10, 0)]),
       strokeEvent(2, "2", [pt(0, 10), pt(10, 10)]),
@@ -31,7 +31,7 @@ describe("fold do log", () => {
     expect(s.strokes.map((st) => st.id)).toEqual(["1", "2"]);
   });
 
-  it("laser e print não entram no estado geométrico", () => {
+  it("laser and print don't enter the geometric state", () => {
     const s = foldEvents([
       { t: 1, seq: 1, type: "laser", points: [pt(1, 1)] },
       { t: 2, seq: 2, type: "print", kind: "auto", file: "frames/print-2s.png", strokes: [] },
@@ -46,44 +46,44 @@ describe("undo/redo", () => {
     strokeEvent(2, "2", [pt(0, 10), pt(10, 10)]),
   ];
 
-  it("undo remove o último; redo devolve", () => {
+  it("undo removes the last one; redo brings it back", () => {
     const s = foldEvents([...base(), { t: 3, seq: 3, type: "undo" }]);
     expect(s.strokes.map((st) => st.id)).toEqual(["1"]);
     const s2 = foldEvents([...base(), { t: 3, seq: 3, type: "undo" }, { t: 4, seq: 4, type: "redo" }]);
     expect(s2.strokes.map((st) => st.id)).toEqual(["1", "2"]);
   });
 
-  it("nova ação geométrica invalida o redo (semântica de editor)", () => {
+  it("new geometric action invalidates redo (editor semantics)", () => {
     const s = foldEvents([
       ...base(),
-      { t: 3, seq: 3, type: "undo" }, // sobra "1"
-      strokeEvent(4, "4", [pt(50, 50), pt(60, 50)]), // redo morre aqui
+      { t: 3, seq: 3, type: "undo" }, // leaves "1"
+      strokeEvent(4, "4", [pt(50, 50), pt(60, 50)]), // redo dies here
       { t: 5, seq: 5, type: "redo" }, // no-op
     ]);
     expect(s.strokes.map((st) => st.id)).toEqual(["1", "4"]);
   });
 
-  it("undo de undo/redo de redo (alternância) é estável", () => {
+  it("undo of undo/redo of redo (alternating) is stable", () => {
     const events: AnnotationEvent[] = [...base()];
     for (let i = 3; i <= 10; i++) events.push({ t: i, seq: i, type: i % 2 ? "undo" : "redo" });
     const s = foldEvents(events);
-    // terminou em redo (i=10) → estado final = ambos os strokes
+    // ended in redo (i=10) → final state = both strokes
     expect(s.strokes.map((st) => st.id)).toEqual(["1", "2"]);
   });
 
-  it("undo em log vazio é no-op (não lança)", () => {
+  it("undo on empty log is a no-op (doesn't throw)", () => {
     const s = foldEvents([{ t: 1, seq: 1, type: "undo" }]);
     expect(s.strokes).toEqual([]);
   });
 
-  it("undo de clear restaura tudo", () => {
+  it("undo of clear restores everything", () => {
     const s = foldEvents([
       ...base(),
-      { t: 3, seq: 3, type: "clear", snapshots: [] }, // snapshots preenchidos pelo caller
+      { t: 3, seq: 3, type: "clear", snapshots: [] }, // snapshots filled by the caller
       { t: 4, seq: 4, type: "undo" },
     ]);
-    // clear com snapshots vazios não remove nada — o caller preenche; aqui
-    // validamos o mecanismo com snapshots reais:
+    // clear with empty snapshots removes nothing — the caller fills them; here
+    // we validate the mechanism with real snapshots:
     const snapshots: StrokeSnapshot[] = [
       { id: "1", color: "#f00", width: 4, points: [pt(0, 0), pt(10, 0)] },
       { id: "2", color: "#f00", width: 4, points: [pt(0, 10), pt(10, 10)] },
@@ -94,22 +94,22 @@ describe("undo/redo", () => {
   });
 });
 
-describe("borracha modo traço (hitStrokes)", () => {
+describe("eraser stroke mode (hitStrokes)", () => {
   const strokes: StrokeSnapshot[] = [
     { id: "1", color: "#f00", width: 4, points: [pt(0, 0), pt(100, 0)] },
     { id: "2", color: "#0f0", width: 4, points: [pt(0, 100), pt(100, 100)] },
   ];
-  it("pega só o stroke tocado", () => {
+  it("picks only the touched stroke", () => {
     const hit = hitStrokes(strokes, [pt(50, 2)], 5);
     expect(hit.map((st) => st.id)).toEqual(["1"]);
   });
-  it("nada tocado → vazio", () => {
+  it("nothing touched → empty", () => {
     expect(hitStrokes(strokes, [pt(500, 500)], 5)).toEqual([]);
   });
 });
 
-describe("borracha modo normal (splitStrokesByPath)", () => {
-  it("corta o meio do stroke em dois pedaços com ids derivados", () => {
+describe("eraser normal mode (splitStrokesByPath)", () => {
+  it("cuts the middle of the stroke into two pieces with derived ids", () => {
     const strokes: StrokeSnapshot[] = [
       { id: "7", color: "#f00", width: 4, points: [pt(0, 0), pt(10, 0), pt(20, 0), pt(30, 0), pt(40, 0)] },
     ];
@@ -120,7 +120,7 @@ describe("borracha modo normal (splitStrokesByPath)", () => {
     expect(added[1]!.points).toEqual([pt(30, 0), pt(40, 0)]);
   });
 
-  it("replay do evento erase-area restaura no undo com os MESMOS pedaços", () => {
+  it("erase-area event replay restores on undo with the SAME pieces", () => {
     const events: AnnotationEvent[] = [
       strokeEvent(1, "1", [pt(0, 0), pt(10, 0), pt(20, 0), pt(30, 0), pt(40, 0)]),
       {
@@ -140,18 +140,18 @@ describe("borracha modo normal (splitStrokesByPath)", () => {
     expect(s.strokes.map((st) => st.id)).toEqual(["1"]);
   });
 
-  it("linha rápida (2 pontos distantes) cruzada pela borracha é removida", () => {
-    // stroke esparso: (0,0)→(100,0), borracha passa no meio sem tocar endpoints
+  it("fast line (2 distant points) crossed by the eraser is removed", () => {
+    // sparse stroke: (0,0)→(100,0), eraser passes in the middle without touching endpoints
     const strokes: StrokeSnapshot[] = [
       { id: "7", color: "#f00", width: 4, points: [pt(0, 0), pt(100, 0)] },
     ];
     const { removed, added } = splitStrokesByPath(strokes, [pt(48, 0), pt(52, 0)], 5, (sid, i) => `${sid}.${i}`);
     expect(removed.map((st) => st.id)).toEqual(["7"]);
-    // pedaços de 1 ponto são descartados (não há o que desenhar)
+    // 1-point pieces are discarded (nothing to draw)
     expect(added).toEqual([]);
   });
 
-  it("stroke não tocado fica intacto", () => {
+  it("untouched stroke stays intact", () => {
     const strokes: StrokeSnapshot[] = [
       { id: "1", color: "#f00", width: 4, points: [pt(0, 0), pt(10, 0)] },
     ];
@@ -161,20 +161,20 @@ describe("borracha modo normal (splitStrokesByPath)", () => {
   });
 });
 
-describe("decimação (simplifyPoints)", () => {
-  it("descarta pontos colados, mantém primeiro e último", () => {
+describe("decimation (simplifyPoints)", () => {
+  it("discards glued points, keeps first and last", () => {
     const pts = [pt(0, 0), pt(1, 0, 5), pt(2, 0, 10), pt(50, 0, 60), pt(51, 0, 65), pt(100, 0, 120)];
     const out = simplifyPoints(pts, 3);
     expect(out.map((p) => p.x)).toEqual([0, 50, 100]);
-    expect(out[2]!.ms).toBe(120); // timestamps preservados dos mantidos
+    expect(out[2]!.ms).toBe(120); // timestamps preserved from the kept points
   });
-  it("2 pontos ou menos passam direto", () => {
+  it("2 points or fewer pass through as-is", () => {
     expect(simplifyPoints([pt(0, 0), pt(1, 1)], 3).length).toBe(2);
   });
 });
 
-describe("determinismo do replay", () => {
-  it("applyEvent sequencial == foldEvents do log completo", () => {
+describe("replay determinism", () => {
+  it("sequential applyEvent == foldEvents of the full log", () => {
     const events: AnnotationEvent[] = [
       strokeEvent(1, "1", [pt(0, 0), pt(10, 0)]),
       { t: 2, seq: 2, type: "stroke", id: "2", color: "#00f", width: 8, points: [pt(0, 5), pt(10, 5)] },
@@ -187,8 +187,8 @@ describe("determinismo do replay", () => {
   });
 });
 
-describe("clear (AN: desync main↔overlay)", () => {
-  it("clear com snapshots corretos limpa tudo", () => {
+describe("clear (AN: main↔overlay desync)", () => {
+  it("clear with correct snapshots clears everything", () => {
     const strokes = [
       { id: "1", color: "#ff4444", width: 4, points: [pt(0, 0), pt(10, 0)] },
       { id: "2", color: "#ffd60a", width: 4, points: [pt(0, 10), pt(10, 10)] },
@@ -201,7 +201,7 @@ describe("clear (AN: desync main↔overlay)", () => {
     expect(s.strokes).toEqual([]);
   });
 
-  it("clear com snapshots VAZIO não limpa (assinatura do desync: main limpou antes e devolveu snapshots=[])", () => {
+  it("clear with EMPTY snapshots doesn't clear (desync signature: main cleared first and returned snapshots=[])", () => {
     const s = foldEvents([
       strokeEvent(1, "1", [pt(0, 0), pt(10, 0)]),
       { t: 2, seq: 2, type: "clear", snapshots: [] },
@@ -209,7 +209,7 @@ describe("clear (AN: desync main↔overlay)", () => {
     expect(s.strokes).toHaveLength(1);
   });
 
-  it("undo após clear restaura os strokes (snapshots são o histórico)", () => {
+  it("undo after clear restores the strokes (snapshots are the history)", () => {
     const strokes = [{ id: "1", color: "#ff4444", width: 4, points: [pt(0, 0), pt(10, 0)] }];
     const s = foldEvents([
       strokeEvent(1, "1", [pt(0, 0), pt(10, 0)]),

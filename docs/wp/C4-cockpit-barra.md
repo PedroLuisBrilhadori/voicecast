@@ -1,119 +1,119 @@
-# C4 — Cockpit v1 na barra (utilityProcess + IPC) · bloqueado por C2-unlock (U1)
+# C4 — Cockpit v1 in the bar (utilityProcess + IPC) · blocked by C2-unlock (U1)
 
-## Objetivo
-O mantenedor vê o ciclo do goal na barra do voicecast: `ouvindo → roteando →
-rodando → concluído | erro`, com o resultado aparecendo no fim. Bridge roda
-em utilityProcess (decisão ratificada): crash dele não derruba gravação/ditado.
+## Objective
+The maintainer sees the goal's cycle in the voicecast bar: `listening → routing →
+running → done | error`, with the result appearing at the end. The bridge runs
+in a utilityProcess (ratified decision): its crash doesn't take down recording/dictation.
 
-## Contexto obrigatório (ler antes)
-- `/home/pedro/programing/projetos/voicecast/docs/PLANO-COCKPIT.md` (C2/C4 + decisões)
-- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocolo)
+## Required context (read first)
+- `/home/pedro/programing/projetos/voicecast/docs/PLANO-COCKPIT.md` (C2/C4 + decisions)
+- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocol)
 - `/home/pedro/programing/projetos/voicecast/src/main/agent/runner.ts` —
-  runGoal/GoalQueue (o worker vai hospedar ESSA lógica; não duplicar)
+  runGoal/GoalQueue (the worker will host THAT logic; don't duplicate)
 - `/home/pedro/programing/projetos/voicecast/src/shared/agent-goal.ts` —
-  máquina de estados pura (a barra consome GoalState)
+  pure state machine (the bar consumes GoalState)
 - `/home/pedro/programing/projetos/voicecast/src/main/index.ts` + `src/shared/ipc.ts`
-  + `src/preload/index.ts` — padrão de registro IPC/broadcast da casa
-- `/home/pedro/programing/projetos/voicecast/src/renderer/BarApp.tsx` — onde os
-  estados aparecem (seguir padrão do `ditado-state`)
+  + `src/preload/index.ts` — the house's IPC/broadcast registration pattern
+- `/home/pedro/programing/projetos/voicecast/src/renderer/BarApp.tsx` — where the
+  states appear (follow the `ditado-state` pattern)
 - `/home/pedro/programing/projetos/voicecast/vite.config.ts` + `package.json` —
-  build (main é tsc→CJS; worker precisa ser entry próprio compilado)
+  build (main is tsc→CJS; the worker needs to be its own compiled entry)
 
-## Escopo
-**Fazer:**
-1. `src/main/agent/worker.ts` — entry do utilityProcess: recebe
-   `{type:"enqueue", req}` / `{type:"status"}` pela MessagePort, hospeda
-   GoalQueue, responde `{type:"goal-state", state}` a cada transição.
-2. `src/main/agent/bridge.ts` — utilityProcess.fork do worker (path do dist),
-   fila/cleanup no quit, kill-switch `VOICECAST_AGENT_BRIDGE=0` também no
-   nível do fork. Se o fork não for viável na estrutura de build atual,
-   DOCUMENTE o motivo e proponha alternativa (não improvisar build novo).
-3. IPC: canais novos em `src/shared/ipc.ts` (`agentRunGoal`, `agentGetState`,
-   evento broadcast `agent-state` via CaptureEvent ou canal dedicado — siga o
-   padrão existente) + preload + handlers no main + teste no
-   ipc-contract.test.ts (contrato é lei).
-4. BarApp: linha de estado do goal (mesma linguagem visual do `ditado-state`);
-   entrada digitada opcional no painel (voz entra depois — F9 já roteia).
-5. Telemetria (DoD): a do runner já existe (goals/seconds); adicionar counter
-   `voicecast_agent_bridge_messages_total{direcao}` para a ponte main↔worker.
+## Scope
+**Do:**
+1. `src/main/agent/worker.ts` — utilityProcess entry: receives
+   `{type:"enqueue", req}` / `{type:"status"}` over the MessagePort, hosts
+   GoalQueue, answers `{type:"goal-state", state}` on every transition.
+2. `src/main/agent/bridge.ts` — utilityProcess.fork of the worker (dist path),
+   queue/cleanup on quit, kill-switch `VOICECAST_AGENT_BRIDGE=0` also at
+   the fork level. If the fork isn't viable in the current build structure,
+   DOCUMENT why and propose an alternative (don't improvise a new build).
+3. IPC: new channels in `src/shared/ipc.ts` (`agentRunGoal`, `agentGetState`,
+   broadcast event `agent-state` via CaptureEvent or a dedicated channel — follow the
+   existing pattern) + preload + handlers in main + test in
+   ipc-contract.test.ts (the contract is law).
+4. BarApp: goal state line (same visual language as `ditado-state`);
+   optional typed input in the panel (voice comes later — F9 already routes).
+5. Telemetry (DoD): the runner's already exists (goals/seconds); add counter
+   `voicecast_agent_bridge_messages_total{direcao}` for the main↔worker bridge.
 
-**Não tocar:** captura/gravação, ditado, editor, gate de permissão (C5 é
-depois), protocolo do zcode-server (fora de escopo).
+**Don't touch:** capture/recording, dictation, editor, permission gate (C5 comes
+later), zcode-server protocol (out of scope).
 
-## Aceite verificável
-- `pnpm ci:local` verde; teste novo do worker com utilityProcess MOCK (port de
-  messages fake) validando o protocolo de mensagens; teste do contrato IPC.
-- `--agenttest "goal de teste"`: gancho determinístico novo no estilo
-  `--autotest` (grava no main/index.ts): enfileira goal no bridge, imprime
-  estados no stdout e sai. Roda no Windows (validação do mantenedor), mas o
-  código e o smoke do protocolo ficam verdes no WSL.
+## Verifiable acceptance
+- `pnpm ci:local` green; new worker test with MOCKED utilityProcess (fake
+  message port) validating the message protocol; IPC contract test.
+- `--agenttest "test goal"`: new deterministic hook in the
+  `--autotest` style (recorded in main/index.ts): enqueues the goal in the bridge, prints
+  states to stdout and exits. Runs on Windows (maintainer validation), but the
+  code and the protocol smoke stay green in WSL.
 
-## Riscos e gotchas
-- utilityProcess usa um entry JS compilado — conferir que `tsc -p
-  tsconfig.node.json` produz `dist/main/agent/worker.js` importável pelo fork
-  (path relativo ao dist/main — ver como o main atual resolve paths no build).
-- OTel no worker: telemetria do runner já emite do processo que roda
-  runGoal — ao mover para o worker, os emits migram juntos (core lazy é por
-  processo; confirmar init do SDK no worker ou aceitar spans ausentes e
-  documentar — NÃO duplicar init do SDK em dois processos sem checar o
+## Risks and gotchas
+- utilityProcess uses a compiled JS entry — check that `tsc -p
+  tsconfig.node.json` produces `dist/main/agent/worker.js` importable by the fork
+  (path relative to dist/main — see how the current main resolves paths in the build).
+- OTel in the worker: the runner's telemetry already emits from the process that runs
+  runGoal — moving it to the worker, the emits migrate along (the lazy core is per
+  process; confirm SDK init in the worker or accept missing spans and
+  document — do NOT duplicate SDK init in two processes without checking the
   collector).
-- A barra é sempre-on-top e pequena: uma linha de estado, sem notificação
-  intrusiva.
+- The bar is always-on-top and small: one state line, no intrusive
+  notification.
 
-## Entrega
-Commits convencionais, sem push. Preencher Resultado abaixo.
+## Delivery
+Conventional commits, no push. Fill in the Result below.
 
-## Resultado (preenche o piloto)
+## Result (filled in by the pilot)
 
-**Entregue (2026-09-27)** — commits `37ee380`, `a54b22f`, `b69e7a3` (+ docs).
-`pnpm ci:local` verde: typecheck ×2 · **176 testes** (7 novos do worker com
-porta MOCK + 2 novos no ipc-contract) · build produz `dist/main/agent/worker.js`
-(CJS, sibling do bridge.js — fork resolve por `__dirname`, sem mudança de build).
+**Delivered (2026-09-27)** — commits `37ee380`, `a54b22f`, `b69e7a3` (+ docs).
+`pnpm ci:local` green: typecheck ×2 · **176 tests** (7 new from the worker with a
+MOCKED port + 2 new in ipc-contract) · build produces `dist/main/agent/worker.js`
+(CJS, sibling of bridge.js — the fork resolves via `__dirname`, no build change).
 
-**Decisões com evidência (fora do caminho óbvio do briefing):**
+**Decisions with evidence (off the briefing's obvious path):**
 
-1. **Enricher C3 roda NO MAIN, não no worker** — medido empiricamente no
-   Electron 44 (smoke xvfb): dentro do utilityProcess `require("electron")`
-   devolve **apenas `{net, systemPreferences}`** — não há `app`. A cadeia do
-   `goalContextEnricher()` (biblioteca → storage → `app.getPath("userData")`)
-   não roda lá. O worker hospeda o GoalQueue com um **delegante pela porta**
-   (`enrich-request`/`enrich-result`, fail-soft por timeout de 30s — mesma
-   semântica C3); o main responde com o `goalContextEnricher()` de produção.
-   O counter `voicecast_agent_context_total` então segue emitindo no main.
-2. **Telemetria do runner migra com a fila SEM duplicar SDK** — o utilityProcess
-   não inicializa SDK OTel (regra do briefing). O worker pluga um **meter-ponte**
-   (`setProcessMeter`, export novo e mínimo no `telemetry.ts`) que retransmite
-   counter/histogram pela porta (`{type:"telemetry"}`); o bridge os reemite na
-   telemetria do main com os **mesmos nomes** (`voicecast_agent_goals_total`,
-   `voicecast_agent_goal_seconds`, counter do runtime setup) — um único
-   SDK/exporter (worker-thread do W1), sem colisão no collector. **Spans do
-   `agent.goal` ficam ausentes no worker** (withSpan não atravessa a porta) —
-   aceito e documentado conforme o briefing.
-3. **Recusa de enqueue vira estado sintético `failed`** (goal vazio / bridge
-   off) — a barra mostra o POR QUÊ, sem novo tipo de mensagem no protocolo.
+1. **The C3 enricher runs IN THE MAIN PROCESS, not in the worker** — measured empirically in
+   Electron 44 (xvfb smoke): inside utilityProcess `require("electron")` returns
+   **only `{net, systemPreferences}`** — there is no `app`. The chain of
+   `goalContextEnricher()` (library → storage → `app.getPath("userData")`)
+   doesn't run there. The worker hosts the GoalQueue with a **delegate over the port**
+   (`enrich-request`/`enrich-result`, fail-soft with a 30s timeout — same
+   C3 semantics); the main answers with the production `goalContextEnricher()`.
+   The `voicecast_agent_context_total` counter therefore keeps emitting in the main process.
+2. **The runner's telemetry migrates with the queue WITHOUT duplicating the SDK** — the utilityProcess
+   doesn't initialize the OTel SDK (briefing rule). The worker plugs in a **bridge meter**
+   (`setProcessMeter`, new and minimal export in `telemetry.ts`) that relays
+   counter/histogram over the port (`{type:"telemetry"}`); the bridge re-emits them in
+   the main process's telemetry with the **same names** (`voicecast_agent_goals_total`,
+   `voicecast_agent_goal_seconds`, runtime setup counter) — a single
+   SDK/exporter (W1's worker thread), no collision in the collector. **The
+   `agent.goal` spans stay absent in the worker** (withSpan doesn't cross the port) —
+   accepted and documented per the briefing.
+3. **An enqueue refusal becomes a synthetic `failed` state** (empty goal / bridge
+   off) — the bar shows the WHY, with no new message type in the protocol.
 
-**Escopo entregue:** worker + protocolo puro (`agent-worker-protocol.ts`) ·
-bridge (fork lazy com refork pós-crash, kill-switch duplo — nível do fork E do
-runner — cleanup no will-quit, counter `voicecast_agent_bridge_messages_total{direcao}`)
-· IPC `agent:run-goal`/`agent:get-state` + evento broadcast `agent-state` no
-`CaptureEvent` (padrão da casa) + preload + teste de contrato · BarApp com linha
-de estado do goal (linguagem visual do `ditado-state`, desfecho some em 6s) ·
-entrada digitada no painel (App.tsx, Ctrl+F9) · gancho `--agenttest "goal"`
-(determinístico com `ZCODE_AGENT_BIN` fake; imprime estados no stdout, exit
+**Scope delivered:** worker + pure protocol (`agent-worker-protocol.ts`) ·
+bridge (lazy fork with refork after crash, double kill-switch — fork level AND
+runner level — cleanup on will-quit, counter `voicecast_agent_bridge_messages_total{direcao}`)
+· IPC `agent:run-goal`/`agent:get-state` + `agent-state` broadcast event in
+`CaptureEvent` (house pattern) + preload + contract test · BarApp with a
+goal state line (visual language of `ditado-state`, outcome fades after 6s) ·
+typed input in the panel (App.tsx, Ctrl+F9) · `--agenttest "goal"` hook
+(deterministic with a fake `ZCODE_AGENT_BIN`; prints states to stdout, exit
 0 = completed).
 
-**Smoke E2E real no WSL (além dos mocks, xvfb + Electron):** fork do
+**Real E2E smoke in WSL (beyond the mocks, xvfb + Electron):** fork of the
 utilityProcess → worker → GoalQueue → fake-agent.sh → `queued → running →
-completed` de volta pela porta, com round-trip de enrich respondido; kill-switch
-`VOICECAST_AGENT_BRIDGE=0` bloqueia no fork (`ok:false`).
+completed` back over the port, with the enrich round-trip answered; kill-switch
+`VOICECAST_AGENT_BRIDGE=0` blocks at the fork (`ok:false`).
 
-**Achados (não consertados — fora do escopo):** o runner ignora `req.cwd` no
-Windows (spawn via `wsl.exe` sem cwd — comportamento do C2); o `goalSummary`
-duplicado em `runner.ts` e `agent-goal.ts` (o do runner não é usado pelo C4 —
-o puro da shared é o consumido).
+**Findings (not fixed — out of scope):** the runner ignores `req.cwd` on
+Windows (spawn via `wsl.exe` without cwd — C2 behavior); the duplicated
+`goalSummary` in `runner.ts` and `agent-goal.ts` (the runner's one isn't used by C4 —
+the pure shared one is what's consumed).
 
-**Pendências p/ gate Windows (mantenedor):** rodar `pnpm dev:win` +
-`voicecast.exe --agenttest "Responda somente: ok"` (runtime C2b real — valida
-spawn wsl.exe, estados na barra e telemetria no Grafana: counters
+**Pending items for the Windows gate (maintainer):** run `pnpm dev:win` +
+`voicecast.exe --agenttest "Responda somente: ok"` ["Reply only: ok" — test goal string] (real C2b runtime — validates
+wsl.exe spawn, states in the bar and telemetry in Grafana: counters
 `voicecast_agent_bridge_messages_total`, `voicecast_agent_goals_total`,
-`voicecast_agent_context_total`); validar entrada digitada no painel.
+`voicecast_agent_context_total`); validate typed input in the panel.

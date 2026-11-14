@@ -1,119 +1,119 @@
-# C3 — Contexto no goal (bounded) · bloqueado por C2-unlock (U1)
+# C3 — Context in the goal (bounded) · blocked by C2-unlock (U1)
 
-## Objetivo
-Todo goal falado/ digitado leva o contexto BOUNDED da última sessão voicecast
-(quando recente e relevante), para o agente começar sabendo o que você estava
-vendo/falando — sem você colar nada.
+## Objective
+Every spoken/typed goal carries the BOUNDED context of the last voicecast session
+(when recent and relevant), so the agent starts knowing what you were
+seeing/saying — without you pasting anything.
 
-## Contexto obrigatório (ler antes)
-- `/home/pedro/programing/projetos/voicecast/docs/PLANO-COCKPIT.md` (C3 + decisões ratificadas)
-- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocolo)
+## Required context (read first)
+- `/home/pedro/programing/projetos/voicecast/docs/PLANO-COCKPIT.md` (C3 + ratified decisions)
+- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocol)
 - `/home/pedro/programing/projetos/voicecast/src/main/library.ts` — `buildContext`
-  (reuso; NÃO duplicar a lógica de montar markdown)
-- `/home/pedro/programing/projetos/voicecast/src/main/agent/runner.ts` — onde o
-  goal é montado/spawnado (o contexto entra aqui)
-- `AGENTS.md` do repo (regras; seção Telemetria p/ padrão de métricas)
+  (reuse; do NOT duplicate the markdown-assembly logic)
+- `/home/pedro/programing/projetos/voicecast/src/main/agent/runner.ts` — where the
+  goal is assembled/spawned (the context goes in here)
+- The repo's `AGENTS.md` (rules; Telemetry section for the metrics pattern)
 
-## Escopo
-**Fazer:**
-1. `src/shared/agent-context.ts` — função PURA `boundSessionContext(detail,
-   opts)`: decide INCLUIR (última sessão < N min, default 30, e meta.jev
-   relevância ≥2) e TRUNCA em ~2k tokens (na fronteira de palavra/linha);
-   testável sem electron. Config por env `VOICECAST_GOAL_CONTEXT_MAX_AGE_MIN`.
-2. No runner (ou no chamador do GoalQueue): antes de spawnar, carregar a
-   última sessão via `listSessions`/`getSessionDetail` e, se o boundContext
-   incluir, concatenar ao goal num bloco delimitado claro:
-   `--- CONTEXTO DA ÚLTIMA SESSÃO (auto) ---\n…\n--- FIM DO CONTEXTO ---`.
-3. Telemetria (DoD): counter `voicecast_agent_context_total{com,sem}` +
+## Scope
+**Do:**
+1. `src/shared/agent-context.ts` — PURE function `boundSessionContext(detail,
+   opts)`: decides whether to INCLUDE (last session < N min, default 30, and meta.jev
+   relevance ≥2) and TRUNCATES at ~2k tokens (at a word/line boundary);
+   testable without electron. Config via env `VOICECAST_GOAL_CONTEXT_MAX_AGE_MIN`.
+2. In the runner (or the GoalQueue caller): before spawning, load the
+   last session via `listSessions`/`getSessionDetail` and, if the boundContext
+   includes it, concatenate it to the goal in a clearly delimited block:
+   `--- CONTEXTO DA ÚLTIMA SESSÃO (auto) ---\n…\n--- FIM DO CONTEXTO ---` (literal delimiter emitted by the app: "--- CONTEXT OF THE LAST SESSION (auto) --- … --- END OF CONTEXT ---").
+3. Telemetry (DoD): counter `voicecast_agent_context_total{com,sem}` +
    span attr `context.chars`.
 
-**Não tocar:** protocolo/middleman (fora de escopo), editor UI, gate de
-permissão (C5), barra (C4).
+**Don't touch:** protocol/middleman (out of scope), editor UI, permission
+gate (C5), bar (C4).
 
-## Aceite verificável
-- `pnpm ci:local` verde; testes novos de `boundSessionContext`: inclui/exclui
-  por idade e relevância Jev; trunca em ~2k tokens na fronteira de palavra;
-  sessão sem transcript não quebra.
-- Teste de integração do runner com agente fake (fixture existente) provando
-  que o bloco de contexto chega no stdin/argv conforme o desenho escolhido.
+## Verifiable acceptance
+- `pnpm ci:local` green; new `boundSessionContext` tests: includes/excludes
+  by age and Jev relevance; truncates at ~2k tokens at a word boundary;
+  a session without transcript doesn't break.
+- Runner integration test with the fake agent (existing fixture) proving
+  that the context block reaches stdin/argv per the chosen design.
 
-## Riscos e gotchas
-- O contexto aumenta o custo do goal (plano real) — truncamento é
-  OBRIGATÓRIO; nunca mandar transcript completo.
-- Jev ausente (fail-soft) ⇒ sem relevância ⇒ só inclui se a sessão for
-  recentíssima (< 5 min)? DECIDA conservador e documente no briefing.
-- Path do sessions root é Windows — `getSessionDetail` do main já resolve.
+## Risks and gotchas
+- Context increases the goal's cost (real plan) — truncation is
+  MANDATORY; never send the full transcript.
+- Jev absent (fail-soft) ⇒ no relevance ⇒ include only if the session is
+  ultra-recent (< 5 min)? DECIDE conservatively and document in the briefing.
+- The sessions root path is Windows — `getSessionDetail` in the main process already resolves it.
 
-## Entrega
-Commits convencionais, sem push. Preencher Resultado abaixo.
+## Delivery
+Conventional commits, no push. Fill in the Result below.
 
-## Resultado (preenche o piloto)
+## Result (filled in by the pilot)
 
-**Entregue em 2026-09-27** (piloto C3). Commits no repo, sem push:
+**Delivered on 2026-09-27** (C3 pilot). Commits in the repo, no push:
 
 - `6a6d751` `feat(c3): política pura do contexto bounded — boundSessionContext
-  (~2k tokens, fronteira de palavra/linha)` — `src/shared/agent-context.ts`
-  (novo, puro — sem electron/fs): `boundSessionContext(detail, opts)` decide
-  INCLUIR e devolve o markdown BOUNDED (null = exclui); `sessionAgeMin`,
-  `truncateToTokenBudget`, `wrapSessionContextBlock` e os delimitadores
-  `SESSION_CONTEXT_BEGIN/END` exportados. Contrato puro `EnrichedGoal`/
-  `GoalEnricher` também mora aqui (o runner importa só o shared — sem
-  electron). + `tests/agent-context.test.ts` (18 testes).
+  (~2k tokens, fronteira de palavra/linha)` [commit subject kept verbatim] — `src/shared/agent-context.ts`
+  (new, pure — no electron/fs): `boundSessionContext(detail, opts)` decides whether to
+  INCLUDE and returns the BOUNDED markdown (null = excludes); `sessionAgeMin`,
+  `truncateToTokenBudget`, `wrapSessionContextBlock` and the
+  `SESSION_CONTEXT_BEGIN/END` delimiters exported. The pure `EnrichedGoal`/
+  `GoalEnricher` contract also lives here (the runner imports only the shared — no
+  electron). + `tests/agent-context.test.ts` (18 tests).
 - `cafb323` `feat(c3): contexto da última sessão no goal — enricher + counter
-  + span attrs` — `src/main/agent/goal-context.ts` (novo):
-  `goalContextEnricher()` carrega a última sessão (`listSessions[0]` →
-  `getSessionDetail`), monta o markdown pelo `buildContext` **(reuso
-  obrigatório — zero duplicação da montagem)** e aplica a política pura.
+  + span attrs` [commit subject kept verbatim] — `src/main/agent/goal-context.ts` (new):
+  `goalContextEnricher()` loads the last session (`listSessions[0]` →
+  `getSessionDetail`), assembles the markdown via `buildContext` **(reuse
+  mandatory — zero duplication of the assembly)** and applies the pure policy.
   `src/main/agent/runner.ts`: `RunGoalRequest.enrich?` + `GoalQueue(onState,
-  enrich?)` — enrich roda ANTES do span `agent.goal`, que nasce com attrs
-  `context.incluido=com|sem` e `context.chars`; enricher quebrado nunca
-  quebra o goal. Counter `voicecast_agent_context_total{incluido=com|sem}`
-  (DoD) no goal-context.ts. `tests/fixtures/fake-agent.sh` ganhou
-  `FAKE_ECHO_ARGS=1` (ecoa o argv — retrocompatível) e
-  `tests/agent-goal-context.test.ts` (13) + 3 testes no
+  enrich?)` — enrich runs BEFORE the `agent.goal` span, which is born with attrs
+  `context.incluido=com|sem` and `context.chars`; a broken enricher never
+  breaks the goal. Counter `voicecast_agent_context_total{incluido=com|sem}`
+  (DoD) in goal-context.ts. `tests/fixtures/fake-agent.sh` gained
+  `FAKE_ECHO_ARGS=1` (echoes argv — backwards compatible) and
+  `tests/agent-goal-context.test.ts` (13) + 3 tests in
   `tests/agent-runner.test.ts`.
 
-**Política Jev-ausente (decisão exigida pelo briefing — conservadora):**
+**Jev-absent policy (decision required by the briefing — conservative):**
 
-- Jev **presente**: inclui se idade < 30 min (env
-  `VOICECAST_GOAL_CONTEXT_MAX_AGE_MIN`) **E** `meta.jev.relevancia >= 2`
-  (mesma política do hook C7).
-- Jev **ausente** (fail-soft: sem key/erro/off): só inclui se a sessão for
-  **RECENTÍSSIMA (< 5 min) E tiver transcript**. Racional: sem sinal de
-  relevância, a recência extrema + existência de fala são os únicos proxies
-  de que o goal se refere àquela sessão; qualquer coisa mais velha sem Jev
-  não entra (feature quase morta com Jev off é o preço conservador).
-- Idade conta do **FIM** da sessão (`startedAt + durationS`, igual ao hook
-  C7); skew de relógio (idade negativa no mount do Windows) é aceito (vira
-  0); `startedAt` ausente/inválida → exclui (recência não comprovável).
-- Sessão **sem transcript não quebra**: com Jev ok entra sem a seção de fala
-  (markdown cita título/paths/julgamento); sem Jev não entra.
-- Truncamento **sempre** aplicado: ~2000 tokens (≈ 8k chars a 4 chars/token —
-  aproximação documentada), corte na fronteira de palavra/linha (a mais
-  tardia dentro da janela; corte duro abaixo da metade) + marcador
-  `… (contexto truncado)`. Transcript completo NUNCA vai (testado).
+- Jev **present**: include if age < 30 min (env
+  `VOICECAST_GOAL_CONTEXT_MAX_AGE_MIN`) **AND** `meta.jev.relevancia >= 2`
+  (same policy as hook C7).
+- Jev **absent** (fail-soft: no key/error/off): only include if the session is
+  ULTRA-RECENT (< 5 min) AND has a transcript. Rationale: without a
+  relevance signal, extreme recency + existence of speech are the only proxies
+  that the goal refers to that session; anything older without Jev
+  doesn't enter (a nearly dead feature with Jev off is the conservative price).
+- Age counts from the session's **END** (`startedAt + durationS`, same as hook
+  C7); clock skew (negative age on the Windows mount) is accepted (becomes
+  0); missing/invalid `startedAt` → exclude (recency not provable).
+- A session **without transcript doesn't break**: with Jev ok it enters without the
+  speech section (markdown cites title/paths/judgment); without Jev it doesn't enter.
+- Truncation **always** applied: ~2000 tokens (≈ 8k chars at 4 chars/token —
+  documented approximation), cut at the word/line boundary (the latest
+  within the window; hard cut below half) + marker
+  `… (contexto truncado)` ["… (context truncated)" — literal marker emitted by the app]. The full transcript NEVER goes (tested).
 
-**Desenho da integração:** o enricher é **injetado** no runner
-(`req.enrich` / construtor do `GoalQueue`) — o runner continua sem import de
-electron (testes do runner intactos sem mock) e o chamador de produção (C4,
-painel) liga com uma linha: `new GoalQueue(onState, goalContextEnricher())`.
-O goal vai primeiro, o bloco delimitado vai concatenado depois
+**Integration design:** the enricher is **injected** into the runner
+(`req.enrich` / `GoalQueue` constructor) — the runner still has no electron
+import (runner tests intact without mock) and the production caller (C4,
+panel) wires it with one line: `new GoalQueue(onState, goalContextEnricher())`.
+The goal goes first, the delimited block is concatenated after
 (`--- CONTEXTO DA ÚLTIMA SESSÃO (auto) ---\n…\n--- FIM DO CONTEXTO ---`).
 
-**Evidências (aceite verificável):** `pnpm ci:local` verde
-(typecheck + **167 passed / 4 skipped** — skips pré-existentes jev.smoke/
-agent-live + build main/preload/renderer). Teste de integração prova o
-efeito observável exigido: runGoal com enricher real (biblioteca real,
-electron mockado → tmpdir) e o agente fake recebendo o bloco no argv
-(`FAKE_ECHO_ARGS`) — e o goal frio (sessão velha) chega sem bloco.
+**Evidence (verifiable acceptance):** `pnpm ci:local` green
+(typecheck + **167 passed / 4 skipped** — pre-existing skips jev.smoke/
+agent-live + main/preload/renderer build). The integration test proves the
+required observable effect: runGoal with a real enricher (real library,
+electron mocked → tmpdir) and the fake agent receiving the block in argv
+(`FAKE_ECHO_ARGS`) — and the cold goal (old session) arrives without a block.
 
-**Pendências (torre de controle):**
-- **C4** é o chamador de produção: passar `goalContextEnricher()` no
-  construtor do `GoalQueue` (hoje nenhum código src instancia a fila).
-- Gate humano no Windows (`pnpm dev:win`): validar o bloco num goal real e o
-  counter/span chegando ao Grafana (painel uid `voicecast` pode ganhar a
-  série `voicecast_agent_context_total` — fora do escopo do piloto).
-- Com Jev off a política fica conservadora de propósito; se o mantenedor
-  quiser janela fresh ajustável, basta um env novo (opts já suportam).
+**Pending items (control tower):**
+- **C4** is the production caller: pass `goalContextEnricher()` to the
+  `GoalQueue` constructor (today no src code instantiates the queue).
+- Human gate on Windows (`pnpm dev:win`): validate the block in a real goal and the
+  counter/span reaching Grafana (dashboard uid `voicecast` can gain the
+  `voicecast_agent_context_total` series — out of the pilot's scope).
+- With Jev off the policy is conservative on purpose; if the maintainer
+  wants an adjustable fresh window, a new env suffices (opts already support it).
 
-Achados: nenhum bug vizinho relevante.
+Findings: no relevant neighboring bugs.

@@ -1,11 +1,11 @@
-"""Paths e helpers independentes de backend, compartilhados por win32/linux.
+"""Backend-independent paths and helpers, shared by win32/linux.
 
-app_dir() é a raiz de dados do plugin:
-  - Windows: %LOCALAPPDATA%/voice-dictation (comportamento histórico)
+app_dir() is the plugin's data root:
+  - Windows: %LOCALAPPDATA%/voice-dictation (historical behavior)
   - Linux:   ${XDG_DATA_HOME:-~/.local/share}/voice-dictation
 
-Todos os módulos que gravam em disco (config, dataset, history, logs,
-pidfiles) passam por aqui — nunca montam o path diretamente.
+Every module that writes to disk (config, dataset, history, logs,
+pidfiles) goes through here — never builds the path directly.
 """
 
 from __future__ import annotations
@@ -15,9 +15,9 @@ import sys
 
 
 def app_dir() -> str:
-    # VOICE_APP_DIR: o voicecast hospeda este backend e aponta a raiz de dados
-    # para %LOCALAPPDATA%\voicecast\asr-backend. Sem o env, comportamento
-    # histórico do voice-dictation.
+    # VOICE_APP_DIR: voicecast hosts this backend and points the data root
+    # to %LOCALAPPDATA%\voicecast\asr-backend. Without the env, historical
+    # voice-dictation behavior.
     override = os.environ.get("VOICE_APP_DIR")
     if override:
         return override
@@ -31,7 +31,7 @@ def app_dir() -> str:
 
 
 def venv_python(venv_dir: str | None = None) -> str:
-    """Caminho do python dentro do venv do plugin (Scripts\\ no Windows)."""
+    """Path of the python inside the plugin's venv (Scripts\\ on Windows)."""
     venv = venv_dir or os.path.join(app_dir(), ".venv")
     if sys.platform == "win32":
         return os.path.join(venv, "Scripts", "python.exe")
@@ -39,10 +39,10 @@ def venv_python(venv_dir: str | None = None) -> str:
 
 
 def host_src() -> str:
-    """Código-fonte sincronizado/executável no host (spawn do ASR).
+    """Source code synced/executable on the host (ASR spawn).
 
-    Windows: cópia feita pelo install-tasks.ps1 (%LOCALAPPDATA%).
-    Linux: o próprio repo roda via PYTHONPATH — spawn usa o mesmo src.
+    Windows: copy made by install-tasks.ps1 (%LOCALAPPDATA%).
+    Linux: the repo itself runs via PYTHONPATH — spawn uses the same src.
     """
     if sys.platform == "win32":
         return os.path.join(app_dir(), "src")

@@ -1,12 +1,12 @@
 /**
- * Overlay de anotações (AN.1) — canvas fullscreen transparente sobre a tela.
+ * Annotation overlay (AN.1) — transparent fullscreen canvas over the screen.
  *
- * O main é a fonte da verdade (annotations.jsonl): todo evento passa por
- * vcInternal.annotationEvent (invoke) e volta com seq/t/ids; o estado local é
- * re-fold do log (mesmo motor puro do main — shared/annotations).
- * Modo desenho: pointer + teclado (Ctrl+Z/Y, Esc). Pass-through: a janela
- * ignora o mouse (usuário interage com o app embaixo); a paleta aciona o
- * mouse da janela no hover.
+ * Main is the source of truth (annotations.jsonl): every event goes through
+ * vcInternal.annotationEvent (invoke) and comes back with seq/t/ids; local state
+ * is a re-fold of the log (same pure engine as main — shared/annotations).
+ * Draw mode: pointer + keyboard (Ctrl+Z/Y, Esc). Pass-through: the window
+ * ignores the mouse (user interacts with the app underneath); the palette turns
+ * the window's mouse on via hover.
  */
 import { useEffect, useRef, useState } from "react";
 import {
@@ -37,17 +37,17 @@ type Tool = { tool: AnnotationTool; eraserMode: EraserMode; color: string; width
 export function AnnotationApp() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const logRef = useRef<AnnotationEvent[]>([]);
-  const strokesRef = useRef<StrokeSnapshot[]>([]); // fold do log (ativo)
-  const drawingRef = useRef<Pt[] | null>(null); // stroke/laser/borracha em andamento
-  const lasersRef = useRef<{ at: number; points: Pt[] }[]>([]); // trails vivos (fade)
+  const strokesRef = useRef<StrokeSnapshot[]>([]); // fold of the log (active)
+  const drawingRef = useRef<Pt[] | null>(null); // stroke/laser/eraser in progress
+  const lasersRef = useRef<{ at: number; points: Pt[] }[]>([]); // live trails (fade)
   const toolRef = useRef<Tool>({ tool: "brush", eraserMode: "stroke", color: CORES[0], width: ESPESSURAS[1] });
   const passThroughRef = useRef(true);
   const [passThrough, setPassThroughS] = useState(true);
   const [tool, setToolS] = useState<Tool>(toolRef.current);
   const paletaRef = useRef<HTMLDivElement>(null);
   const [, forceRender] = useState(0);
-  // paleta móvel (mantenedor 2026-09-22: mover como o indicador de gravação);
-  // null = posição default (centro, bottom 48)
+  // movable palette (maintainer 2026-09-22: move it like the recording indicator);
+  // null = default position (center, bottom 48)
   const [palPos, setPalPos] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ dx: number; dy: number } | null>(null);
   const [palHidden, setPalHiddenS] = useState(false);
@@ -60,17 +60,17 @@ export function AnnotationApp() {
   const setPassThrough = (on: boolean) => {
     passThroughRef.current = on;
     setPassThroughS(on);
-    // laser mostra o cursor real (mantenedor 2026-09-22: "quando eu clico no
-    // laser, meu mouse some") — nenhuma ferramenta esconde o mouse
+    // laser shows the real cursor (maintainer 2026-09-22: "when I click the
+    // laser, my mouse disappears") — no tool hides the mouse
     document.body.style.cursor = on ? "default" : "crosshair";
   };
 
-  // main faz polling do cursor sobre este retângulo p/ habilitar o mouse
+  // main polls the cursor over this rectangle to enable the mouse
   useEffect(() => {
     const report = () => {
       const el = paletaRef.current;
       if (!el) {
-        // paleta oculta: limpa o retângulo (hover do poll não deve ligar o mouse)
+        // palette hidden: clears the rectangle (poll hover must not turn the mouse on)
         window.vcInternal.annotationPaletteBounds(null);
         return;
       }
@@ -85,7 +85,7 @@ export function AnnotationApp() {
     };
   }, [palPos, palHidden]);
 
-  // ── drag da paleta (fundo/grip; botões e controles não arrastam) ──────
+  // ── palette drag (background/grip; buttons and controls don't drag) ──────
   const onPalPointerDown = (e: React.PointerEvent) => {
     const t = e.target as HTMLElement;
     if (t !== e.currentTarget && !t.dataset.grip) return;
@@ -93,7 +93,7 @@ export function AnnotationApp() {
     if (!r) return;
     dragRef.current = { dx: e.clientX - r.left, dy: e.clientY - r.top };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    // pass-through: mantém o mouse da janela ligado mesmo saindo do retângulo
+    // pass-through: keeps the window's mouse on even when leaving the rectangle
     void window.vcInternal.annotationMouse({ mouse: true, from: "drag" });
   };
   const onPalPointerMove = (e: React.PointerEvent) => {
@@ -115,10 +115,10 @@ export function AnnotationApp() {
     kickRef.current();
   };
 
-  // ── render loop (SOB DEMANDA — overlay parado custa ~0% CPU) ──────────
-  // rAF só fica agendado enquanto há o que animar (laser com fade, traço/
-  // borracha em andamento). Mudanças pontuais (stroke commitado, undo,
-  // sync do main, resize) pedem UM frame via kick().
+  // ── render loop (ON DEMAND — idle overlay costs ~0% CPU) ──────────
+  // rAF only stays scheduled while there is something to animate (laser with
+  // fade, stroke/eraser in progress). Point changes (committed stroke, undo,
+  // main sync, resize) ask for ONE frame via kick().
   const kickRef = useRef<() => void>(() => {});
   useEffect(() => {
     let raf = 0;
@@ -143,15 +143,15 @@ export function AnnotationApp() {
           for (let i = 1; i < st.points.length; i++) ctx.lineTo(st.points[i]!.x, st.points[i]!.y);
           ctx.stroke();
         };
-        // ativos (fold do log)
+        // active (fold of the log)
         for (const st of strokesRef.current) drawStroke(st);
-        // em andamento
+        // in progress
         const cur = drawingRef.current;
         if (cur && toolRef.current.tool === "brush") {
           drawStroke({ color: toolRef.current.color, width: toolRef.current.width, points: cur });
         }
         if (cur && toolRef.current.tool === "eraser") {
-          // cursor da borracha
+          // eraser cursor
           const p = cur[cur.length - 1]!;
           ctx.globalAlpha = 0.9;
           ctx.strokeStyle = "#ffffff";
@@ -160,14 +160,14 @@ export function AnnotationApp() {
           ctx.arc(p.x, p.y, toolRef.current.width * 2, 0, Math.PI * 2);
           ctx.stroke();
         }
-        // lasers: trail com fade (rastro: segmentos com alpha decrescente)
+        // lasers: trail with fade (trail: segments with decreasing alpha)
         lasersRef.current = lasersRef.current.filter((l) => now - l.at < LASER_FADE_MS);
         for (const l of lasersRef.current) {
-          animated = true; // fade em curso → próxima frame
+          animated = true; // fade in progress → next frame
           const age = (now - l.at) / LASER_FADE_MS;
           if (l.points.length >= 2) {
             drawStroke({ points: l.points }, Math.max(0, 1 - age), "#ff2d2d", 5);
-            // ponto quente
+            // hot spot
             const p = l.points[l.points.length - 1]!;
             ctx.globalAlpha = Math.max(0, 1 - age);
             ctx.fillStyle = "#ff2d2d";
@@ -198,21 +198,21 @@ export function AnnotationApp() {
     };
   }, []);
 
-  // ── canvas sizing (px físicos — CSS cobre a tela inteira) ─────────────
+  // ── canvas sizing (physical px — CSS covers the whole screen) ─────────────
   useEffect(() => {
     const fit = () => {
       const cv = canvasRef.current;
       if (!cv) return;
       cv.width = Math.round(window.innerWidth * DPR);
       cv.height = Math.round(window.innerHeight * DPR);
-      kickRef.current(); // resize limpa o canvas — repinta o estado
+      kickRef.current(); // resize clears the canvas — repaints the state
     };
     fit();
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
   }, []);
 
-  // ── comandos do main (tool / pass-through / capture) ──────────────────
+  // ── commands from main (tool / pass-through / capture) ──────────────────
   useEffect(() => {
     const off = window.vcInternal.onAnnotationCmd((cmd) => {
       if (cmd.type === "tool") {
@@ -227,7 +227,7 @@ export function AnnotationApp() {
       } else if (cmd.type === "capture") {
         void composite(cmd.id, cmd.frame);
       } else if (cmd.type === "sync") {
-        // evento gravado direto no main (limpar via hotkey) — replica no fold
+        // event recorded directly in main (clear via hotkey) — replicated in the fold
         logRef.current.push(cmd.ev);
         refold();
       }
@@ -235,14 +235,14 @@ export function AnnotationApp() {
     return off;
   }, []);
 
-  /** Frame + strokes/lasers ativos → PNG b64 de volta pro main. */
+  /** Frame + active strokes/lasers → b64 PNG back to main. */
   async function composite(id: string, frame: string): Promise<void> {
     try {
       const ctxData = window.vcInternal.annotationContext();
       const img = new Image();
       await new Promise<void>((res, rej) => {
         img.onload = () => res();
-        img.onerror = () => rej(new Error("frame não carregou"));
+        img.onerror = () => rej(new Error("frame did not load"));
         img.src = frame;
       });
       const cv = document.createElement("canvas");
@@ -250,7 +250,7 @@ export function AnnotationApp() {
       cv.height = img.naturalHeight;
       const c = cv.getContext("2d")!;
       c.drawImage(img, 0, 0);
-      // strokes no MESMO espaço físico do frame
+      // strokes in the SAME physical space as the frame
       for (const st of ctxData.strokes) {
         if (st.points.length < 2) continue;
         c.strokeStyle = st.color;
@@ -262,7 +262,7 @@ export function AnnotationApp() {
         for (let i = 1; i < st.points.length; i++) c.lineTo(st.points[i]!.x, st.points[i]!.y);
         c.stroke();
       }
-      // lasers recentes entram queimados (registro de onde apontou)
+      // recent lasers get burned in (record of where it pointed)
       for (const l of ctxData.lasers) {
         if (l.points.length < 2) continue;
         c.strokeStyle = "#ff2d2d";
@@ -281,7 +281,7 @@ export function AnnotationApp() {
     }
   }
 
-  // ── teclado (só recebe em modo desenho — janela focusable) ────────────
+  // ── keyboard (only received in draw mode — window focusable) ────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -312,11 +312,11 @@ export function AnnotationApp() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // ── AN.6: roda no modo desenho → main repassa à janela de baixo ───────
-  // Fora do React (onWheel do root é passive): precisa de preventDefault.
+  // ── AN.6: runs in draw mode → main forwards to the window underneath ───────
+  // Outside React (root onWheel is passive): needs preventDefault.
   useEffect(() => {
     const onWheel = (e: WheelEvent) => {
-      if (passThroughRef.current) return; // pass-through: a roda já é do app de baixo
+      if (passThroughRef.current) return; // pass-through: the wheel already belongs to the app underneath
       e.preventDefault();
       window.vcInternal.annotationWheel({
         cx: Math.round(e.clientX * DPR),
@@ -332,7 +332,7 @@ export function AnnotationApp() {
     return () => window.removeEventListener("wheel", onWheel);
   }, []);
 
-  // ── pointer (modo desenho) ────────────────────────────────────────────
+  // ── pointer (draw mode) ────────────────────────────────────────────
   const toPhysical = (e: React.PointerEvent): Pt => ({
     x: Math.round(e.clientX * DPR),
     y: Math.round(e.clientY * DPR),
@@ -353,11 +353,11 @@ export function AnnotationApp() {
     if (!cur) return;
     const p = toPhysical(e);
     const last = cur[cur.length - 1]!;
-    if (Math.hypot(p.x - last.x, p.y - last.y) < 2) return; // throttle 2px
+    if (Math.hypot(p.x - last.x, p.y - last.y) < 2) return; // 2px throttle
     cur.push(p);
     kickRef.current();
     if (toolRef.current.tool === "laser") {
-      // trail vivo: renasce a cada movimento (fade conta desde o último ponto)
+      // live trail: reborn on every move (fade counts from the last point)
       const alive = lasersRef.current[lasersRef.current.length - 1];
       if (alive && performance.now() - alive.at < 80) alive.points.push(p);
       else lasersRef.current.push({ at: performance.now(), points: [p] });
@@ -383,7 +383,7 @@ export function AnnotationApp() {
         refold();
       }
     } else if (t.tool === "laser") {
-      // caminho persiste no log (atenção); visual continua fade local
+      // path persists in the log (heads-up); visual keeps the local fade
       const ev = await window.vcInternal.annotationEvent({ kind: "laser", points: simplifyPoints(cur) });
       if (ev) logRef.current.push(ev);
     } else if (t.tool === "eraser") {
@@ -413,7 +413,7 @@ export function AnnotationApp() {
     }
   };
 
-  // ── paleta ────────────────────────────────────────────────────────────
+  // ── palette ────────────────────────────────────────────────────────────
   const btn = (ativo: boolean): React.CSSProperties => ({
     background: ativo ? "#2d1b3d" : "#1a1a22",
     border: `1px solid ${ativo ? "#7c4dff" : "#2a2a34"}`,
@@ -448,7 +448,7 @@ export function AnnotationApp() {
     >
       <div
         data-grip="1"
-        title="segure para mover a paleta"
+        title="hold to move the palette"
         style={{ cursor: dragRef.current ? "grabbing" : "grab", font: "700 14px system-ui", color: "#6a6a78", padding: "0 2px" }}
       >
         ⠿
@@ -456,19 +456,19 @@ export function AnnotationApp() {
       <button style={btn(tool.tool === "laser" && !passThrough)} onClick={() => { setTool({ tool: "laser" }); void window.vcInternal.annotationMouse({ mouse: true, from: "draw", tool: "laser" }); }} title="Laser (Ctrl+Alt+G)">
         Laser
       </button>
-      <button style={btn(tool.tool === "brush" && !passThrough)} onClick={() => { setTool({ tool: "brush" }); void window.vcInternal.annotationMouse({ mouse: true, from: "draw", tool: "brush" }); }} title="Pincel (Ctrl+Alt+B)">
-        Pincel
+      <button style={btn(tool.tool === "brush" && !passThrough)} onClick={() => { setTool({ tool: "brush" }); void window.vcInternal.annotationMouse({ mouse: true, from: "draw", tool: "brush" }); }} title="Brush (Ctrl+Alt+B)">
+        Brush
       </button>
-      <button style={btn(tool.tool === "eraser" && !passThrough)} onClick={() => { setTool({ tool: "eraser" }); void window.vcInternal.annotationMouse({ mouse: true, from: "draw", tool: "eraser" }); }} title="Borracha (Ctrl+Alt+E)">
-        Borracha
+      <button style={btn(tool.tool === "eraser" && !passThrough)} onClick={() => { setTool({ tool: "eraser" }); void window.vcInternal.annotationMouse({ mouse: true, from: "draw", tool: "eraser" }); }} title="Eraser (Ctrl+Alt+E)">
+        Eraser
       </button>
       {tool.tool === "eraser" && (
         <button
           style={btn(tool.eraserMode === "area")}
           onClick={() => setTool({ eraserMode: tool.eraserMode === "stroke" ? "area" : "stroke" })}
-          title="Modo da borracha: traço inteiro ↔ por proximidade"
+          title="Eraser mode: whole stroke ↔ by proximity"
         >
-          {tool.eraserMode === "stroke" ? "modo: traço" : "modo: normal"}
+          {tool.eraserMode === "stroke" ? "mode: stroke" : "mode: normal"}
         </button>
       )}
       {tool.tool === "brush" && (
@@ -509,30 +509,30 @@ export function AnnotationApp() {
         </>
       )}
       <span style={{ width: 1, height: 20, background: "#2a2a34" }} />
-      <button style={btn(false)} onClick={() => void window.vcInternal.annotationEvent({ kind: "undo" }).then((ev) => { if (ev) { logRef.current.push(ev); refold(); } })} title="Desfazer (Ctrl+Z)">
+      <button style={btn(false)} onClick={() => void window.vcInternal.annotationEvent({ kind: "undo" }).then((ev) => { if (ev) { logRef.current.push(ev); refold(); } })} title="Undo (Ctrl+Z)">
         ↶
       </button>
-      <button style={btn(false)} onClick={() => void window.vcInternal.annotationEvent({ kind: "redo" }).then((ev) => { if (ev) { logRef.current.push(ev); refold(); } })} title="Refazer (Ctrl+Shift+Z)">
+      <button style={btn(false)} onClick={() => void window.vcInternal.annotationEvent({ kind: "redo" }).then((ev) => { if (ev) { logRef.current.push(ev); refold(); } })} title="Redo (Ctrl+Shift+Z)">
         ↷
       </button>
-      <button style={btn(false)} onClick={() => void window.vcInternal.annotationEvent({ kind: "clear" }).then((ev) => { if (ev) { logRef.current.push(ev); refold(); } })} title="Limpar tudo (Ctrl+Alt+C ou Ctrl+Alt+X)">
-        Limpar
+      <button style={btn(false)} onClick={() => void window.vcInternal.annotationEvent({ kind: "clear" }).then((ev) => { if (ev) { logRef.current.push(ev); refold(); } })} title="Clear all (Ctrl+Alt+C or Ctrl+Alt+X)">
+        Clear
       </button>
-      <button style={btn(false)} onClick={() => void window.vcInternal.annotationPrint()} title="Print da tela para frames/ (Ctrl+Alt+P)">
-        📷 Print
+      <button style={btn(false)} onClick={() => void window.vcInternal.annotationPrint()} title="Screenshot to frames/ (Ctrl+Alt+P)">
+        📷 Screenshot
       </button>
-      <button style={btn(false)} onClick={() => void window.vcInternal.annotationPaletteToggle()} title="Ocultar a paleta (Ctrl+Alt+H traz de volta)">
-        ⏷ ocultar
+      <button style={btn(false)} onClick={() => void window.vcInternal.annotationPaletteToggle()} title="Hide the palette (Ctrl+Alt+H brings it back)">
+        ⏷ hide
       </button>
       {standalone && (
-        <button style={btn(false)} onClick={() => void window.vcInternal.annotationClose()} title="Fechar o painel (descarta as anotações do rascunho)">
-          ✕ fechar
+        <button style={btn(false)} onClick={() => void window.vcInternal.annotationClose()} title="Close the panel (discards draft annotations)">
+          ✕ close
         </button>
       )}
       {!passThrough ? (
-        <span style={{ color: "#7c4dff", font: "600 11px system-ui" }}>desenhando · Esc solta o mouse</span>
+        <span style={{ color: "#7c4dff", font: "600 11px system-ui" }}>drawing · Esc releases the mouse</span>
       ) : (
-        <span style={{ color: "#9a9aa8", font: "11px system-ui" }}>pass-through · Ctrl+Alt+Espaço desenha</span>
+        <span style={{ color: "#9a9aa8", font: "11px system-ui" }}>pass-through · Ctrl+Alt+Space draws</span>
       )}
     </div>
   );

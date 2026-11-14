@@ -1,75 +1,75 @@
-# Delegação — subagents pilotando WPs do voicecast
+# Delegation — subagents piloting voicecast WPs
 
-Data: 2026-09-27 · Mantém a regra da casa: **torre de controle** (sessão main
-+ mantenedor) decide direção e valida gates; **pilotos** (subagents) entregam
-WPs fechados.
+Date: 2026-09-27 · Keeps the house rule: the **control tower** (main
+session + maintainer) decides direction and validates gates; **pilots**
+(subagents) deliver closed WPs.
 
-## Protocolo do piloto (toda delegação segue isto)
+## Pilot protocol (every delegation follows this)
 
-1. **Leia antes de codar** (nesta ordem): o briefing do WP
-   (`docs/wp/<id>.md`) · `AGENTS.md` do repo · os docs canônicos que o
-   briefing citar. O briefing é autocontido — se algo essencial faltar,
-   **pare e reporte**; não invente.
-2. **Escopo estrito**: só o que o briefing manda. Achei bug vizinho? Anote
-   na seção "Achados" do briefing — não conserte por conta própria.
-3. **Definition of Done** (sem isso o WP não está entregue):
-   - `pnpm ci:local` verde (typecheck + testes + build);
-   - **instrumentação nasce junto** (regra do mantenedor: span/métrica/log
-     da feature no mesmo commit — ver "Regra transversal" do CRONOGRAMA);
-   - testes novos cobrindo o comportamento do WP;
-   - commits pequenos e convencionais (`feat(c6): …`) — sem push;
-   - briefing atualizado com resultado, achados e pendências.
-4. **Proibições do piloto**:
-   - NUNCA `pnpm dev:win`, sync-to-host, ou qualquer coisa na cópia Windows;
-   - NUNCA reabrir decisão fechada (arquitetura Electron, protocolo do
-     cockpit, permissões leitura-auto/mutação-humana, etc.);
-   - NUNCA mexer fora dos paths listados no briefing;
-   - NUNCA push, deploy, ou mudança em config do usuário/máquina.
-5. **Reporte final**: o que entregou, evidências (testes/commits), o que
-   ficou pendente e por quê.
+1. **Read before coding** (in this order): the WP briefing
+   (`docs/wp/<id>.md`) · the repo's `AGENTS.md` · the canonical docs the
+   briefing cites. The briefing is self-contained — if something essential is
+   missing, **stop and report**; don't invent.
+2. **Strict scope**: only what the briefing orders. Found a neighboring bug? Note it
+   in the briefing's "Findings" section — don't fix it on your own.
+3. **Definition of Done** (without this the WP isn't delivered):
+   - `pnpm ci:local` green (typecheck + tests + build);
+   - **instrumentation born with the feature** (maintainer's rule: span/metric/log
+     of the feature in the same commit — see CRONOGRAMA's "Cross-cutting rule");
+   - new tests covering the WP's behavior;
+   - small, conventional commits (`feat(c6): …`) — no push;
+   - briefing updated with result, findings and pending items.
+4. **Pilot prohibitions**:
+   - NEVER `pnpm dev:win`, sync-to-host, or anything on the Windows copy;
+   - NEVER reopen a closed decision (Electron architecture, cockpit
+     protocol, read-auto/mutate-human permissions, etc.);
+   - NEVER touch anything outside the paths listed in the briefing;
+   - NEVER push, deploy, or change user/machine config.
+5. **Final report**: what you delivered, evidence (tests/commits), what
+   stayed pending and why.
 
-## Estado dos WPs (torre de controle mantém)
+## WP status (kept by the control tower)
 
-| WP | Onda | Estado | Paralelizável com |
+| WP | Wave | Status | Parallelizable with |
 |---|---|---|---|
-| [U1 — build do CLI open source](wp/U1-build-cli.md) | 1 | ✅ build ok (esbuild main) | — |
-| U2 — diagnóstico standalone | 1 | ✅ **causa raiz + goal "ok" ponta a ponta** (falta chave `identity` no credential store; desbloqueio testado via `ZCODE_DATA_BASE_DIR`) | — |
-| [C2b — wiring do runtime headless no runner](wp/C2b-wiring-headless.md) | 1 | ✅ **entregue** — goal real "ok" 9,4s via runGoal (47610fe; 133 testes; gate Windows pendente) | — |
-| [C3 — contexto no goal](wp/C3-contexto-goal.md) | 1 | 🚀 piloto em background (C2 desbloqueado) | C4 serial |
-| [C6 — AN.4: anotações no buildContext](wp/C6-an4-buildcontext.md) | 1 | ✅ **entregue** (d0c7c3f..46a5afb; 103 testes; gate Windows pendente) | — |
-| [W1 — worker thread p/ import OTel](wp/W1-worker-otel.md) | 1 ⚡ | ✅ **entregue** (331e35b; 114 testes; API main intacta; gate Windows pendente) | — |
-| [C7 — hook + skill .zcode](wp/C7-hook-skill.md) | 1 ⚡ | ✅ **entregue** (39 testes; hook `enabled:false` — gate: ligar + validar c/ sessão real no Windows) | — |
-| C2-unlock — validar goal headless de verdade | 1 | bloqueado: depende de U1 | — |
-| [C3 — contexto no goal](wp/C3-contexto-goal.md) | 1 | ✅ **entregue** (6a6d751..2aa5fe1; 167 testes; política Jev-ausente documentada) | — |
-| [C4 — cockpit na barra (utilityProcess+IPC)](wp/C4-cockpit-barra.md) | 1 | ✅ **entregue** (37ee380..5311384; 176 testes; smoke E2E real c/ xvfb; gate Windows: `--agenttest`) | — |
+| [U1 — open source CLI build](wp/U1-build-cli.md) | 1 | ✅ build ok (esbuild main) | — |
+| U2 — standalone diagnostics | 1 | ✅ **root cause + "ok" goal end to end** (`identity` key missing in the credential store; unlock tested via `ZCODE_DATA_BASE_DIR`) | — |
+| [C2b — headless runtime wiring in the runner](wp/C2b-wiring-headless.md) | 1 | ✅ **delivered** — real "ok" goal in 9.4s via runGoal (47610fe; 133 tests; Windows gate pending) | — |
+| [C3 — context in the goal](wp/C3-contexto-goal.md) | 1 | 🚀 pilot in background (C2 unblocked) | C4 serial |
+| [C6 — AN.4: annotations in buildContext](wp/C6-an4-buildcontext.md) | 1 | ✅ **delivered** (d0c7c3f..46a5afb; 103 tests; Windows gate pending) | — |
+| [W1 — worker thread for the OTel import](wp/W1-worker-otel.md) | 1 ⚡ | ✅ **delivered** (331e35b; 114 tests; main API intact; Windows gate pending) | — |
+| [C7 — hook + .zcode skill](wp/C7-hook-skill.md) | 1 ⚡ | ✅ **delivered** (39 tests; hook `enabled:false` — gate: turn it on + validate with a real session on Windows) | — |
+| C2-unlock — validate a real headless goal | 1 | blocked: depends on U1 | — |
+| [C3 — context in the goal](wp/C3-contexto-goal.md) | 1 | ✅ **delivered** (6a6d751..2aa5fe1; 167 tests; Jev-absent policy documented) | — |
+| [C4 — cockpit in the bar (utilityProcess+IPC)](wp/C4-cockpit-barra.md) | 1 | ✅ **delivered** (37ee380..5311384; 176 tests; real E2E smoke with xvfb; Windows gate: `--agenttest`) | — |
 
-> **Onda 1 (cockpit v1) — código completo** (2026-09-27). Gates do mantenedor:
-> (1) `pnpm dev:win` — valida fase B do editor, C6, W1, C2b/C3/C4 via
-> `voicecast.exe --agenttest "Responda somente: ok"` (estados na barra);
-> (2) ligar hook do C7 (`enabled:true` no zcode.json) + F9 com sessão real.
-| C5 — gate de permissão local | 1 | bloqueado: C4 | — |
-| [W2a — correção de ditados + dataset (#3+#5)](wp/W2a-correcao-dataset.md) | 2 | ✅ **entregue** (1dda3f6..fa00a6a; 219 testes; gate Windows pendente) | W2b (arquivos disjuntos) |
-| [W2b — backlog técnico da Onda 1 (4 achados)](wp/W2b-backlog-tecnico.md) | 2 | ✅ **entregue** (fe4b44c..83deff6; 185 testes; cwd no Windows exercido no gate `--agenttest`) | — |
+> **Wave 1 (cockpit v1) — code complete** (2026-09-27). Maintainer gates:
+> (1) `pnpm dev:win` — validates editor phase B, C6, W1, C2b/C3/C4 via
+> `voicecast.exe --agenttest "Responda somente: ok"` ["Reply only: ok"] (states in the bar);
+> (2) turn on the C7 hook (`enabled:true` in zcode.json) + F9 with a real session.
+| C5 — local permission gate | 1 | blocked: C4 | — |
+| [W2a — dictation correction + dataset (#3+#5)](wp/W2a-correcao-dataset.md) | 2 | ✅ **delivered** (1dda3f6..fa00a6a; 219 tests; Windows gate pending) | W2b (disjoint files) |
+| [W2b — Wave 1 technical backlog (4 findings)](wp/W2b-backlog-tecnico.md) | 2 | ✅ **delivered** (fe4b44c..83deff6; 185 tests; cwd on Windows exercised in the `--agenttest` gate) | — |
 
-## Template de briefing (`docs/wp/<ID>-<slug>.md`)
+## Briefing template (`docs/wp/<ID>-<slug>.md`)
 
 ```
-# <ID> — <título> · <estado>
-## Objetivo (1–2 frases, no vocabulário do produto)
-## Contexto obrigatório (paths absolutos p/ ler antes)
-## Escopo: fazer / não tocar
-## Aceite verificável (comandos + efeitos observáveis)
-## Instrumentação exigida (nomes de métricas/spans)
-## Riscos e gotchas do repo
-## Entrega (commits, seção Resultado preenchida no fim)
-## Resultado (preenche o piloto)
+# <ID> — <title> · <status>
+## Objective (1–2 sentences, in product vocabulary)
+## Required context (absolute paths to read first)
+## Scope: do / don't touch
+## Verifiable acceptance (commands + observable effects)
+## Required instrumentation (metric/span names)
+## Repo risks and gotchas
+## Delivery (commits, Result section filled in at the end)
+## Result (filled in by the pilot)
 ```
 
-## Como a torre orquestra
+## How the tower orchestrates
 
-- Pilotos rodam como **agents em background** (paralelos quando a coluna
-  "Paralelizável" permitir); a sessão main segue em outras frentes.
-- Gate humano (mantenedor) no fim de cada onda: validação no Windows via
-  `pnpm dev:win` — piloto nunca valida sozinho no Windows.
-- Resultado de piloto = commits no repo + briefing preenchido; a torre
-  confere ci:local e fecha o WP.
+- Pilots run as **background agents** (in parallel whenever the
+  "Parallelizable" column allows); the main session continues on other fronts.
+- Human gate (maintainer) at the end of each wave: Windows validation via
+  `pnpm dev:win` — a pilot never validates alone on Windows.
+- Pilot result = commits in the repo + briefing filled in; the tower
+  checks ci:local and closes the WP.

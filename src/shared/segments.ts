@@ -1,6 +1,6 @@
 /**
- * Lógica pura dos segmentos do editor (fase B) — sem electron, testável.
- * Segmento = trecho nomeado da sessão; clipe e contexto nascem daqui.
+ * Pure editor segments logic (phase B) — no electron, testable.
+ * Segment = a named piece of the session; clips and context are born from it.
  */
 
 export interface SessionSegment {
@@ -10,7 +10,7 @@ export interface SessionSegment {
   outS: number;
 }
 
-/** Palavra com timing (subset do transcript — basta start/end p/ fatiar). */
+/** Word with timing (subset of the transcript — start/end is enough to slice). */
 export interface TimedWord {
   w: string;
   start: number;
@@ -24,9 +24,9 @@ export function newSegmentId(): string {
 }
 
 /**
- * Valida/normaliza segmentos vindos do renderer ou do meta.json: descarta
- * entradas sem sentido, clampa em 0, exige ≥0.2s, deduplica ids e ordena
- * por inS. Retorna sempre um array novo e seguro de persistir.
+ * Validates/normalizes segments coming from the renderer or meta.json:
+ * discards meaningless entries, clamps at 0, requires ≥0.2s, deduplicates
+ * ids and sorts by inS. Always returns a new array, safe to persist.
  */
 export function sanitizeSegments(raw: unknown): SessionSegment[] {
   if (!Array.isArray(raw)) return [];
@@ -49,7 +49,7 @@ export function sanitizeSegments(raw: unknown): SessionSegment[] {
       label:
         typeof label === "string" && label.trim()
           ? label.trim().slice(0, 80)
-          : `Segmento ${out.length + 1}`,
+          : `Segment ${out.length + 1}`,
       inS: +lo.toFixed(2),
       outS: +hi.toFixed(2),
     });
@@ -59,17 +59,17 @@ export function sanitizeSegments(raw: unknown): SessionSegment[] {
 
 const safeNamePart = (s: string) => s.replace(/[^\w.-]+/g, "-").slice(0, 60);
 
-/** Base do nome do clipe de um trecho (mesmo critério do createClip). */
+/** Base name of a segment's clip (same criteria as createClip). */
 export function clipFileBase(label: string, inS: number, outS: number): string {
-  return `${safeNamePart(label) || "trecho"}-${Math.round(inS)}s-${Math.round(outS)}s`;
+  return `${safeNamePart(label) || "segment"}-${Math.round(inS)}s-${Math.round(outS)}s`;
 }
 
-/** Base do nome do corte combinado (exportCut) — determinístico p/ re-export. */
+/** Base name of the combined cut (exportCut) — deterministic for re-export. */
 export function cutFileBase(label: string, nSegments: number): string {
-  return `${safeNamePart(label) || "corte"}-${nSegments}seg`;
+  return `${safeNamePart(label) || "cut"}-${nSegments}seg`;
 }
 
-/** Palavras que tocam o intervalo [inS, outS) — fatia de transcrição do trecho. */
+/** Words touching the [inS, outS) interval — the segment's transcript slice. */
 export function wordsInRange<T extends TimedWord>(words: T[], inS: number, outS: number): T[] {
   return words.filter((w) => w.end > inS && w.start < outS);
 }

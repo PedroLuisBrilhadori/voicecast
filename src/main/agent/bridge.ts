@@ -1,20 +1,20 @@
 /**
- * Ponte main ↔ worker do cockpit (C4): utilityProcess.fork do worker
- * (dist/main/agent/worker.js — sibling compilado deste arquivo pelo tsc),
- * relay de mensagens e cleanup no quit.
+ * Cockpit main ↔ worker bridge (C4): utilityProcess.fork of the worker
+ * (dist/main/agent/worker.js — compiled sibling of this file by tsc),
+ * message relay and cleanup on quit.
  *
- * - Isolamento de crash (decisão #4 ratificada do PLANO-COCKPIT): queda do
- *   worker não derruba gravação/ditado — o fork é refeito lazy no próximo
+ * - Crash isolation (ratified decision #4 of PLANO-COCKPIT): a worker crash
+ *   doesn't take down recording/dictation — the fork is redone lazily on the next
  *   enqueue.
- * - Kill-switch DUPLO: VOICECAST_AGENT_BRIDGE=0 impede o fork AQUI (nível da
- *   ponte) e o runner dentro do worker também recusa (agentRunnerConfig).
- * - Enricher (C3): roda NO MAIN (goalContextEnricher() → biblioteca →
- *   electron) e responde os enrich-request do worker pela porta — no
- *   utilityProcess o electron não expõe `app` (medido: só
- *   {net, systemPreferences} no Electron 44).
- * - Telemetria: counter voicecast_agent_bridge_messages_total{direcao} conta
- *   cada mensagem main→worker / worker→main; mensagens {type:"telemetry"} do
- *   worker são reemitidas na telemetria DO MAIN (um único SDK/exporter — W1).
+ * - DOUBLE kill-switch: VOICECAST_AGENT_BRIDGE=0 prevents the fork HERE (bridge
+ *   level) and the runner inside the worker also refuses (agentRunnerConfig).
+ * - Enricher (C3): runs ON MAIN (goalContextEnricher() → library →
+ *   electron) and answers the worker's enrich-requests over the port — in the
+ *   utilityProcess electron doesn't expose `app` (measured: only
+ *   {net, systemPreferences} on Electron 44).
+ * - Telemetry: counter voicecast_agent_bridge_messages_total{direcao} counts
+ *   each main→worker / worker→main message; worker {type:"telemetry"} messages are
+ *   re-emitted in MAIN telemetry (a single SDK/exporter — W1).
  */
 import { utilityProcess, type UtilityProcess } from "electron";
 import fs from "node:fs";
@@ -32,20 +32,20 @@ import type {
 
 const M_BRIDGE = counter(
   "voicecast_agent_bridge_messages_total",
-  "mensagens da ponte main↔worker do cockpit (utilityProcess) por direção",
+  "cockpit main↔worker bridge (utilityProcess) messages by direction",
 );
 
 export interface AgentBridge {
-  /** Enfileira um goal no worker (gera id; cwd default = home do usuário). */
+  /** Enqueues a goal in the worker (generates id; default cwd = user home). */
   enqueue(goal: string): { ok: true; id: string } | { ok: false; error: string };
-  /** Último GoalState recebido do worker — snapshot p/ agentGetState. */
+  /** Last GoalState received from the worker — snapshot for agentGetState. */
   lastState(): GoalState | null;
-  /** Encerra o utilityProcess (app will-quit). */
+  /** Shuts down the utilityProcess (app will-quit). */
   stop(): void;
 }
 
 export function createAgentBridge(onState: (s: GoalState) => void): AgentBridge {
-  const enrich = goalContextEnricher(); // C3 em produção — roda no main
+  const enrich = goalContextEnricher(); // C3 in production — runs on main
   let child: UtilityProcess | null = null;
   let last: GoalState | null = null;
   let stopped = false;
@@ -57,12 +57,12 @@ export function createAgentBridge(onState: (s: GoalState) => void): AgentBridge 
     if (stopped) return null;
     const file = path.join(__dirname, "worker.js");
     if (!fs.existsSync(file)) {
-      logError("agent-bridge: worker não encontrado (build ausente?):", file);
+      logError("agent-bridge: worker not found (missing build?):", file);
       return null;
     }
     const c = utilityProcess.fork(file, [], {
       serviceName: "voicecast-agent-worker",
-      env: { ...process.env }, // runner resolve config pelo env do utilityProcess
+      env: { ...process.env }, // runner resolves config from the utilityProcess env
     });
     c.on("message", (m: AgentWorkerOutbound) => {
       M_BRIDGE?.add(1, { direcao: "worker-main" });
@@ -72,13 +72,13 @@ export function createAgentBridge(onState: (s: GoalState) => void): AgentBridge 
           onState(m.state);
           return;
         case "enrich-request":
-          // C3 no main: buildContext/biblioteca precisam de electron (app)
+          // C3 on main: buildContext/library need electron (app)
           void enrich(m.goal)
             .catch(() => ({ goal: m.goal, included: false, contextChars: 0 }) as const)
             .then((result) => post({ type: "enrich-result", rid: m.rid, result }));
           return;
         case "telemetry":
-          // reemite na telemetria do main — nomes Prometheus preservados
+          // re-emits into main telemetry — Prometheus names preserved
           if (m.kind === "counter") counter(m.name, m.description).add(m.n, m.attrs);
           else histogram(m.name, m.description).record(m.n, m.attrs);
           return;
@@ -88,10 +88,10 @@ export function createAgentBridge(onState: (s: GoalState) => void): AgentBridge 
       }
     });
     c.on("exit", (code) => {
-      if (!stopped) logError(`agent-bridge: worker saiu (code=${code}) — refork lazy no próximo enqueue`);
+      if (!stopped) logError(`agent-bridge: worker exited (code=${code}) — lazy refork on next enqueue`);
       child = null;
     });
-    logInfo("agent-bridge: utilityProcess do worker subiu (", file, ")");
+    logInfo("agent-bridge: worker utilityProcess up (", file, ")");
     return c;
   };
 
@@ -103,24 +103,24 @@ export function createAgentBridge(onState: (s: GoalState) => void): AgentBridge 
       child.postMessage(m);
       return true;
     } catch (e) {
-      logError("agent-bridge: postMessage falhou:", e);
+      logError("agent-bridge: postMessage failed:", e);
       return false;
     }
   };
 
   return {
     enqueue(goal: string) {
-      if (!enabled()) return { ok: false as const, error: "bridge desligado (VOICECAST_AGENT_BRIDGE=0)" };
-      if (!goal.trim()) return { ok: false as const, error: "goal vazio" };
+      if (!enabled()) return { ok: false as const, error: "bridge off (VOICECAST_AGENT_BRIDGE=0)" };
+      if (!goal.trim()) return { ok: false as const, error: "empty goal" };
       const req: AgentGoalRequest = {
         id: `goal-${Date.now().toString(36)}-${++seq}`,
         goal: goal.trim(),
-        // workspace default (decisão #1 do PLANO-COCKPIT: seletor por goal é
-        // UI futura; v1 roda na home do usuário)
+        // default workspace (PLANO-COCKPIT decision #1: per-goal selector is
+        // future UI; v1 runs in the user home)
         cwd: os.homedir(),
       };
       if (!post({ type: "enqueue", req })) {
-        return { ok: false as const, error: "worker do agente indisponível (fork falhou — ver logs)" };
+        return { ok: false as const, error: "agent worker unavailable (fork failed — see logs)" };
       }
       return { ok: true as const, id: req.id };
     },

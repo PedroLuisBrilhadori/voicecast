@@ -1,8 +1,8 @@
 /**
- * boundSessionContext (C3) — política de inclusão e truncamento do contexto
- * da última sessão, PURO (sem electron/fs). Idade, relevância Jev, política
- * conservadora sem Jev, truncamento em ~2k tokens na fronteira de
- * palavra/linha e sessão sem transcript.
+ * boundSessionContext (C3) — inclusion and truncation policy for the last
+ * session context, PURE (no electron/fs). Age, Jev relevance, conservative
+ * policy without Jev, ~2k token truncation at word/line boundary and session
+ * without transcript.
  */
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -19,7 +19,7 @@ import {
 const NOW = Date.parse("2026-09-27T12:00:00.000Z");
 const DUR_S = 60;
 
-/** Detail com idade exata (fim = startedAt + durationS) e sinais opcionais. */
+/** Detail with exact age (end = startedAt + durationS) and optional signals. */
 function mk(
   o: {
     ageMin?: number;
@@ -50,43 +50,43 @@ afterEach(() => {
   delete process.env.VOICECAST_GOAL_CONTEXT_MAX_AGE_MIN;
 });
 
-describe("boundSessionContext — inclusão por idade e relevância", () => {
-  it("sessão recente com relevância ≥ 2 → inclui o markdown", () => {
+describe("boundSessionContext — inclusion by age and relevance", () => {
+  it("recent session with relevance ≥ 2 → includes the markdown", () => {
     expect(boundSessionContext(mk({ ageMin: 5, relevancia: 2.7 }), { markdown: MD, now: NOW })).toBe(MD);
   });
 
-  it("idade fora da janela de 30min → exclui", () => {
+  it("age outside the 30min window → excludes", () => {
     expect(boundSessionContext(mk({ ageMin: 31, relevancia: 3 }), { markdown: MD, now: NOW })).toBeNull();
     expect(boundSessionContext(mk({ ageMin: 45, relevancia: 3 }), { markdown: MD, now: NOW })).toBeNull();
   });
 
-  it("relevância < 2 → exclui (2.0 incluso na borda)", () => {
+  it("relevance < 2 → excludes (2.0 included at the boundary)", () => {
     expect(boundSessionContext(mk({ ageMin: 5, relevancia: 1.9 }), { markdown: MD, now: NOW })).toBeNull();
     expect(boundSessionContext(mk({ ageMin: 5, relevancia: 2.0 }), { markdown: MD, now: NOW })).toBe(MD);
   });
 
-  it("env VOICECAST_GOAL_CONTEXT_MAX_AGE_MIN encurta a janela", () => {
+  it("env VOICECAST_GOAL_CONTEXT_MAX_AGE_MIN shortens the window", () => {
     process.env.VOICECAST_GOAL_CONTEXT_MAX_AGE_MIN = "1";
     expect(boundSessionContext(mk({ ageMin: 2, relevancia: 3 }), { markdown: MD, now: NOW })).toBeNull();
     expect(boundSessionContext(mk({ ageMin: 0.5, relevancia: 3 }), { markdown: MD, now: NOW })).toBe(MD);
   });
 
-  it("idade conta do FIM da sessão (startedAt + durationS, como no hook C7)", () => {
-    // startedAt há 70min + duração 60s → idade 69min (fora); com durationS
-    // cobrindo, a mesma startedAt estaria na janela
+  it("age counts from the END of the session (startedAt + durationS, as in hook C7)", () => {
+    // startedAt 70min ago + 60s duration → age 69min (out); with durationS
+    // covered, the same startedAt would be inside the window
     const startedAt = new Date(NOW - 70 * 60_000).toISOString();
     const fora = mk({ relevancia: 3, startedAt });
     expect(sessionAgeMin(fora, NOW)).toBeCloseTo(69, 5);
     expect(boundSessionContext(fora, { markdown: MD, now: NOW })).toBeNull();
   });
 
-  it("skew de relógio (idade negativa) é aceito", () => {
+  it("clock skew (negative age) is accepted", () => {
     const futuro = mk({ relevancia: 3, startedAt: new Date(NOW + 10 * 60_000).toISOString() });
     expect(sessionAgeMin(futuro, NOW)).toBe(0);
     expect(boundSessionContext(futuro, { markdown: MD, now: NOW })).toBe(MD);
   });
 
-  it("startedAt ausente/inválida → exclui (sem recência comprovável)", () => {
+  it("missing/invalid startedAt → excludes (no provable recency)", () => {
     const semData = { meta: { startedAt: null, durationS: DUR_S, jev: { relevancia: 3 } } };
     expect(boundSessionContext(semData, { markdown: MD, now: NOW })).toBeNull();
     const invalida = mk({ relevancia: 3, startedAt: "não-é-data" });
@@ -96,75 +96,75 @@ describe("boundSessionContext — inclusão por idade e relevância", () => {
   });
 });
 
-describe("boundSessionContext — política conservadora sem Jev", () => {
-  it("Jev ausente + recentíssima (< 5min) com transcript → inclui", () => {
+describe("boundSessionContext — conservative policy without Jev", () => {
+  it("Jev absent + very recent (< 5min) with transcript → includes", () => {
     const r = boundSessionContext(mk({ ageMin: 2, transcript: "fala da sessão" }), { markdown: MD, now: NOW });
     expect(r).toBe(MD);
   });
 
-  it("Jev ausente + 10min → exclui (mesmo com transcript)", () => {
+  it("Jev absent + 10min → excludes (even with transcript)", () => {
     expect(boundSessionContext(mk({ ageMin: 10, transcript: "fala" }), { markdown: MD, now: NOW })).toBeNull();
   });
 
-  it("Jev ausente + sem transcript → exclui (nada sinaliza conteúdo)", () => {
+  it("Jev absent + no transcript → excludes (nothing signals content)", () => {
     expect(boundSessionContext(mk({ ageMin: 2 }), { markdown: MD, now: NOW })).toBeNull();
   });
 
-  it("Jev ausente → freshMaxAgeMin é ajustável por opts", () => {
+  it("Jev absent → freshMaxAgeMin is adjustable via opts", () => {
     const d = mk({ ageMin: 8, transcript: "fala" });
     expect(boundSessionContext(d, { markdown: MD, now: NOW, freshMaxAgeMin: 10 })).toBe(MD);
   });
 });
 
-describe("boundSessionContext — sessão sem transcript não quebra", () => {
-  it("Jev ok + sem transcript → inclui o markdown (título/paths/julgamento)", () => {
+describe("boundSessionContext — session without transcript doesn't break", () => {
+  it("Jev ok + no transcript → includes the markdown (title/paths/judgment)", () => {
     expect(boundSessionContext(mk({ ageMin: 5, relevancia: 3 }), { markdown: MD, now: NOW })).toBe(MD);
     const transcriptNull = { ...mk({ ageMin: 5, relevancia: 3 }), transcript: null };
     expect(boundSessionContext(transcriptNull, { markdown: MD, now: NOW })).toBe(MD);
   });
 
-  it("sem markdown montado → null (caller monta pelo buildContext)", () => {
+  it("no assembled markdown → null (caller assembles it via buildContext)", () => {
     expect(boundSessionContext(mk({ ageMin: 5, relevancia: 3 }), { now: NOW })).toBeNull();
   });
 });
 
-describe("truncateToTokenBudget — truncamento OBRIGATÓRIO (~2k tokens)", () => {
-  it("texto dentro do orçamento volta intacto (sem marcador)", () => {
+describe("truncateToTokenBudget — MANDATORY truncation (~2k tokens)", () => {
+  it("text within budget comes back intact (no marker)", () => {
     expect(truncateToTokenBudget("curto", 100)).toBe("curto");
   });
 
-  it("corta na fronteira de PALAVRA (nunca no meio de uma palavra)", () => {
+  it("cuts at WORD boundary (never mid-word)", () => {
     const text = "word ".repeat(2000).trimEnd(); // 9999 chars
     const out = truncateToTokenBudget(text, SESSION_CONTEXT_MAX_TOKENS); // 8000 chars
-    const content = out.replace("\n… (contexto truncado)", "");
-    expect(out.endsWith("… (contexto truncado)")).toBe(true);
+    const content = out.replace("\n… (context truncated)", "");
+    expect(out.endsWith("… (context truncated)")).toBe(true);
     expect(content.length).toBeLessThanOrEqual(SESSION_CONTEXT_MAX_TOKENS * CHARS_PER_TOKEN);
-    expect(content).toMatch(/word$/); // termina numa palavra completa
-    expect(text.startsWith(content)).toBe(true); // prefixo do original
-    expect(out).not.toBe(text); // nunca o transcript completo
+    expect(content).toMatch(/word$/); // ends on a complete word
+    expect(text.startsWith(content)).toBe(true); // prefix of the original
+    expect(out).not.toBe(text); // never the full transcript
   });
 
-  it("prefere a fronteira de LINHA quando existe dentro da janela", () => {
+  it("prefers the LINE boundary when one exists inside the window", () => {
     const text = `${"x".repeat(30)}\n${"y".repeat(30)}`;
     const out = truncateToTokenBudget(text, 10); // 40 chars
-    expect(out).toBe("x".repeat(30) + "\n… (contexto truncado)");
+    expect(out).toBe("x".repeat(30) + "\n… (context truncated)");
     expect(out).not.toContain("yyy");
   });
 
-  it("sem fronteira razoável → corte duro no limite", () => {
+  it("no reasonable boundary → hard cut at the limit", () => {
     const text = "z".repeat(100);
-    const out = truncateToTokenBudget(text, 10); // 40 chars, sem espaço/linha
+    const out = truncateToTokenBudget(text, 10); // 40 chars, no space/line
     expect(out.startsWith("z".repeat(40))).toBe(true);
-    expect(out.endsWith("… (contexto truncado)")).toBe(true);
+    expect(out.endsWith("… (context truncated)")).toBe(true);
   });
 });
 
-describe("wrapSessionContextBlock — bloco delimitado", () => {
-  it("delimitadores exatos do briefing", () => {
+describe("wrapSessionContextBlock — delimited block", () => {
+  it("exact briefing delimiters", () => {
     expect(wrapSessionContextBlock(MD)).toBe(
       `${SESSION_CONTEXT_BEGIN}\n${MD}\n${SESSION_CONTEXT_END}`,
     );
-    expect(wrapSessionContextBlock(MD)).toContain("--- CONTEXTO DA ÚLTIMA SESSÃO (auto) ---");
-    expect(wrapSessionContextBlock(MD)).toContain("--- FIM DO CONTEXTO ---");
+    expect(wrapSessionContextBlock(MD)).toContain("--- LAST SESSION CONTEXT (auto) ---");
+    expect(wrapSessionContextBlock(MD)).toContain("--- END OF CONTEXT ---");
   });
 });

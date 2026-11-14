@@ -5,13 +5,13 @@ import { describe, expect, it } from "vitest";
 import { readSettings, settingsFile, writeSettings } from "../src/shared/settings";
 
 /**
- * Settings persistente (settings.json no appDataDir) — módulo puro: leitura
- * fail-soft, merge sem perda de chaves e escrita atômica (tmp+rename).
+ * Persistent settings (settings.json in the appDataDir) — pure module: fail-soft
+ * reading, merge without key loss and atomic write (tmp+rename).
  */
 describe("settings", () => {
   const makeDir = () => mkdtempSync(path.join(tmpdir(), "vc-settings-"));
 
-  it("arquivo ausente → {} (default ligado)", () => {
+  it("missing file → {} (default on)", () => {
     const dir = makeDir();
     try {
       expect(readSettings(dir)).toEqual({});
@@ -20,7 +20,7 @@ describe("settings", () => {
     }
   });
 
-  it("roundtrip write→read preserva a chave", () => {
+  it("write→read roundtrip preserves the key", () => {
     const dir = makeDir();
     try {
       writeSettings(dir, { asrHost: false });
@@ -31,7 +31,7 @@ describe("settings", () => {
     }
   });
 
-  it("merge: patch não apaga chaves existentes", () => {
+  it("merge: patch doesn't wipe existing keys", () => {
     const dir = makeDir();
     try {
       writeSettings(dir, { asrHost: false });
@@ -42,12 +42,12 @@ describe("settings", () => {
     }
   });
 
-  it("arquivo corrompido → {} (fail-soft, nunca derruba o boot)", () => {
+  it("corrupted file → {} (fail-soft, never takes down the boot)", () => {
     const dir = makeDir();
     try {
       writeFileSync(settingsFile(dir), "{ quebrado", "utf-8");
       expect(readSettings(dir)).toEqual({});
-      // e a escrita seguinte recupera o arquivo
+      // and the next write recovers the file
       writeSettings(dir, { asrHost: true });
       expect(readSettings(dir)).toEqual({ asrHost: true });
     } finally {
@@ -55,7 +55,7 @@ describe("settings", () => {
     }
   });
 
-  it("JSON não-objeto (array/null) → {}", () => {
+  it("non-object JSON (array/null) → {}", () => {
     const dir = makeDir();
     try {
       writeFileSync(settingsFile(dir), "[1,2]", "utf-8");

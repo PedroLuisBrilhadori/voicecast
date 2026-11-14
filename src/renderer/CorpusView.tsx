@@ -1,10 +1,10 @@
 /**
- * Tela do dataset de treino do voice (W2a — issues #3+#5): lista, detalhe e
- * correção dos ditados do corpus histórico em
- * %LOCALAPPDATA%\voice-dictation\datasets\transcriptions — substitui o painel
- * :8700 aposentado com o daemon. Mesma operação do painel antigo: buscar,
- * abrir, apontar palavras erradas e rotular (bloco validation no JSON do
- * corpus; texto cru do ASR nunca é alterado).
+ * Voice training dataset screen (W2a — issues #3+#5): list, detail and
+ * correction of the historical corpus dictations in
+ * %LOCALAPPDATA%\voice-dictation\datasets\transcriptions — replaces the
+ * :8700 panel retired with the daemon. Same operation as the old panel: search,
+ * open, point out wrong words and label (validation block in the corpus JSON;
+ * raw ASR text is never modified).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DatasetItemDetail, DatasetItemSummary, DatasetLabeledFilter } from "../shared/ipc";
@@ -12,9 +12,9 @@ import { wordsText } from "../shared/corrections";
 import { WordFixer, diffWords, correctionMsg, fmt, type Word } from "./correction-ui";
 
 const FILTERS: { key: DatasetLabeledFilter; label: string }[] = [
-  { key: "any", label: "todas" },
-  { key: "0", label: "sem correção" },
-  { key: "1", label: "rotuladas" },
+  { key: "any", label: "all" },
+  { key: "0", label: "uncorrected" },
+  { key: "1", label: "labeled" },
 ];
 
 export function CorpusView({ initialId }: { initialId: string }) {
@@ -67,10 +67,10 @@ export function CorpusView({ initialId }: { initialId: string }) {
   return (
     <div className="app corpus">
       <header className="ed-head">
-        <button onClick={() => window.close()} title="fechar">✕</button>
-        <h1 style={{ fontSize: 18, margin: 0 }}>Dataset do voice</h1>
+        <button onClick={() => window.close()} title="close">✕</button>
+        <h1 style={{ fontSize: 18, margin: 0 }}>voice dataset</h1>
         <span className="muted">
-          {items ? `${items.length} itens (máx. 200)` : "carregando…"} ·{" "}
+          {items ? `${items.length} items (max. 200)` : "loading…"} ·{" "}
           %LOCALAPPDATA%\voice-dictation\datasets
         </span>
       </header>
@@ -78,7 +78,7 @@ export function CorpusView({ initialId }: { initialId: string }) {
       <div className="corp-tools">
         <input
           className="corp-search"
-          placeholder="buscar no texto… (Enter)"
+          placeholder="search text… (Enter)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && void search()}
@@ -98,12 +98,12 @@ export function CorpusView({ initialId }: { initialId: string }) {
       </div>
 
       <div className="corp-list">
-        {items?.length === 0 && <p className="muted">nada encontrado — dataset vazio ou ausente (fail-soft)</p>}
+        {items?.length === 0 && <p className="muted">nothing found — dataset empty or missing (fail-soft)</p>}
         {items?.map((it) => (
           <button key={it.id} className="corp-row" onClick={() => void openItem(it.id)}>
             <span className="mono">{it.id}</span>
-            <span className="corp-preview">{it.preview || "(vazio)"}</span>
-            {it.validated && <span className="ok" title="já rotulada">✓</span>}
+            <span className="corp-preview">{it.preview || "(empty)"}</span>
+            {it.validated && <span className="ok" title="already labeled">✓</span>}
             <span className="mono">{it.durationS != null ? `${it.durationS.toFixed(1)}s` : "?"}</span>
           </button>
         ))}
@@ -130,7 +130,7 @@ function CorpusDetail(props: {
   const words: Word[] = useMemo(() => detail.words ?? [], [detail]);
   const activeWord = useMemo(() => {
     if (!fixing) return words.findIndex((w) => time >= w.start && time < w.end);
-    return -1; // em correção o destaque não persegue o playhead (evita re-render no input)
+    return -1; // while correcting the highlight doesn't chase the playhead (avoids re-render on input)
   }, [words, time, fixing]);
 
   const seek = (s: number) => {
@@ -153,7 +153,7 @@ function CorpusDetail(props: {
   const save = async () => {
     const edits = draft && words.length ? diffWords(words, draft) : [];
     const correctedText = draft ? wordsText(draft) : (draftText ?? "").replace(/\s+/g, " ").trim();
-    if (!draft && !correctedText) return notify("correção vazia");
+    if (!draft && !correctedText) return notify("empty correction");
     const r = await window.voicecast.saveDatasetCorrection(detail.id, { correctedText, edits });
     notify(correctionMsg(r));
     if (r.ok) {
@@ -168,15 +168,15 @@ function CorpusDetail(props: {
   return (
     <div className="app corpus">
       <header className="ed-head">
-        <button onClick={onBack} title="voltar à lista">←</button>
+        <button onClick={onBack} title="back to the list">←</button>
         <h1 style={{ fontSize: 16, margin: 0 }} className="mono">{detail.id}</h1>
         <span className="tag">
           {detail.language ?? "?"} · {detail.model ?? "?"} · {dur.toFixed(1)}s ·{" "}
           {detail.source ?? "?"} · {detail.ts ?? "?"}
         </span>
         {v && (
-          <span className="ok" title={`por ${v.labeled_by} em ${v.ts}`}>
-            ✓ corrigida ({v.n_edits} edições)
+          <span className="ok" title={`by ${v.labeled_by} at ${v.ts}`}>
+            ✓ corrected ({v.n_edits} edits)
           </span>
         )}
       </header>
@@ -192,35 +192,35 @@ function CorpusDetail(props: {
               onTimeUpdate={(e) => setTime((e.target as HTMLAudioElement).currentTime)}
             />
           ) : (
-            <p className="muted">wav ausente no raw/ (só texto)</p>
+            <p className="muted">wav missing from raw/ (text only)</p>
           )}
           {v && (
             <div className="corp-validation">
-              <strong>texto corrigido:</strong> {v.corrected_text}
+              <strong>corrected text:</strong> {v.corrected_text}
             </div>
           )}
         </div>
 
         <div className="ed-transcript">
           <div className="ed-transcript-head">
-            <h3>Transcrição (crua do ASR — não é alterada)</h3>
-            {words.length > 0 && <span className="muted">{words.length} palavras</span>}
+            <h3>Transcript (raw from ASR — never modified)</h3>
+            {words.length > 0 && <span className="muted">{words.length} words</span>}
             {!fixing && (
-              <button onClick={startFix} title="apontar palavras erradas (rotula no corpus)">
-                ✏️ corrigir
+              <button onClick={startFix} title="point out wrong words (labels in the corpus)">
+                ✏️ correct
               </button>
             )}
             {fixing && (
               <>
-                <button className="go" onClick={() => void save()}>💾 salvar correção</button>
-                <button onClick={cancelFix}>cancelar</button>
+                <button className="go" onClick={() => void save()}>💾 save correction</button>
+                <button onClick={cancelFix}>cancel</button>
               </>
             )}
           </div>
 
           {fixing && words.length > 0 && (
             <p className="muted" style={{ marginTop: 0 }}>
-              clique na palavra errada, corrija e Enter — os timings são preservados
+              click the wrong word, fix it, press Enter — timings are preserved
             </p>
           )}
 
@@ -249,7 +249,7 @@ function CorpusDetail(props: {
               value={draftText ?? ""}
               rows={8}
               onChange={(e) => setDraftText(e.target.value)}
-              placeholder="texto corrigido (ditado sem words — correção é do texto inteiro)"
+              placeholder="corrected text (dictation without words — the whole text is corrected)"
             />
           )}
         </div>

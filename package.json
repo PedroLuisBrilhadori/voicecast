@@ -2,7 +2,7 @@
   "name": "voicecast",
   "version": "0.1.0",
   "private": true,
-  "description": "Sessões de contexto: voz + tela gravadas localmente, transcritas (ASR local) e transformadas em referências para agentes de código.",
+  "description": "Context sessions: voice + screen recorded locally, transcribed (local ASR) and turned into references for coding agents.",
   "main": "dist/main/index.js",
   "scripts": {
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.preload.json --noEmit && tsc -p tsconfig.json --noEmit",

@@ -1,15 +1,15 @@
 /**
- * Protocolo main ↔ worker do cockpit (C4) — PURO, sem electron, testável.
+ * Cockpit main ↔ worker protocol (C4) — PURE, no electron, testable.
  *
- * A porta é o `process.parentPort` do utilityProcess (formato Electron:
- * `on("message", (e) => e.data)` + `postMessage`). O worker hospeda o
- * GoalQueue do runner (C2/C3) e conversa com o main por estas mensagens
+ * The port is utilityProcess's `process.parentPort` (Electron format:
+ * `on("message", (e) => e.data)` + `postMessage`). The worker hosts the
+ * runner's GoalQueue (C2/C3) and talks to main through these messages
  * (src/main/agent/worker.ts ⇄ src/main/agent/bridge.ts).
  *
- * Payloads são interfaces puras (serializáveis) — nada de funções: o
- * enriquecedor do C3 NÃO atravessa a porta (o worker delega ao main via
- * enrich-request/enrich-result, pois a biblioteca de contexto usa electron,
- * que no utilityProcess só expõe {net, systemPreferences}).
+ * Payloads are pure (serializable) interfaces — no functions: the C3
+ * enricher does NOT cross the port (the worker delegates to main via
+ * enrich-request/enrich-result, since the context library uses electron,
+ * which inside utilityProcess only exposes {net, systemPreferences}).
  */
 import type { GoalState } from "./agent-goal";
 import type { EnrichedGoal } from "./agent-context";
@@ -17,7 +17,7 @@ import type { EnrichedGoal } from "./agent-context";
 export type { GoalState } from "./agent-goal";
 export type { EnrichedGoal } from "./agent-context";
 
-/** Pedido de goal que cruza a porta (runGoal sem o enrich — função não serializa). */
+/** Goal request crossing the port (runGoal without enrich — functions don't serialize). */
 export interface AgentGoalRequest {
   id: string;
   goal: string;
@@ -28,19 +28,19 @@ export interface AgentGoalRequest {
 export type AgentWorkerInbound =
   | { type: "enqueue"; req: AgentGoalRequest }
   | { type: "status" }
-  /** Resposta do main ao enrich-request do worker (C3 fail-soft: result nunca rejeita). */
+  /** Main's response to the worker's enrich-request (C3 fail-soft: result never rejects). */
   | { type: "enrich-result"; rid: string; result: EnrichedGoal };
 
 /** Worker → main. */
 export type AgentWorkerOutbound =
   | { type: "goal-state"; state: GoalState }
   | { type: "status"; state: GoalState | null; size: number; summary: string }
-  /** Worker pede ao main o enriquecimento do goal (goalContextEnricher roda no main). */
+  /** Worker asks main to enrich the goal (goalContextEnricher runs in main). */
   | { type: "enrich-request"; rid: string; goal: string }
   /**
-   * Telemetria do runner retransmitida ao main (counter/histogram com os
-   * MESMOS nomes — o SDK OTel continua existindo só no worker-thread do main,
-   * W1; o utilityProcess NÃO duplica init do SDK).
+   * Runner telemetry relayed to main (counter/histogram with the SAME
+   * names — the OTel SDK still exists only in main's worker-thread, W1;
+   * the utilityProcess does NOT duplicate the SDK init).
    */
   | {
       type: "telemetry";
@@ -51,7 +51,7 @@ export type AgentWorkerOutbound =
       attrs?: Record<string, string | number | boolean>;
     };
 
-/** Porta do utilityProcess (formato do process.parentPort do Electron). */
+/** utilityProcess port (Electron's process.parentPort format). */
 export interface AgentWorkerPort {
   on(event: "message", cb: (e: { data: AgentWorkerInbound }) => void): unknown;
   postMessage(m: AgentWorkerOutbound): void;

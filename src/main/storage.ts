@@ -1,7 +1,7 @@
 /**
- * Storage da aplicação — layout de dados em %LOCALAPPDATA%\voicecast (win)
- * ou ${XDG_DATA_HOME:-~/.local/share}/voicecast (linux). Sempre por aqui;
- * nenhum módulo monta path diretamente (padrão voice-dictation).
+ * Application storage — data layout at %LOCALAPPDATA%\voicecast (win)
+ * or ${XDG_DATA_HOME:-~/.local/share}/voicecast (linux). Always through here;
+ * no module assembles paths directly (voice-dictation pattern).
  */
 import { app } from "electron";
 import path from "node:path";
@@ -17,9 +17,9 @@ export function sessionsRoot(): string {
 
 export interface SessionDirs {
   root: string;
-  video: string; // original.fmp4 (bruto do MediaRecorder)
-  mp4: string; // session.mp4 (remux faststart)
-  audio: string; // audio.webm (ditado — sem vídeo)
+  video: string; // original.fmp4 (raw MediaRecorder output)
+  mp4: string; // session.mp4 (faststart remux)
+  audio: string; // audio.webm (dictation — no video)
   meta: string; // meta.json
   transcript: string; // transcript.json
   clips: string;
@@ -42,7 +42,7 @@ export function sessionDirs(dayDir: string, name: string): SessionDirs {
   };
 }
 
-/** Garante a árvore de diretórios (chamado no boot). Idempotente. */
+/** Ensures the directory tree (called on boot). Idempotent. */
 export function ensureLayout(): void {
   for (const dir of [appDataDir(), sessionsRoot()]) {
     fs.mkdirSync(dir, { recursive: true });

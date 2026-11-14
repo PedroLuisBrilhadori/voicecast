@@ -1,20 +1,20 @@
 /**
- * Anotações em tela — engine do main (PLANO-ANOTACOES-TELA: AN.1/AN.2, D4–D7).
+ * On-screen annotations — main engine (PLANO-ANOTACOES-TELA: AN.1/AN.2, D4–D7).
  *
- * Responsabilidades:
- *  - Log `annotations.jsonl` como fonte da verdade (motor puro em
- *    shared/annotations.ts; este arquivo só orquestra).
- *  - Janela overlay fullscreen transparente (irmã do overlay de região): modo
- *    desenho (mouse+teclado da overlay) vs pass-through (ignoreMouseEvents +
- *    focusable false — usuário interage com o app embaixo).
- *  - Hotkeys globais Ctrl+Alt+L/B/E/C/Espaço/P enquanto ativa. Ctrl+Z NÃO é
- *    global (roubaria o undo do app embaixo): teclado da overlay em modo
- *    desenho + botões da paleta.
- *  - Auto-print do modo somente-transcrição (D7): rajada de stroke/laser no
- *    ditado → debounce 2s → frame + marcações queimadas via composite
- *    (ping-pong com o overlay) → frames/print-<t>s.png.
- *  - Ditado não tem dir de sessão até o stop → log e prints ficam em buffer
- *    e são salvos no detach (persistDeferred).
+ * Responsibilities:
+ *  - `annotations.jsonl` log as the source of truth (pure engine in
+ *    shared/annotations.ts; this file only orchestrates).
+ *  - Transparent fullscreen overlay window (sibling of the region overlay): draw
+ *    mode (overlay mouse+keyboard) vs pass-through (ignoreMouseEvents +
+ *    focusable false — user interacts with the app below).
+ *  - Global hotkeys Ctrl+Alt+L/B/E/C/Space/P while active. Ctrl+Z is NOT
+ *    global (it would steal the undo of the app below): overlay keyboard in draw
+ *    mode + palette buttons.
+ *  - Auto-shot of transcription-only mode (D7): stroke/laser burst in the
+ *    dictation → 2s debounce → frame + burned-in markers via composite
+ *    (ping-pong with the overlay) → frames/print-<t>s.png.
+ *  - Dictation has no session dir until stop → log and shots stay buffered
+ *    and are saved on detach (persistDeferred).
  */
 import { BrowserWindow, desktopCapturer, globalShortcut, ipcMain, screen } from "electron";
 import fs from "node:fs";
@@ -42,25 +42,25 @@ import {
 } from "../shared/annotations";
 import { IPC, type AnnotationCmd, type AnnotationEventRequest, type AnnotationWheelRequest } from "../shared/ipc";
 
-const M_EVENTS = counter("voicecast_annotation_events_total", "eventos de anotação por tipo");
-const M_PRINTS = counter("voicecast_annotation_prints_total", "prints queimados por kind");
+const M_EVENTS = counter("voicecast_annotation_events_total", "annotation events by type");
+const M_PRINTS = counter("voicecast_annotation_prints_total", "burned-in shots by kind");
 
 const AUTO_PRINT_DEBOUNCE_MS = 2000;
-const LASER_RECENT_MS = 1500; // lasers recentes entram no print queimado
+const LASER_RECENT_MS = 1500; // recent lasers go into the burned-in shot
 const HOTKEYS = ["Control+Alt+G", "Control+Alt+B", "Control+Alt+E", "Control+Alt+C", "Control+Alt+X", "Control+Alt+Space", "Control+Alt+P"];
 
 /**
- * A overlay (fullscreen, sempre-no-topo) só sobe onde o pass-through é
- * confiável. No Linux/Wayland o setIgnoreMouseEvents não aplica a input
- * region de forma estável (electron#51808 — XWayland/KWin): a overlay em
- * "pass-through" ENGOLE todos os cliques da tela durante ditado/REC.
- * VOICECAST_ANNOTATION_OVERLAY=1 força (teste, ex. com ozone=wayland).
+ * The overlay (fullscreen, always-on-top) only comes up where pass-through is
+ * reliable. On Linux/Wayland setIgnoreMouseEvents doesn't apply the input
+ * region in a stable way (electron#51808 — XWayland/KWin): the overlay in
+ * "pass-through" SWALLOWS every click on screen during dictation/REC.
+ * VOICECAST_ANNOTATION_OVERLAY=1 forces it (testing, e.g. with ozone=wayland).
  */
 function overlaySuportada(): boolean {
   return process.platform === "win32" || process.env.VOICECAST_ANNOTATION_OVERLAY === "1";
 }
 
-/** Engine de anotações — uma instância por processo (sessão corrente). */
+/** Annotations engine — one instance per process (current session). */
 class AnnotationEngine {
   events: AnnotationEvent[] = [];
   state: AnnotationState = emptyState();
@@ -74,19 +74,19 @@ class AnnotationEngine {
   private eraserMode: EraserMode = "stroke";
   private autoPrintTimer: NodeJS.Timeout | null = null;
   private pendingComposites = new Map<string, (b64: string | null) => void>();
-  /** Ditado: prints gerados antes do dir existir. */
+  /** Dictation: shots generated before the dir exists. */
   private bufferedPrints: { name: string; b64: string }[] = [];
-  /** Lasers recentes p/ queimar no print (visual efêmero, memória curta). */
+  /** Recent lasers to burn into the shot (ephemeral visual, short memory). */
   private recentLasers: { at: number; points: Pt[] }[] = [];
-  /** Retângulo da paleta (CSS px) p/ polling de cursor — hover sem forward. */
+  /** Palette rect (CSS px) for cursor polling — hover without forward. */
   private paletteBounds: { x: number; y: number; w: number; h: number } | null = null;
   private cursorPoll: NodeJS.Timeout | null = null;
   private mouseOnWindow = false;
-  /** Drag da paleta em curso: congela o poll e mantém o mouse da janela. */
+  /** Ongoing palette drag: freezes the poll and keeps the window mouse. */
   private dragging = false;
-  /** Paleta visível (mantenedor 2026-09-22: ocultar sem encerrar a sessão). */
+  /** Palette visible (maintainer 2026-09-22: hide without ending the session). */
   private paletteOn = true;
-  /** Painel aberto fora de sessão (Ctrl+Alt+H) — rascunho adotável pelo REC. */
+  /** Panel opened outside a session (Ctrl+Alt+H) — draft adoptable by REC. */
   private standalone = false;
   private hotkeysOn = false;
 
@@ -106,29 +106,29 @@ class AnnotationEngine {
     this.seq = 0;
     this.bufferedPrints = [];
     this.recentLasers = [];
-    // bounds da paleta são da overlay ANTERIOR — sem reset, o poll de cursor
-    // ligaria o mouse da overlay nova sobre um retângulo que não existe mais
+    // the palette bounds are from the PREVIOUS overlay — without the reset, the cursor
+    // poll would enable the new overlay's mouse over a rect that no longer exists
     this.paletteBounds = null;
-    // paleta sob demanda (Ctrl+Alt+H) — decisão do mantenedor (2026-09-23):
-    // não abrir junto com a gravação; overlay segue viva (prints/hotkeys ok)
+    // palette on demand (Ctrl+Alt+H) — maintainer decision (2026-09-23):
+    // don't open it together with the recording; the overlay stays alive (shots/hotkeys ok)
     this.paletteOn = opts.paletteOn ?? false;
     this.standalone = false;
     if (!overlaySuportada()) {
-      // sem overlay (e sem hotkeys/poll): o log de anotações fica vazio e o
-      // detach no stop apenas não escreve nada — ditado/REC seguem normais
-      logInfo("anotações: overlay desligada neste SO (pass-through não confiável no Wayland)");
+      // no overlay (and no hotkeys/poll): the annotations log stays empty and the
+      // detach at stop just writes nothing — dictation/REC keep working normally
+      logInfo("annotations: overlay off on this OS (pass-through unreliable on Wayland)");
       return;
     }
     this.createOverlay();
     this.registerHotkeys();
     this.sendMode();
-    logInfo(`anotações: attach (${kind}${dirs ? "" : ", dir no stop"}${this.paletteOn ? ", paleta" : ""})`);
+    logInfo(`annotations: attach (${kind}${dirs ? "" : ", dir at stop"}${this.paletteOn ? ", palette" : ""})`);
   }
 
   /**
-   * Sessão/ditado começa: se o painel standalone já está aberto, é ADOTADO
-   * (overlay e eventos preservados — traços pré-REC entram no jsonl; t segue
-   * contando da abertura do painel, sem negativos). Senão, attach novo.
+   * Session/dictation starts: if the standalone panel is already open, it is ADOPTED
+   * (overlay and events preserved — pre-REC strokes go into the jsonl; t keeps
+   * counting from the panel opening, no negatives). Otherwise, a new attach.
    */
   beginSession(kind: "session" | "ditado", startedAt: number): void {
     if (this.overlay && this.standalone) {
@@ -136,25 +136,25 @@ class AnnotationEngine {
       this.kind = kind;
       this.dirs = null;
       this.sendMode();
-      logInfo(`anotações: painel standalone adotado pela sessão (${kind})`);
+      logInfo(`annotations: standalone panel adopted by the session (${kind})`);
       return;
     }
     this.attach(kind, startedAt, null);
   }
 
-  /** Estado standalone → overlay (método à parte: evita narrowing do TS). */
+  /** Standalone state → overlay (separate method: avoids TS narrowing). */
   private sendMode(): void {
     this.overlay?.webContents.send(IPC.annotationCmd, { type: "mode", standalone: this.standalone } satisfies AnnotationCmd);
   }
 
-  /** Painel standalone (fora de sessão) — Ctrl+Alt+H sem overlay ativa. */
+  /** Standalone panel (outside a session) — Ctrl+Alt+H without an active overlay. */
   open(): void {
     if (this.overlay) {
       this.togglePalette();
       return;
     }
     if (!overlaySuportada()) {
-      logInfo("anotações: painel standalone indisponível neste SO (overlay desligada)");
+      logInfo("annotations: standalone panel unavailable on this OS (overlay off)");
       return;
     }
     this.standalone = true;
@@ -170,15 +170,15 @@ class AnnotationEngine {
     this.createOverlay();
     this.registerHotkeys();
     this.sendMode();
-    logInfo("anotações: painel standalone aberto (Ctrl+Alt+H)");
+    logInfo("annotations: standalone panel opened (Ctrl+Alt+H)");
   }
 
-  /** ✕ da paleta standalone: fecha e descarta o rascunho. */
+  /** Standalone palette ✕: closes and discards the draft. */
   closeStandalone(): void {
     if (this.overlay && this.standalone) void this.detach();
   }
 
-  /** Ctrl+Alt+H — global do app: sem painel abre; com painel alterna paleta. */
+  /** Ctrl+Alt+H — app-global: without a panel it opens; with a panel it toggles the palette. */
   onPaletteHotkey(): void {
     if (!this.overlay) {
       this.open();
@@ -187,10 +187,10 @@ class AnnotationEngine {
     this.togglePalette();
   }
 
-  /** Para a sessão de anotações. dirs = no ditado, o dir criado no stop. */
+  /** Ends the annotation session. dirs = in dictation, the dir created at stop. */
   async detach(dirs?: SessionDirs | null): Promise<void> {
     if (dirs) this.dirs = dirs;
-    // flush da rajada pendente ANTES de destruir a overlay (composite a usa)
+    // flush the pending burst BEFORE destroying the overlay (composite uses it)
     if (this.autoPrintTimer) {
       clearTimeout(this.autoPrintTimer);
       this.autoPrintTimer = null;
@@ -209,7 +209,7 @@ class AnnotationEngine {
       this.flushJsonl();
       this.flushBufferedPrints();
     }
-    logInfo(`anotações: detach (${this.events.length} eventos)`);
+    logInfo(`annotations: detach (${this.events.length} events)`);
   }
 
   private flushBufferedPrints(): void {
@@ -220,23 +220,23 @@ class AnnotationEngine {
       for (const p of this.bufferedPrints) {
         fs.writeFileSync(path.join(dirs.frames, p.name), Buffer.from(p.b64, "base64"));
       }
-      logInfo(`anotações: ${this.bufferedPrints.length} prints em buffer salvos`);
+      logInfo(`annotations: ${this.bufferedPrints.length} buffered shots saved`);
       this.bufferedPrints = [];
     } catch (e) {
-      logError("anotações: falha ao salvar prints em buffer:", e);
+      logError("annotations: failed to save buffered shots:", e);
     }
   }
 
-  /** Ditado: persiste log+buffer quando o dir passa a existir (no stop). */
+  /** Dictation: persists log+buffer once the dir comes to exist (at stop). */
   private flushJsonl(): void {
     if (!this.dirs || !this.events.length) return;
     try {
       fs.mkdirSync(this.dirs.root, { recursive: true });
       const file = path.join(this.dirs.root, "annotations.jsonl");
       for (const ev of this.events) fs.appendFileSync(file, JSON.stringify(ev) + "\n");
-      logInfo(`anotações: log persistido (${this.events.length} eventos)`);
+      logInfo(`annotations: log persisted (${this.events.length} events)`);
     } catch (e) {
-      logError("anotações: falha ao persistir annotations.jsonl:", e);
+      logError("annotations: failed to persist annotations.jsonl:", e);
     }
   }
 
@@ -251,9 +251,9 @@ class AnnotationEngine {
       transparent: true,
       resizable: false,
       movable: false,
-      // não-focável DESDE o mapa: se nascer focável, o KWin pode entregar o
-      // foco a ela no map (corrida com o setFocusable do pass-through) e o
-      // Ctrl+V do ditado cairia na overlay em vez da janela do usuário
+      // not focusable SINCE mapping: if born focusable, KWin may hand it
+      // focus at map time (race with the pass-through setFocusable) and the
+      // dictation Ctrl+V would land on the overlay instead of the user's window
       focusable: false,
       enableLargerThanScreen: true,
       skipTaskbar: true,
@@ -272,8 +272,8 @@ class AnnotationEngine {
     w.once("ready-to-show", () => {
       w.showInactive();
       this.setPassThrough(true);
-      // renderer nasce com paleta visível — sincroniza o estado real
-      // (oculta em sessão; standalone/show-up abre com ela)
+      // renderer is born with the palette visible — syncs the real state
+      // (hidden in a session; standalone/show-up opens with it)
       this.setPaletteVisible(this.paletteOn);
     });
     wireLogging(w, "annotation");
@@ -282,9 +282,9 @@ class AnnotationEngine {
   }
 
   /**
-   * Hover da paleta sem depender de forwarded mousemove (não chegava ao
-   * renderer nesta máquina): main faz polling do cursor e habilita o mouse
-   * da janela quando o cursor está sobre a paleta (modo pass-through apenas).
+   * Palette hover without relying on forwarded mousemove (it didn't reach the
+   * renderer on this machine): main polls the cursor and enables the
+   * window mouse when the cursor is over the palette (pass-through mode only).
    */
   private startCursorPoll(): void {
     if (this.cursorPoll) clearInterval(this.cursorPoll);
@@ -301,7 +301,7 @@ class AnnotationEngine {
           c.y >= b.y + p.y && c.y <= b.y + p.y + p.h;
         if (inside !== this.mouseOnWindow) {
           this.mouseOnWindow = inside;
-          logInfo(`anotações: poll cursor → mouse da janela ${inside ? "ON" : "off"}`);
+          logInfo(`annotations: cursor poll → window mouse ${inside ? "ON" : "off"}`);
           w.setIgnoreMouseEvents(!inside, { forward: true });
         }
       } catch {}
@@ -319,20 +319,20 @@ class AnnotationEngine {
     this.paletteBounds = rect;
   }
 
-  /** Modo: desenho (mouse+teclado) ou pass-through (usuário no app embaixo). */
+  /** Mode: draw (mouse+keyboard) or pass-through (user in the app below). */
   setPassThrough(passThrough: boolean): void {
     const w = this.overlay;
     if (!w || w.isDestroyed()) return;
     this.drawMode = !passThrough;
-    this.mouseOnWindow = !passThrough; // poll não briga com o setPassThrough
-    logInfo(`anotações: modo ${passThrough ? "pass-through" : "desenho"}`);
+    this.mouseOnWindow = !passThrough; // poll doesn't fight with setPassThrough
+    logInfo(`annotations: mode ${passThrough ? "pass-through" : "draw"}`);
     w.setIgnoreMouseEvents(passThrough, { forward: true });
     w.setFocusable(!passThrough);
     if (!passThrough) w.focus();
-    // pista do "congelamento": exstyle por modo (LAYERED derrubado no desenho
-    // pode fazer apps de baixo serem tratados como ocluídos)
+    // hint for the "freeze": exstyle per mode (LAYERED dropped in draw mode
+    // may make apps below be treated as occluded)
     const ex = process.platform === "win32" ? windowExStyle(w) : null;
-    logInfo(`anotações: exstyle=0x${ex === null ? "?" : ex.toString(16)} (${passThrough ? "pass-through" : "desenho"})`);
+    logInfo(`annotations: exstyle=0x${ex === null ? "?" : ex.toString(16)} (${passThrough ? "pass-through" : "draw"})`);
     const cmd: AnnotationCmd = { type: "pass-through", on: passThrough };
     w.webContents.send(IPC.annotationCmd, cmd);
   }
@@ -344,7 +344,7 @@ class AnnotationEngine {
     this.overlay?.webContents.send(IPC.annotationCmd, cmd);
   }
 
-  /** Hover da paleta: mouse da janela temporário (só em pass-through). */
+  /** Palette hover: temporary window mouse (pass-through only). */
   setWindowMouse(mouse: boolean): void {
     const w = this.overlay;
     if (w && !w.isDestroyed() && !this.drawMode) {
@@ -352,25 +352,25 @@ class AnnotationEngine {
     }
   }
 
-  /** Drag da paleta (pass-through): mouse da janela travado ON até soltar. */
+  /** Palette drag (pass-through): window mouse locked ON until released. */
   setPaletteDragging(dragging: boolean): void {
     const w = this.overlay;
     if (!w || w.isDestroyed() || this.drawMode) return;
     this.dragging = dragging;
-    this.mouseOnWindow = dragging; // poll não briga no meio do drag
+    this.mouseOnWindow = dragging; // poll doesn't fight mid-drag
     w.setIgnoreMouseEvents(!dragging, { forward: true });
   }
 
-  /** Entrar no modo desenho pela PALETA (sem hotkey) — ativa a ferramenta. */
+  /** Enter draw mode via the PALETTE (no hotkey) — activates the tool. */
   enterDrawMode(tool?: AnnotationTool): void {
     this.cmdTool(tool ?? this.tool);
   }
 
   /**
-   * AN.6 — roda do mouse em modo desenho: injeta WM_MOUSEWHEEL na janela DE
-   * BAIXO do cursor (o overlay engole o wheel e o Electron não repassa).
-   * Ativo em todo o modo desenho (qualquer ferramenta); em pass-through a roda
-   * já é do app de baixo (janela fora do hit-test) — nada a fazer aqui.
+   * AN.6 — mouse wheel in draw mode: injects WM_MOUSEWHEEL into the window
+   * UNDER the cursor (the overlay swallows the wheel and Electron doesn't pass it through).
+   * Active throughout draw mode (any tool); in pass-through the wheel
+   * already belongs to the app below (window outside the hit-test) — nothing to do here.
    */
   forwardWheel(req: AnnotationWheelRequest): void {
     const w = this.overlay;
@@ -380,7 +380,7 @@ class AnnotationEngine {
     const b = w.getContentBounds();
     const sf = screen.getDisplayMatching(b).scaleFactor;
     const pt = screenPointFromOverlay(b, sf, req.cx, req.cy);
-    const orig = screenPointFromOverlay(b, sf, 0, 0); // posição física p/ restaurar
+    const orig = screenPointFromOverlay(b, sf, 0, 0); // physical position to restore
     const wparam = packWheelWParam({
       delta: osWheelDelta(req),
       ctrl: req.ctrl,
@@ -391,24 +391,24 @@ class AnnotationEngine {
   }
 
   private registerHotkeys(): void {
-    if (this.hotkeysOn) return; // painel standalone adotado: já registradas
+    if (this.hotkeysOn) return; // adopted standalone panel: already registered
     this.hotkeysOn = true;
     const reg = (accel: string, fn: () => void) => {
-      if (!globalShortcut.register(accel, fn)) logError(`anotações: hotkey ${accel} indisponível`);
+      if (!globalShortcut.register(accel, fn)) logError(`annotations: hotkey ${accel} unavailable`);
     };
-    // laser no G (decisão do mantenedor 2026-09-22: cluster todo na metade
-    // esquerda — mão direita fora do teclado)
+    // laser on G (maintainer decision 2026-09-22: whole cluster on the left
+    // half — right hand off the keyboard)
     reg("Control+Alt+G", () => this.cmdTool("laser"));
     reg("Control+Alt+B", () => this.cmdTool("brush"));
     reg("Control+Alt+E", () => this.cmdTool("eraser"));
     reg("Control+Alt+C", () => void this.record({ kind: "clear" }));
-    reg("Control+Alt+X", () => void this.record({ kind: "clear" })); // atalho extra (pedido do mantenedor)
+    reg("Control+Alt+X", () => void this.record({ kind: "clear" })); // extra shortcut (maintainer request)
     reg("Control+Alt+Space", () => this.setPassThrough(this.drawMode));
     reg("Control+Alt+P", () => void this.captureComposite("manual", false));
     reg("Control+Alt+H", () => this.togglePalette());
   }
 
-  /** Paleta visível/oculta — botão da própria paleta e Ctrl+Alt+H. */
+  /** Palette visible/hidden — the palette's own button and Ctrl+Alt+H. */
   togglePalette(): void {
     this.setPaletteVisible(!this.paletteOn);
   }
@@ -460,14 +460,14 @@ class AnnotationEngine {
     this.events.push(ev);
     applyEvent(this.state, ev);
     if (this.dirs) this.appendJsonl(ev);
-    // Evento que NÃO veio do overlay (ex.: limpar via Ctrl+Alt+C/X) precisa
-    // chegar ao fold do renderer — sem isso o canvas continua desenhando o
-    // que o main já limpou, e o clear seguinte sai com snapshots vazio.
+    // An event that did NOT come from the overlay (e.g., clear via Ctrl+Alt+C/X) needs
+    // to reach the renderer's fold — without this the canvas keeps drawing what
+    // main already cleared, and the next clear goes out with empty snapshots.
     if (!fromRenderer) {
       this.overlay.webContents.send(IPC.annotationCmd, { type: "sync", ev } satisfies AnnotationCmd);
     }
     M_EVENTS?.add(1, { tipo: ev.type });
-    // D7: rajada de anotação no modo somente-transcrição agenda print
+    // D7: an annotation burst in transcription-only mode schedules a shot
     if (this.kind === "ditado" && (ev.type === "stroke" || ev.type === "laser")) {
       this.scheduleAutoPrint();
     }
@@ -479,11 +479,11 @@ class AnnotationEngine {
       fs.mkdirSync(this.dirs!.root, { recursive: true });
       fs.appendFileSync(path.join(this.dirs!.root, "annotations.jsonl"), JSON.stringify(ev) + "\n");
     } catch (e) {
-      logError("anotações: falha ao escrever annotations.jsonl:", e);
+      logError("annotations: failed to write annotations.jsonl:", e);
     }
   }
 
-  // ── prints (manual / auto D7 / marker D6) ───────────────────────────
+  // ── shots (manual / auto D7 / marker D6) ───────────────────────────
 
   private scheduleAutoPrint(): void {
     if (this.autoPrintTimer) clearTimeout(this.autoPrintTimer);
@@ -498,7 +498,7 @@ class AnnotationEngine {
     if (await this.captureComposite("auto", true)) M_PRINTS?.add(1, { kind: "auto" });
   }
 
-  /** Marker (D6): frame + marcações queimadas. Chamar de capture.addMarker. */
+  /** Marker (D6): frame + burned-in markers. Call from capture.addMarker. */
   async marker(n: number): Promise<void> {
     if (await this.captureComposite("marker", true, `marker-${n}`)) {
       M_PRINTS?.add(1, { kind: "marker" });
@@ -506,8 +506,8 @@ class AnnotationEngine {
   }
 
   /**
-   * Captura o frame do display, pede o composite ao overlay (strokes/lasers
-   * recentes por cima) e salva em frames/. kind=manual não queima strokes.
+   * Captures the display frame, asks the overlay for the composite (recent
+   * strokes/lasers on top) and saves it in frames/. kind=manual doesn't burn strokes.
    */
   private async captureComposite(
     kind: "auto" | "manual" | "marker",
@@ -524,7 +524,7 @@ class AnnotationEngine {
       });
       const src = sources[0];
       if (!src) {
-        logError("anotações: nenhuma fonte de tela p/ print");
+        logError("annotations: no screen source for the shot");
         return false;
       }
       const t = +((Date.now() - this.startedAt) / 1000).toFixed(1);
@@ -543,7 +543,7 @@ class AnnotationEngine {
         }, 4000).unref?.();
       });
       if (!b64) {
-        logError("anotações: composite não retornou (timeout)");
+        logError("annotations: composite didn't return (timeout)");
         return false;
       }
       this.seq += 1;
@@ -562,17 +562,17 @@ class AnnotationEngine {
         fs.writeFileSync(path.join(this.dirs.frames, name), Buffer.from(b64, "base64"));
         this.appendJsonl(ev);
       } else {
-        this.bufferedPrints.push({ name, b64 }); // log do ditado sai inteiro no flush
+        this.bufferedPrints.push({ name, b64 }); // the dictation log goes out whole at flush
       }
-      logInfo(`anotações: print ${kind} → frames/${name}`);
+      logInfo(`annotations: shot ${kind} → frames/${name}`);
       return true;
     } catch (e) {
-      logError("anotações: captureComposite falhou:", e);
+      logError("annotations: captureComposite failed:", e);
       return false;
     }
   }
 
-  /** Contexto p/ o overlay compor o print (chamado via IPC pelo próprio). */
+  /** Context for the overlay to compose the shot (called via IPC by the overlay itself). */
   overlayContext(): { strokes: StrokeSnapshot[]; lasers: { at: number; points: Pt[] }[] } {
     return { strokes: this.state.strokes, lasers: this.recentLasers };
   }
@@ -585,7 +585,7 @@ class AnnotationEngine {
     }
   }
 
-  /** Print manual pela paleta (mesmo caminho do Ctrl+Alt+P). */
+  /** Manual shot from the palette (same path as Ctrl+Alt+P). */
   manualPrint(): void {
     void this.captureComposite("manual", false).then((ok) => {
       if (ok) M_PRINTS?.add(1, { kind: "manual" });
@@ -597,7 +597,7 @@ class AnnotationEngine {
 
 export const annotations = new AnnotationEngine();
 
-/** Contexto do overlay precisa vir pelo IPC (main é a fonte do estado). */
+/** The overlay's context has to come via IPC (main is the state's source). */
 export function registerAnnotationIpc(): void {
   ipcMain.handle(IPC.annotationEvent, (_e, req: AnnotationEventRequest) => annotations.record(req, true));
   ipcMain.handle(
@@ -613,7 +613,7 @@ export function registerAnnotationIpc(): void {
   ipcMain.on(IPC.annotationComposite, (_e, p: { id: string; b64: string | null }) => {
     annotations.resolveComposite(p.id, p.b64);
   });
-  /** Overlay pede o estado p/ compor o print (strokes/lasers ativos). */
+  /** Overlay asks for the state to compose the shot (active strokes/lasers). */
   ipcMain.on(IPC.annotationContext, (e) => {
     e.returnValue = annotations.overlayContext();
   });
@@ -632,7 +632,7 @@ export function registerAnnotationIpc(): void {
     annotations.closeStandalone();
     return { ok: true };
   });
-  /** AN.6: roda em modo desenho → WM_MOUSEWHEEL na janela de baixo (one-way). */
+  /** AN.6: wheel in draw mode → WM_MOUSEWHEEL into the window below (one-way). */
   ipcMain.on(IPC.annotationWheel, (_e, req: AnnotationWheelRequest) => {
     annotations.forwardWheel(req);
   });

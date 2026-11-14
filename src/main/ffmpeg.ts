@@ -1,7 +1,7 @@
 /**
- * Resolução do ffmpeg: env > PATH > wsl.exe (ffmpeg do WSL acessa /mnt/c) >
- * imageio_ffmpeg do venv do voice-dictation. Testado com -version.
- * TUDO async — spawnSync congelava o processo principal no remux.
+ * ffmpeg resolution: env > PATH > wsl.exe (WSL ffmpeg accesses /mnt/c) >
+ * voice-dictation venv imageio_ffmpeg. Tested with -version.
+ * EVERYTHING async — spawnSync froze the main process on remux.
  */
 import { execFile } from "node:child_process";
 import fs from "node:fs";
@@ -32,14 +32,14 @@ function wslPathOf(winPath: string): string {
   return `/mnt/${m[1].toLowerCase()}/${m[2].replace(/\\/g, "/")}`;
 }
 
-/** Executa ffmpeg com args (paths Windows); traduz p/ WSL quando o resolved é wsl.exe. */
+/** Runs ffmpeg with args (Windows paths); translates to WSL when the resolved cmd is wsl.exe. */
 export async function runFfmpeg(ffmpeg: Ffmpeg, args: string[]): Promise<void> {
   if (!ffmpeg.isWsl) {
     try {
       await pExec(ffmpeg.cmd, args, { timeout: 120_000, maxBuffer: 16 * 1024 * 1024 });
     } catch (e) {
       const err = e as { stderr?: string; message?: string };
-      throw new Error(`ffmpeg falhou: ${(err.stderr || err.message || "").slice(-400)}`);
+      throw new Error(`ffmpeg failed: ${(err.stderr || err.message || "").slice(-400)}`);
     }
     return;
   }
@@ -51,7 +51,7 @@ export async function runFfmpeg(ffmpeg: Ffmpeg, args: string[]): Promise<void> {
     });
   } catch (e) {
     const err = e as { stderr?: string; message?: string };
-    throw new Error(`ffmpeg (wsl) falhou: ${(err.stderr || err.message || "").slice(-400)}`);
+    throw new Error(`ffmpeg (wsl) failed: ${(err.stderr || err.message || "").slice(-400)}`);
   }
 }
 
@@ -64,7 +64,7 @@ export async function resolveFfmpeg(): Promise<Ffmpeg> {
     return cached;
   }
 
-  // Linux/Arch: ffmpeg do PATH (o where.exe abaixo é o lookup do Windows)
+  // Linux/Arch: ffmpeg from PATH (the where.exe below is the Windows lookup)
   if (await tryRun("ffmpeg", ["-version"])) {
     cached = { cmd: "ffmpeg", isWsl: false };
     return cached;
@@ -84,7 +84,7 @@ export async function resolveFfmpeg(): Promise<Ffmpeg> {
     return cached;
   }
 
-  // último recurso: imageio_ffmpeg do venv do voice-dictation
+  // last resort: voice-dictation venv imageio_ffmpeg
   const py = path.join(
     process.env.LOCALAPPDATA ?? "",
     "voice-dictation",
@@ -108,6 +108,6 @@ export async function resolveFfmpeg(): Promise<Ffmpeg> {
   }
 
   throw new Error(
-    "ffmpeg não encontrado (env VOICECAST_FFMPEG, PATH, wsl.exe e imageio_ffmpeg do voice)",
+    "ffmpeg not found (env VOICECAST_FFMPEG, PATH, wsl.exe, and voice imageio_ffmpeg)",
   );
 }

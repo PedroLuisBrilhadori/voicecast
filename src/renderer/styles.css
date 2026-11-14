@@ -184,10 +184,10 @@ footer {
 }
 .mic { display: flex; gap: 8px; align-items: center; color: var(--muted); }
 
-/* ── M1: barra ──────────────────────────────────────────── */
+/* ── M1: bar ──────────────────────────────────────────── */
 body.bar-body { background: transparent; overflow: hidden; }
 
-/* ── M2: biblioteca ─────────────────────────────────────── */
+/* ── M2: library ─────────────────────────────────────── */
 .library { margin-top: 26px; }
 .library h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
 .tabs.small { margin-top: 0; margin-bottom: 10px; }
@@ -233,7 +233,7 @@ body.bar-body { background: transparent; overflow: hidden; }
   font-size: 13.5px; box-shadow: 0 4px 18px rgba(0,0,0,0.5);
 }
 
-/* ── editor fase B: timeline de segmentos, lista de segmentos e clipes ── */
+/* ── editor phase B: segment timeline, segment list and clips ── */
 .seg-track {
   position: relative; height: 14px; background: var(--panel);
   border: 1px solid var(--line); border-radius: 4px; overflow: hidden;
@@ -258,7 +258,7 @@ body.bar-body { background: transparent; overflow: hidden; }
 .clip-row .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .copy-text { font-size: 12.5px; padding: 2px 10px; border-radius: 999px; }
 
-/* ── W2a: correção de ditados + tela do dataset do voice ─────────── */
+/* ── W2a: dictation correction + voice dataset screen ─────────── */
 
 .ok { color: var(--ok); font-size: 12.5px; }
 

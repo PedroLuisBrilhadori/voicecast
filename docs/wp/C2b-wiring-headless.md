@@ -1,72 +1,72 @@
-# C2b — Wiring do runtime headless no runner · ✅ entregue (goal live ok)
+# C2b — Wiring the headless runtime into the runner · ✅ delivered (live goal ok)
 
-## Objetivo
-Tornar DURÁVEL e padrão o desbloqueio provado pelo U2: o runner do voicecast
-usa o CLI buildado do open source com um data-dir próprio auto-curado, e um
-goal real roda ponta a ponta via `runGoal` (evidência registrada).
+## Objective
+Make DURABLE and standard the unlock proven by U2: the voicecast
+runner uses the CLI built from open source with its own self-curated data-dir, and a
+real goal runs end to end via `runGoal` (evidence recorded).
 
-## Contexto obrigatório (ler antes)
-- `/tmp/zcode-cli-build/BUILD.md` — SEÇÃO "U2 — diagnóstico standalone":
-  causa raiz (chave `account-provider:<providerId>:identity` ausente no
-  credentials.json), o script idempotente de injeção e o env
-  `ZCODE_DATA_BASE_DIR` (cópia do credentials + identity keys; self-heal a
-  cada start).
+## Required context (read first)
+- `/tmp/zcode-cli-build/BUILD.md` — SECTION "U2 — standalone diagnostics":
+  root cause (`account-provider:<providerId>:identity` key missing in
+  credentials.json), the idempotent injection script and the
+  `ZCODE_DATA_BASE_DIR` env (copy of credentials + identity keys; self-heal at
+  every start).
 - `/home/pedro/programing/projetos/voicecast/src/main/agent/runner.ts` —
-  `agentRunnerConfig`/`goalSpawnArgs` (é aqui que o wiring entra)
-- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocolo)
-- `AGENTS.md` do repo
+  `agentRunnerConfig`/`goalSpawnArgs` (this is where the wiring goes)
+- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocol)
+- The repo's `AGENTS.md`
 
-## Escopo
-**Fazer:**
-1. Script `src/main/agent/runtime-setup.ts` (puro Node, testável): garante em
+## Scope
+**Do:**
+1. Script `src/main/agent/runtime-setup.ts` (pure Node, testable): guarantees in
    `~/.local/state/voicecast/zcode-runtime/`:
-   - `zcode` (binário) + `node24/` copiados de `/tmp/zcode-cli-build/`
-     (SE existirem; senão erro claro orientando rodar o U1 — exit code
-     distinto p/ pré-requisito ausente);
-   - `zcode-data/` com credentials.json copiado de `~/.zcode/v2/` +
-     identity keys injetadas (idempotente; re-copia se o mtime do original
-     mudar = self-heal se o desktop rotacionar). NUNCA logar segredos;
-   - retorna os envs prontos: `ZCODE_DATA_BASE_DIR`,
-     `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` (se aplicável — conferir no BUILD.md).
-2. Runner: `agentRunnerConfig` passa a resolver o binário do runtime setup
-   (env `ZCODE_AGENT_BIN` continua sobrescrevendo); spawn direto no Linux
-   usa `node24` + binário; Windows segue `wsl.exe` (o script roda dentro do
-   WSL — paths WSL, não Windows).
-3. Teste LIVE por trás de flag: `tests/agent-live.test.ts` rodando um goal
-   real ("Responda somente: ok") via `runGoal` SÓ se
-   `VOICECAST_AGENT_LIVE=1` (default CI = skip) — é a prova contínua do C2.
-4. Telemetria (DoD): counter `voicecast_agent_runtime_setup_total{resultado}`
-   (ok | stale | sem-build) no setup.
+   - `zcode` (binary) + `node24/` copied from `/tmp/zcode-cli-build/`
+     (IF they exist; otherwise a clear error instructing to run U1 — distinct
+     exit code for missing prerequisite);
+   - `zcode-data/` with credentials.json copied from `~/.zcode/v2/` +
+     injected identity keys (idempotent; re-copies if the original's mtime
+     changed = self-heal if the desktop rotates). NEVER log secrets;
+   - returns the ready envs: `ZCODE_DATA_BASE_DIR`,
+     `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE` (if applicable — check BUILD.md).
+2. Runner: `agentRunnerConfig` now resolves the binary from runtime setup
+   (env `ZCODE_AGENT_BIN` keeps overriding); direct spawn on Linux
+   uses `node24` + binary; Windows keeps `wsl.exe` (the script runs inside
+   WSL — WSL paths, not Windows).
+3. LIVE test behind a flag: `tests/agent-live.test.ts` running a real goal
+   ("Responda somente: ok" ["Reply only: ok" — test goal string]) via `runGoal` ONLY if
+   `VOICECAST_AGENT_LIVE=1` (CI default = skip) — it's C2's continuous proof.
+4. Telemetry (DoD): counter `voicecast_agent_runtime_setup_total{resultado}`
+   (ok | stale | sem-build) in the setup.
 
-**Não tocar:** `~/.zcode` (somente leitura), utilityProcess/barra (C4),
-contexto no goal (C3), protocolo do zcode-server.
+**Don't touch:** `~/.zcode` (read-only), utilityProcess/bar (C4),
+context in the goal (C3), the zcode-server protocol.
 
-## Aceite verificável
-- `pnpm ci:local` verde (o live test pula por default).
-- `VOICECAST_AGENT_LIVE=1 pnpm vitest run tests/agent-live.test.ts` → goal
-  "ok" com stdout real, phase=completed (evidência colada no Resultado).
-- Unit tests do setup: copia idempotente, self-heal por mtime, erro claro
-  sem build, segredos nunca em stdout.
+## Verifiable acceptance
+- `pnpm ci:local` green (the live test skips by default).
+- `VOICECAST_AGENT_LIVE=1 pnpm vitest run tests/agent-live.test.ts` → "ok"
+  goal with real stdout, phase=completed (evidence pasted into the Result).
+- Setup unit tests: idempotent copy, self-heal by mtime, clear error
+  without build, secrets never in stdout.
 
-## Riscos e gotchas
-- O binário do U1 é esbuild p/ node 24 — spawn SEMPRE com o node24 do
-  runtime dir, não o node do sistema.
-- Permissões de execução no copiar (chmod +x).
-- Credenciais copiadas = arquivo sensível em ~/.local/state — chmod 600 e
-  NUNCA imprimir conteúdo.
+## Risks and gotchas
+- The U1 binary is esbuild for node 24 — spawn ALWAYS with the runtime dir's
+  node24, not the system node.
+- Execution permissions on copy (chmod +x).
+- Copied credentials = sensitive file in ~/.local/state — chmod 600 and
+  NEVER print its content.
 
-## Entrega
-Commits convencionais (`feat(c2b): …`), sem push. Preencher Resultado abaixo.
+## Delivery
+Conventional commits (`feat(c2b): …`), no push. Fill in the Result below.
 
-## Resultado (preenche o piloto)
+## Result (filled in by the pilot)
 
-**ENTREGUE (2026-09-27, piloto C2b).** `pnpm ci:local` verde (133 testes, live
-pulando por default) e o goal REAL respondeu ponta a ponta via `runGoal`.
+**DELIVERED (2026-09-27, C2b pilot).** `pnpm ci:local` green (133 tests, live
+skipping by default) and the REAL goal answered end to end via `runGoal`.
 
-### Evidência LIVE (obrigatória)
+### LIVE evidence (mandatory)
 
-`VOICECAST_AGENT_LIVE=1 pnpm vitest run tests/agent-live.test.ts` (primeiro
-run; a duração inclui a materialização inicial do runtime — 229 MB):
+`VOICECAST_AGENT_LIVE=1 pnpm vitest run tests/agent-live.test.ts` (first
+run; the duration includes the runtime's initial materialization — 229 MB):
 
 ```
 [live-c2b] {"phase":"completed","exitCode":0,"durationMs":46976,"agentBin":"/home/pedro/.local/state/voicecast/zcode-runtime/zcode"}
@@ -74,77 +74,77 @@ run; a duração inclui a materialização inicial do runtime — 229 MB):
 ✓ tests/agent-live.test.ts (1 test) 46982ms
 ```
 
-Estado observável pós-run (verificado sem imprimir segredos):
-- `~/.local/state/voicecast/zcode-runtime/` materializado: `zcode` (755),
-  `node24/` (bin 755), `provider/zcode-builtin.json`, `zcode-data/` (700) com
-  `credentials.json` (600) — 8 chaves (6 do desktop + 2 identity injetadas).
-- `~/.zcode/v2/credentials.json` INTACTO: 6 chaves, 0 identity (somente
-  leitura respeitado). O CLI escreveu `telemetry-state.json` dentro do
-  data-dir próprio (comportamento do `ZCODE_DATA_BASE_DIR`, já anotado no U2)
-  e logs/db normais em `~/.zcode/cli/` (precedente U1/U2).
+Observable state post-run (verified without printing secrets):
+- `~/.local/state/voicecast/zcode-runtime/` materialized: `zcode` (755),
+  `node24/` (bin 755), `provider/zcode-builtin.json`, `zcode-data/` (700) with
+  `credentials.json` (600) — 8 keys (6 from desktop + 2 injected identity).
+- `~/.zcode/v2/credentials.json` INTACT: 6 keys, 0 identity (read-only
+  respected). The CLI wrote `telemetry-state.json` inside its own
+  data-dir (`ZCODE_DATA_BASE_DIR` behavior, already noted in U2)
+  and normal logs/db in `~/.zcode/cli/` (U1/U2 precedent).
 
-### O que foi implementado
+### What was implemented
 
-1. `src/main/agent/runtime-setup.ts` (puro Node, sem electron): `ensureRuntime`
-   idempotente com self-heal por mtime — copia `zcode`+`node24/`+provider do
-   build U1 para `~/.local/state/voicecast/zcode-runtime` (paths por env
-   `VOICECAST_ZCODE_BUILD_DIR`/`VOICECAST_RUNTIME_DIR`), monta
-   `zcode-data/.zcode/v2/credentials.json` (600) com `injectIdentityKeys`
-   (regex do U2: `account-provider:<providerId>:identity` = UUID do nome da
-   api-key; idempotente), devolve os envs prontos (`ZCODE_DATA_BASE_DIR`,
+1. `src/main/agent/runtime-setup.ts` (pure Node, no electron): idempotent `ensureRuntime`
+   with mtime self-heal — copies `zcode`+`node24/`+provider from the
+   U1 build to `~/.local/state/voicecast/zcode-runtime` (paths via env
+   `VOICECAST_ZCODE_BUILD_DIR`/`VOICECAST_RUNTIME_DIR`), assembles
+   `zcode-data/.zcode/v2/credentials.json` (600) with `injectIdentityKeys`
+   (U2 regex: `account-provider:<providerId>:identity` = UUID of the
+   api-key name; idempotent), returns the ready envs (`ZCODE_DATA_BASE_DIR`,
    `ZCODE_BUILTIN_PROVIDER_CONFIG_FILE`, `ZCODE_PERSONAL_PROVIDER_CONFIG_FILE`
-   quando existe). Cache por processo (`ensureRuntimeCached`) — self-heal 1x
-   por start do bridge. Counter
+   when it exists). Per-process cache (`ensureRuntimeCached`) — self-heal 1x
+   per bridge start. Counter
    `voicecast_agent_runtime_setup_total{resultado}`.
-2. `src/main/agent/runner.ts`: `agentRunnerConfig` resolve o binário do
-   runtime (env `ZCODE_AGENT_BIN` continua sobrescrevendo E desligando o
-   runtime setup — compat com o comportamento antigo); spawn direto Linux é
-   `<node24/bin/node> <zcode> -p <goal>` com os envs do setup; Windows segue
-   `wsl.exe --exec sh -lc` com script single-line que garante binários (cp do
-   build), roda o self-heal de credentials DENTRO do WSL via
-   `node24 -e "$VOICECAST_SETUP_JS"` (mesma lógica, paridade garantida por
-   teste) e exec no node24 do runtime — paths `$HOME` (WSL), nunca Windows.
-   `runGoal` falha claro quando o setup falha (erro do pré-requisito vira
-   goal failed com a mensagem orientando o U1).
-3. Testes: `tests/runtime-setup.test.ts` (16 — cópia idempotente, self-heal
-   por mtime → resultado `stale`, durável sem buildDir, `SEM_BUILD`/
-   `SEM_CREDENCIAL`, segredos nunca em stdout, paridade do JS de self-heal
-   incluindo exit 87) e `tests/agent-runner.test.ts` (12 — defaults do
-   runtime, override, spawn node24+binário, script WSL com exit 87 e goal só
-   por ENV) + `tests/agent-live.test.ts` (live por trás de
-   `VOICECAST_AGENT_LIVE=1`, default skip).
+2. `src/main/agent/runner.ts`: `agentRunnerConfig` resolves the binary from the
+   runtime (env `ZCODE_AGENT_BIN` keeps overriding AND disabling the
+   runtime setup — back-compat with the old behavior); direct Linux spawn is
+   `<node24/bin/node> <zcode> -p <goal>` with the setup envs; Windows keeps
+   `wsl.exe --exec sh -lc` with a single-line script that guarantees binaries (cp from
+   the build), runs the credentials self-heal INSIDE WSL via
+   `node24 -e "$VOICECAST_SETUP_JS"` (same logic, parity guaranteed by
+   test) and execs with the runtime's node24 — `$HOME` paths (WSL), never Windows.
+   `runGoal` fails clearly when the setup fails (the prerequisite error becomes
+   goal failed with the message pointing to U1).
+3. Tests: `tests/runtime-setup.test.ts` (16 — idempotent copy, mtime self-heal →
+   `stale` result, durable without buildDir, `SEM_BUILD`/
+   `SEM_CREDENCIAL`, secrets never in stdout, self-heal JS parity
+   including exit 87) and `tests/agent-runner.test.ts` (12 — runtime
+   defaults, override, node24+binary spawn, WSL script with exit 87 and goal only
+   via ENV) + `tests/agent-live.test.ts` (live behind
+   `VOICECAST_AGENT_LIVE=1`, skip default).
 
-### Decisões e desvios conscientes (para a torre validar)
+### Conscious decisions and deviations (for the tower to validate)
 
-- **Counter**: além de `ok | stale | sem-build`, nasceu `sem-credencial`
-  (credentials do desktop ausentes = usuário sem login) — falha real que não
-  é "sem build"; taxonomia do briefing estendida por honestidade.
-- **Durabilidade**: se o runtime dir já está completo, o buildDir NÃO é
-  exigido (sobrevive a reboot que limpa /tmp); o build só é necessário para
-  materializar/refresh. Build mais novo que a cópia (mtime/size) → refresh e
-  resultado `stale`.
-- **`stale`** = qualquer re-cópia sobre material existente (credentials
-  rotacionados OU rebuild do U1). Primeira provisionação e "nada a fazer" =
+- **Counter**: beyond `ok | stale | sem-build`, `sem-credencial` was born
+  (desktop credentials missing = user without login) — a real failure that isn't
+  "no build"; briefing taxonomy extended out of honesty.
+- **Durability**: if the runtime dir is already complete, the buildDir is NOT
+  required (survives a reboot that wipes /tmp); the build is only needed to
+  materialize/refresh. Build newer than the copy (mtime/size) → refresh and
+  `stale` result.
+- **`stale`** = any re-copy over existing material (rotated credentials
+  OR U1 rebuild). First provisioning and "nothing to do" =
   `ok`.
-- **Windows**: o self-heal de credentials dentro do WSL usa
-  `VOICECAST_SETUP_JS` via env do spawn (mesmo mecanismo do `VOICECAST_GOAL`
-  do C2). O hop wsl.exe→WSL segue o padrão já adotado no C2 e continua sob o
-  gate humano de validação no Windows (`pnpm dev:win`) — piloto não valida
+- **Windows**: the credentials self-heal inside WSL uses
+  `VOICECAST_SETUP_JS` via the spawn env (same mechanism as C2's
+  `VOICECAST_GOAL`). The wsl.exe→WSL hop follows the pattern already adopted in C2 and stays under the
+  human gate of Windows validation (`pnpm dev:win`) — the pilot doesn't validate
   Windows.
-- Sem utilityProcess/barra (C4 intocado), sem contexto no goal (C3 intocado),
-  protocolo do zcode-server intocado.
+- No utilityProcess/bar (C4 untouched), no context in the goal (C3 untouched),
+  zcode-server protocol untouched.
 
-### Pendências / achados
+### Pending items / findings
 
-- Gate humano: validação no Windows via `pnpm dev:win` (spawn wsl.exe +
-  self-heal dentro do WSL).
-- `telemetry-state.json` do CLI aparece no data-dir próprio (comportamento
-  do `ZCODE_DATA_BASE_DIR` confirmado em runtime — nota do U2 validada).
-- Achado vizinho (não consertado, escopo estrito): o live gastou ~47s no
-  primeiro run por causa da cópia de 229 MB síncrona no event loop do main
-  (fs/promises — threadpool, mas o ensure é `await` dentro do primeiro
-  goal). Runs seguintes são stat-only + goal (~7s no U2). Se incomodar,
-  candidata a worker (padrão W1) em WP futuro.
-- Durabilidade do build: `/tmp/zcode-cli-build` some no reboot; com o runtime
-  já materializado isso NÃO quebra (testado), mas o refresh de binários
-  (rebuild do U1) só funciona com o build presente de novo.
+- Human gate: Windows validation via `pnpm dev:win` (wsl.exe spawn +
+  self-heal inside WSL).
+- The CLI's `telemetry-state.json` appears in its own data-dir
+  (`ZCODE_DATA_BASE_DIR` behavior confirmed at runtime — U2 note validated).
+- Neighboring finding (not fixed, strict scope): the live spent ~47s on the
+  first run because of the synchronous 229 MB copy on the main process's event loop
+  (fs/promises — threadpool, but ensure is `await`ed inside the first
+  goal). Following runs are stat-only + goal (~7s in U2). If it bothers,
+  candidate for a worker (W1 pattern) in a future WP.
+- Build durability: `/tmp/zcode-cli-build` disappears on reboot; with the runtime
+  already materialized this does NOT break (tested), but the binary
+  refresh (U1 rebuild) only works with the build present again.

@@ -1,114 +1,113 @@
-# RELATORIO-TELEMETRIA — OTel funcional + fix do delay do REC (2026-09-22)
+# RELATORIO-TELEMETRIA — OTel working + REC delay fix (2026-09-22)
 
-Marco: telemetria OTel do voicecast **realmente funcionando** (as métricas
-existiam no código mas nenhuma chegava ao Grafana) + instrumentação do
-pipeline de start + fix do delay percebido entre o pedido de gravação e a
-barra REC.
+Milestone: voicecast's OTel telemetry **actually working** (the metrics
+existed in the code but none reached Grafana) + instrumentation of the
+start pipeline + fix of the perceived delay between the recording request and the
+REC bar.
 
-## Contexto e achado
+## Context and finding
 
-- `src/main/telemetry.ts` declarava 7 counters/histograms no **module-load**,
-  mas o init do SDK OTel é tardio (`index.ts`, 3s pós-ready, pra não travar o
-  probe do daemon F9). Com o meter ainda `null`, as factories devolviam `null`
-  e **todas as métricas ficavam inertes para sempre** — só 2 spans
-  (`session.finalize`, `ditado.stop`) eram emitidos de fato.
-- O pipeline de **start** não tinha instrumentação nenhuma — é onde morava o
-  delay reportado pelo mantenedor (barra REC aparecendo com ~8–10s no timer).
-  Causa: `startBar()` só rodava DEPOIS do `getUserMedia` de tela + mic
-  (sequencial, segundos no Windows), e o timer contava desde `startedAt`
-  (fixado antes do warm-up). Ou seja: o relógio mostrava tempo que o vídeo
-  nem tinha.
+- `src/main/telemetry.ts` declared 7 counters/histograms at **module-load**,
+  but the OTel SDK init is late (`index.ts`, 3s after ready, to not block the
+  F9 daemon probe). With the meter still `null`, the factories returned `null`
+  and **all metrics stayed inert forever** — only 2 spans
+  (`session.finalize`, `ditado.stop`) were actually emitted.
+- The **start** pipeline had no instrumentation at all — that's where the
+  delay reported by the maintainer lived (REC bar appearing with ~8–10s on the timer).
+  Cause: `startBar()` only ran AFTER the screen + mic `getUserMedia`
+  (sequential, seconds on Windows), and the timer counted from `startedAt`
+  (fixed before warm-up). In other words: the clock showed time the video didn't even have.
 
-## O que mudou
+## What changed
 
-### F0 — métricas vivas
+### F0 — living metrics
 
-- **`src/shared/telemetry-core.ts` (novo, puro)**: registro lazy — o
-  instrumento é resolvido no primeiro `add/record` com o meter pós-init e
-  cacheado por nome (declaração duplicada cai no mesmo instrumento). Emit
-  antes do init é descartado sem lançar.
-- `src/main/telemetry.ts`: factories agora vêm do core; init injeita o meter
-  real (`core.setMeter`). Kill-switch `OTEL_ENABLED=0` e
-  `OTEL_EXPORTER_OTLP_ENDPOINT` (default `http://localhost:4318`) mantidos.
-- Dedupe: `voicecast_sessions_total` ficou só no `capture.ts` (a declaração
-  órfã em `library.ts` saiu).
-- Testes: `tests/telemetry.test.ts` (antes do init não lança; pós-init grava;
-  cache por nome; `setMeter(null)` degrada).
+- **`src/shared/telemetry-core.ts` (new, pure)**: lazy registry — the
+  instrument is resolved on the first `add/record` with the post-init meter and
+  cached by name (a duplicate declaration falls into the same instrument). Emit
+  before init is discarded without throwing.
+- `src/main/telemetry.ts`: factories now come from the core; init injects the real
+  meter (`core.setMeter`). Kill-switch `OTEL_ENABLED=0` and
+  `OTEL_EXPORTER_OTLP_ENDPOINT` (default `http://localhost:4318`) kept.
+- Dedupe: `voicecast_sessions_total` stayed only in `capture.ts` (the orphan
+  declaration in `library.ts` is gone).
+- Tests: `tests/telemetry.test.ts` (doesn't throw before init; records after init;
+  cache by name; `setMeter(null)` degrades).
 
-### F1 — start instrumentado + barra imediata (fix do delay)
+### F1 — instrumented start + immediate bar (delay fix)
 
-- **Barra REC nasce na hora**: `startRecording` cria a barra e o preview
-  ANTES do warm-up da captura. Estado novo `RecordingState.arming` — a barra
-  mostra "⏳ preparando captura…" e trava marker/pause/parar (stop durante
-  arming = cancelamento limpo).
-- **Relógio verdadeiro**: o recorder (`recorder.ts`) devolve `startedAtReal`
-  (o `Date.now()` do `recorder.start()`) e o main adota — timer, `durationS`
-  do `meta.json` e markers passam a casar com o conteúdo do mp4 (e com a
-  transcrição).
-- **Métricas/spans novos**:
+- **REC bar born instantly**: `startRecording` creates the bar and the preview
+  BEFORE capture warm-up. New state `RecordingState.arming` — the bar
+  shows "⏳ preparando captura…" ["⏳ preparing capture…"] and locks marker/pause/stop (stop during
+  arming = clean cancellation).
+- **True clock**: the recorder (`recorder.ts`) returns `startedAtReal`
+  (the `Date.now()` of `recorder.start()`) and the main process adopts it — timer, `durationS`
+  of `meta.json` and markers now match the mp4 content (and the
+  transcription).
+- **New metrics/spans**:
   - `voicecast_session_starts_total{mode,outcome=ok|erro}` (counter)
   - `voicecast_session_start_seconds{mode,stage=total|gum-desktop|gum-mic}`
-    (histograma — separa o custo do `getUserMedia` de tela vs mic)
-  - spans `session.start` (com filhos `recorder.load`, `recorder.open`) e
-    `sources.list` (fluxo tela-cheia lista fontes antes de gravar).
-- Breakdown do start também no log: `start ok: total=…s (desktop=…ms mic=…ms)`.
+    (histogram — separates the cost of screen vs mic `getUserMedia`)
+  - spans `session.start` (with children `recorder.load`, `recorder.open`) and
+    `sources.list` (fullscreen flow lists sources before recording).
+- The start breakdown also goes to the log: `start ok: total=…s (desktop=…ms mic=…ms)`.
 
-### F3 — dashboard Grafana
+### F3 — Grafana dashboard
 
 - `unidocs/volumes/grafana/dashboards-json/voicecast.json` (uid `voicecast`,
-  commit no repo unidocs — provider de arquivo, mesma casa dos dashboards
-  `agentes-*`/`voice-*`): sessões por modo, inícios por desfecho,
-  **start p50/p95 (o painel do delay)** + média por estágio, finalize p50/p95,
-  ASR p50/p95 e por status, ditados, decisões Jev, eventos/prints de anotação.
-- Fluxo de dados: voicecast (Windows) → OTLP HTTP `localhost:4318` (collector
-  do `pnpm docker:observability` do unidocs) → Prometheus/Tempo → Grafana
+  committed in the unidocs repo — file provider, same home as the
+  `agentes-*`/`voice-*` dashboards): sessions per mode, starts per outcome,
+  **start p50/p95 (the delay panel)** + average per stage, finalize p50/p95,
+  ASR p50/p95 and per status, dictations, Jev decisions, annotation events/screenshots.
+- Data flow: voicecast (Windows) → OTLP HTTP `localhost:4318` (collector
+  of unidocs' `pnpm docker:observability`) → Prometheus/Tempo → Grafana
   `localhost:3001`.
 
-## Validação (real, Windows + Grafana — 2026-09-23)
+## Validation (real, Windows + Grafana — 2026-09-23)
 
-- WSL: `pnpm ci:local` ok (typecheck + 61 testes + build), incluindo os novos
-  testes do telemetry-core; queries do dashboard validadas na API do Grafana.
-- **Prometheus recebeu as métricas do app**: `voicecast_sessions_total` = 1,
+- WSL: `pnpm ci:local` ok (typecheck + 61 tests + build), including the new
+  telemetry-core tests; dashboard queries validated against the Grafana API.
+- **Prometheus received the app's metrics**: `voicecast_sessions_total` = 1,
   `voicecast_session_starts_total` = 1, `voicecast_session_start_seconds_count`
-  = 3 (estágios total/gum-desktop/gum-mic) após `--autotest`; collector com
-  delta positivo e **zero falhas novas**.
-- **Breakdown real do start (quente)**: total **1,18s** · gum-desktop **0,27s**
-  · gum-mic **0,26s** — a captura é rápida; o delay de 8–10s relatado tinha
-  OUTRA causa (abaixo).
-- Traces `session.start`/`recorder.load`/`recorder.open`/`sources.list` no
+  = 3 (stages total/gum-desktop/gum-mic) after `--autotest`; collector with
+  positive delta and **zero new failures**.
+- **Real warm start breakdown**: total **1.18s** · gum-desktop **0.27s**
+  · gum-mic **0.26s** — capture is fast; the reported 8–10s delay had ANOTHER
+  cause (below).
+- Traces `session.start`/`recorder.load`/`recorder.open`/`sources.list` in
   Tempo (service `voicecast`).
-- **Checagem visual do dashboard** (painéis/legendas/units) pendente do
-  mantenedor: http://localhost:3001/d/voicecast.
+- **Visual check of the dashboard** (panels/legends/units) pending from the
+  maintainer: http://localhost:3001/d/voicecast.
 
-## Descobertas do diagnóstico (o "delay" tinha dois andares)
+## Diagnostic findings (the "delay" had two floors)
 
-1. **Barra depois da captura** (fixado na F1): a barra só nascia após o
-   getUserMedia — agora nasce na hora ("preparando captura…").
-2. **Import do SDK OTel trava o event loop por ~9s**: medido no autotest de
-   cold start (`start ok: total=9.97s` com desktop=218ms/mic=221ms — o
-   `telemetria: OTLP para` só terminou DEPOIS de 9s, colidindo com o start).
-   Mitigação: init do OTel agora espera **idle + 15s de vida** (retry 5s);
-   o `--autotest` inicializa a telemetria ANTES de medir (caminho estável).
-   Residual: gravação iniciada nos ~9s em que o import roda ainda colide —
-   fix definitivo futuro = import do SDK em worker thread.
-3. **Infra (unidocs)**: o remotewrite do collector descartava lotes inteiros
-   com `out of order sample` **desde 2026-09-19** (~98k pontos no acumulado) —
-   produtores com relógio à frente (Windows: skew medido de ~2,2s do WSL2) e
-   replays de fila. Fix: Prometheus `v3.0.1 → v3.13.3` +
-   `storage.tsdb.out_of_order_time_window: 10m` (a config não existe no
-   v3.0.1; no v3 virou chave de config, não flag de CLI). Sonda OTLP→collector
-   →Prometheus validada antes/depois.
-4. **App saía sem flush**: o reader só exporta a cada 5s e o `app.exit()`
-   dos smokes perdia o ciclo — `stopTelemetry()` (shutdown+flush) no
-   will-quit e nos ganchos que saem. Detecção de erros de export:
-   `VOICECAST_OTEL_DEBUG=1` (diag logger, silencioso por default).
+1. **Bar after capture** (fixed in F1): the bar was only born after the
+   getUserMedia — now it's born instantly ("preparando captura…" ["preparing capture…"]).
+2. **The OTel SDK import blocks the event loop for ~9s**: measured in the
+   cold start autotest (`start ok: total=9.97s` with desktop=218ms/mic=221ms — the
+   `telemetria: OTLP para` ["OTLP telemetry up"] log only finished AFTER 9s, colliding with the start).
+   Mitigation: OTel init now waits **idle + 15s of life** (5s retry);
+   `--autotest` initializes telemetry BEFORE measuring (stable path).
+   Residual: a recording started during the ~9s the import runs still collides —
+   the future definitive fix = SDK import in a worker thread.
+3. **Infra (unidocs)**: the collector's remotewrite discarded whole batches
+   with `out of order sample` **since 2026-09-19** (~98k points accumulated) —
+   producers with clocks ahead (Windows: measured skew of ~2.2s from WSL2) and
+   queue replays. Fix: Prometheus `v3.0.1 → v3.13.3` +
+   `storage.tsdb.out_of_order_time_window: 10m` (the config doesn't exist in
+   v3.0.1; in v3 it became a config key, not a CLI flag). OTLP→collector
+   →Prometheus probe validated before/after.
+4. **App exited without flush**: the reader only exports every 5s and the `app.exit()`
+   of the smokes lost the cycle — `stopTelemetry()` (shutdown+flush) on
+   will-quit and on the hooks that exit. Export error detection:
+   `VOICECAST_OTEL_DEBUG=1` (diag logger, silent by default).
 
-## Notas
+## Notes
 
-- Emits antes do init (idle ≥15s) são descartados por design — janela
-  pequena, documentada no telemetry-core.
-- Nomes Prometheus: counters com `_total`, histogramas geram
-  `_bucket/_sum/_count` — validado ponta a ponta.
-- Próximos blocos (fora do escopo): ditado-start/ASR host/boot/erros globais/
-  `clip_seconds`; logs → Loki (handler OTLP); worker thread p/ o import do
-  SDK; re-sync de relógio do WSL2 (hwclock) na infra.
+- Emits before init (idle ≥15s) are discarded by design — small
+  window, documented in telemetry-core.
+- Prometheus names: counters with `_total`, histograms generate
+  `_bucket/_sum/_count` — validated end to end.
+- Next blocks (out of scope): dictation-start/ASR host/boot/global errors/
+  `clip_seconds`; logs → Loki (OTLP handler); worker thread for the SDK
+  import; WSL2 clock re-sync (hwclock) in the infra.

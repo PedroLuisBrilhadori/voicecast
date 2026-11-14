@@ -1,11 +1,11 @@
 /**
- * Settings persistente do app (settings.json no appDataDir) — módulo PURO
- * (só fs, sem electron), testável no vitest. O lado com efeitos (path real,
- * IPC) vive em src/main/asr-host.ts e index.ts.
+ * Persistent app settings (settings.json in appDataDir) — PURE module
+ * (fs only, no electron), testable in vitest. The side with effects (real
+ * path, IPC) lives in src/main/asr-host.ts and index.ts.
  *
- * Chaves conhecidas:
- * - `asrHost` (boolean, default true): liga/desliga o modelo de transcrição
- *   local (host do ASR). O env VOICECAST_ASR_HOST=0 ganha do settings.
+ * Known keys:
+ * - `asrHost` (boolean, default true): toggles the local transcription model
+ *   (the ASR host). Env VOICECAST_ASR_HOST=0 overrides settings.
  */
 import fs from "node:fs";
 
@@ -17,7 +17,7 @@ export function settingsFile(dir: string): string {
   return `${dir}/settings.json`;
 }
 
-/** Leitura fail-soft: arquivo ausente ou corrompido → {} (defaults valem). */
+/** Fail-soft read: missing or corrupted file → {} (defaults apply). */
 export function readSettings(dir: string): AppSettings {
   try {
     const raw = fs.readFileSync(settingsFile(dir), "utf-8");
@@ -28,7 +28,7 @@ export function readSettings(dir: string): AppSettings {
   }
 }
 
-/** Merge + escrita atômica (tmp+rename) — nunca trunca o arquivo existente. */
+/** Merge + atomic write (tmp+rename) — never truncates the existing file. */
 export function writeSettings(dir: string, patch: AppSettings): AppSettings {
   const merged = { ...readSettings(dir), ...patch };
   fs.mkdirSync(dir, { recursive: true });

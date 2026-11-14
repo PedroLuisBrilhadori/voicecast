@@ -1,12 +1,12 @@
 /**
- * Jev (TypeSafe/systemone) no voicecast — decisões locais, sem LLM no loop.
- * Etapa 2 do PLANO-JEV-CU: roteamento do F9 + julgamento pós-sessão.
+ * Jev (TypeSafe/systemone) in voicecast — local decisions, no LLM in the loop.
+ * Step 2 of PLANO-JEV-CU: F9 routing + post-session judgment.
  *
- * Fail-SOFT: julgamento é melhoria, não dependência — sem key, com erro de
- * rede ou desligado (VOICECAST_JEV=0), tudo retorna null e o app se comporta
- * exatamente como antes (F9 cola, sessão salva sem campo jev).
- * Key: env TYPESAFE_API_KEY → %APPDATA%/voicecast/jev-key.txt (1 linha).
- * Métricas OTel: voicecast_jev_decisions_total{origem,status} e
+ * Fail-SOFT: judgment is an improvement, not a dependency — without a key, on a
+ * network error, or disabled (VOICECAST_JEV=0), everything returns null and the app behaves
+ * exactly as before (F9 pastes, session saved without a jev field).
+ * Key: env TYPESAFE_API_KEY → %APPDATA%/voicecast/jev-key.txt (1 line).
+ * OTel metrics: voicecast_jev_decisions_total{origem,status} and
  * voicecast_jev_seconds{origem}.
  */
 import path from "node:path";
@@ -25,15 +25,15 @@ import {
   type Rota,
 } from "./jev-questions";
 
-const M_DECISIONS = counter("voicecast_jev_decisions_total", "decisões Jev por origem/status");
-const H_JEV = histogram("voicecast_jev_seconds", "latência do julgamento Jev");
+const M_DECISIONS = counter("voicecast_jev_decisions_total", "Jev decisions by origin/status");
+const H_JEV = histogram("voicecast_jev_seconds", "Jev judgment latency");
 
 export function jevEnabled(): boolean {
   return process.env.VOICECAST_JEV !== "0";
 }
 
-// logging/storage importam electron no topo — import dinâmico mantém este
-// módulo importável pelos testes (vitest roda sem Electron).
+// logging/storage import electron at the top — the dynamic import keeps this
+// module importable by tests (vitest runs without Electron).
 async function log(method: "info" | "error", msg: string, ...args: unknown[]): Promise<void> {
   try {
     const l = await import("./logging.js");
@@ -70,7 +70,7 @@ export async function jevApiKey(): Promise<string | null> {
   return cachedKey;
 }
 
-// ── cliente (fetch injetável p/ testes — mesmo padrão do workspace) ──────
+// ── client (injectable fetch for tests — same workspace pattern) ──────
 
 export interface JevAnswer {
   noul?: number;
@@ -105,13 +105,13 @@ async function getClient(key: string, fetchImpl?: unknown): Promise<TypeSafeClie
   return cachedClient.client;
 }
 
-/** Uma chamada systemone. Fail-soft: null em off/sem-key/erro (logado + métrica). */
+/** One systemone call. Fail-soft: null on off/no-key/error (logged + metric). */
 export async function jevJudge(opts: {
   state: unknown;
   questions: Record<string, unknown>;
   timeoutMs?: number;
   maxRetries?: number;
-  /** rótulo de telemetria/latência (ditado | sessao) */
+  /** telemetry/latency label (ditado | sessao) */
   origem: "ditado" | "sessao";
   fetch?: unknown;
 }): Promise<JevVerdict | null> {
@@ -145,12 +145,12 @@ export async function jevJudge(opts: {
     };
   } catch (e) {
     M_DECISIONS?.add(1, { origem: opts.origem, status: "erro" });
-    await log("error", `jev: falha (${opts.origem}):`, String(e).slice(0, 160));
+    await log("error", `jev: failed (${opts.origem}):`, String(e).slice(0, 160));
     return null;
   }
 }
 
-// ── julgamentos do app ───────────────────────────────────────────────────
+// ── app judgments ───────────────────────────────────────────────────
 
 export interface DictationJudgment {
   rota: Rota;
@@ -159,10 +159,10 @@ export interface DictationJudgment {
   latenciaMs: number;
 }
 
-/** F9: roteia a intenção do ditado (1 choice — caminho quente, ~600ms). */
+/** F9: routes the dictation intent (1 choice — hot path, ~600ms). */
 export async function judgeDictation(text: string, fetchImpl?: unknown): Promise<DictationJudgment | null> {
   const v = await jevJudge({
-    state: { origem: "voicecast F9 ditado", transcript: text },
+    state: { origem: "voicecast F9 dictation", transcript: text },
     questions: { rota: Q_ROTA },
     timeoutMs: JEV_TIMEOUT_DITADO_MS,
     maxRetries: 0,
@@ -184,14 +184,14 @@ export interface SessionJudgment {
   latenciaMs: number;
 }
 
-/** Sessão (voz+tela ou ditado da biblioteca): 4 perguntas numa chamada. */
+/** Session (voice+screen or library dictation): 4 questions in one call. */
 export async function judgeSession(
   transcript: string,
   ctx?: { mode?: string; title?: string },
   fetchImpl?: unknown,
 ): Promise<SessionJudgment | null> {
   const v = await jevJudge({
-    state: { origem: "voicecast sessão", mode: ctx?.mode, title: ctx?.title, transcript },
+    state: { origem: "voicecast session", mode: ctx?.mode, title: ctx?.title, transcript },
     questions: { rota: Q_ROTA, relevancia: Q_RELEVANCIA, pedido: Q_PEDIDO, risco: Q_RISCO },
     timeoutMs: JEV_TIMEOUT_SESSAO_MS,
     maxRetries: 1,
@@ -214,7 +214,7 @@ export async function judgeSession(
   };
 }
 
-// ── decisão de colagem (pura — testável) ────────────────────────────────
+// ── paste decision (pure — testable) ────────────────────────────────
 
 export interface PasteDecision {
   paste: boolean;
@@ -222,15 +222,15 @@ export interface PasteDecision {
 }
 
 /**
- * Sem julgamento → cola (fail-soft preserva o comportamento do F9 antigo).
- * Rota ditado_texto → cola. Confiança baixa → cola (não decide sozinho).
- * Só não cola quando a rota NÃO é ditado com confiança alta: comando pro
- * agente, anotação e conversa não pertencem à janela focada.
+ * No judgment → paste (fail-soft preserves the old F9 behavior).
+ * Route ditado_texto → paste. Low confidence → paste (doesn't decide on its own).
+ * Only skips pasting when the route is NOT dictation with high confidence: an agent
+ * command, an annotation, and conversation don't belong in the focused window.
  */
 export function decidePaste(j: DictationJudgment | null): PasteDecision {
-  if (!j) return { paste: true, motivo: "sem julgamento (Jev off/sem key/erro)" };
-  if (j.rota === "ditado_texto") return { paste: true, motivo: "ditado puro" };
+  if (!j) return { paste: true, motivo: "no judgment (Jev off/no key/error)" };
+  if (j.rota === "ditado_texto") return { paste: true, motivo: "pure dictation" };
   if (j.confidence < AUTO_CONFIDENCE)
-    return { paste: true, motivo: `confiança ${j.confidence.toFixed(2)} < ${AUTO_CONFIDENCE}` };
+    return { paste: true, motivo: `confidence ${j.confidence.toFixed(2)} < ${AUTO_CONFIDENCE}` };
   return { paste: false, motivo: j.rota };
 }

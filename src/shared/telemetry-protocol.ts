@@ -1,12 +1,12 @@
 /**
- * Contrato de mensagens main ↔ worker de telemetria (W1).
+ * Message contract main ↔ telemetry worker (W1).
  *
- * Desenho: o SDK OTel inteiro vive no worker (import pesado ~9s não toca o
- * event loop do main); o main mantém a API do core lazy e FORWARDA cada emit
- * como mensagem. Nomes/descrições dos instruments viajam nas mensagens — o
- * worker recria com o mesmo telemetry-core, então os nomes Prometheus não
- * mudam. Spans preservam hierarquia (id/parent) e timing (epoch-ms medido no
- * main, aplicado no span real pelo worker).
+ * Design: the entire OTel SDK lives in the worker (the heavy ~9s import never
+ * touches the main event loop); main keeps the core API lazy and FORWARDS each
+ * emit as a message. Instrument names/descriptions travel inside the messages —
+ * the worker recreates them with the same telemetry-core, so the Prometheus
+ * names don't change. Spans preserve hierarchy (id/parent) and timing
+ * (epoch-ms measured in main, applied to the real span by the worker).
  */
 import type { Attributes } from "./telemetry-core";
 
@@ -18,7 +18,7 @@ export type TelemetryWorkerInbound =
   | {
       type: "span-start";
       id: number;
-      /** id do span pai (com withSpan aninhado) — undefined = raiz */
+      /** parent span id (nested withSpan) — undefined = root */
       parent?: number;
       name: string;
       attrs: Attributes;

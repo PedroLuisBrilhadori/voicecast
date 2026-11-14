@@ -1,19 +1,19 @@
 /**
- * Host do ASR local — o app spawna e supervisiona o serviço python
- * vendorizado (asr-backend/, instalado em %LOCALAPPDATA%\voicecast\asr-backend
- * pelo scripts/setup-asr-backend.ps1). O voicecast deixou de depender do
- * serviço compartilhado do voice-dictation (aposentado em 2026-09-22): o
- * backend agora é nosso — o acesso continua via HTTP :8701, cliente
- * inalterado (src/main/asr.ts, com failover de URLs).
+ * Local ASR host — the app spawns and supervises the vendored python
+ * service (asr-backend/, installed at %LOCALAPPDATA%\voicecast\asr-backend
+ * by scripts/setup-asr-backend.ps1). voicecast stopped depending on the
+ * shared voice-dictation service (retired on 2026-09-22): the
+ * backend is ours now — access is still via HTTP :8701, unchanged
+ * client (src/main/asr.ts, with URL failover).
  *
- * Regras: probe de /health antes de qualquer spawn (nunca duplica serviço que
- * já responde — inclusive um externo, que é adotado), respawn com backoff
- * 5s→60s resetando após 60s estável, logs do filho em logs/asr-backend.log.
- * Kill-switch: VOICECAST_ASR_HOST=0 (env — ganha de tudo). Switch persistente
- * do usuário: settings.json `asrHost:false` (painel → "transcrição", IPC
- * asr:host-set) — desligar em runtime derruba o serviço na hora.
- * Com VOICECAST_ASR_URLS/VOICE_ASR_URLS configurado (endpoint externo), não
- * hospeda.
+ * Rules: /health probe before any spawn (never duplicates a service that
+ * already answers — including an external one, which is adopted), respawn with backoff
+ * 5s→60s resetting after 60s stable, child logs at logs/asr-backend.log.
+ * Kill-switch: VOICECAST_ASR_HOST=0 (env — wins over everything). Persistent
+ * user switch: settings.json `asrHost:false` (panel → "transcription", IPC
+ * asr:host-set) — turning it off at runtime takes the service down right away.
+ * With VOICECAST_ASR_URLS/VOICE_ASR_URLS configured (external endpoint), it
+ * doesn't host.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
@@ -81,7 +81,7 @@ let stableSince = 0;
 let monitor: ReturnType<typeof setInterval> | null = null;
 let respawnTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Estado efetivo do switch do modelo de transcrição (env + settings + runtime). */
+/** Effective state of the transcription model switch (env + settings + runtime). */
 export function asrHostStatus(): AsrHostStatus {
   const sw = asrSwitch({
     envOff: process.env.VOICECAST_ASR_HOST === "0",
@@ -96,37 +96,37 @@ export function asrHostStatus(): AsrHostStatus {
 }
 
 /**
- * Liga/desliga o modelo de transcrição (persiste no settings.json). Desligar
- * derruba o serviço NA HORA (stopAsrHost — filho morto, monitor parado).
- * Ligar sobe o host (spawn com warmup em background). Com env
- * VOICECAST_ASR_HOST=0, o pedido de ligar é persistido mas o env segue
- * ganhando (status reflete).
+ * Turns the transcription model on/off (persists to settings.json). Turning it off
+ * takes the service down RIGHT AWAY (stopAsrHost — child killed, monitor stopped).
+ * Turning it on brings the host up (spawn with background warmup). With env
+ * VOICECAST_ASR_HOST=0, the on request is persisted but the env keeps
+ * winning (status reflects it).
  */
 export async function setAsrHostEnabled(on: boolean): Promise<AsrHostStatus> {
   writeSettings(appDataDir(), { asrHost: on });
-  logInfo(`ASR host: switch do usuário → ${on ? "LIGADO" : "DESLIGADO"} (settings.json)`);
+  logInfo(`ASR host: user switch → ${on ? "ON" : "OFF"} (settings.json)`);
   if (on) await ensureAsrHost();
   else stopAsrHost();
   return asrHostStatus();
 }
 
 /**
- * Pedido EXPLÍCITO de transcrição (F9 do ditado, botão "transcrever agora",
- * --transcribe) com o switch off → religa o modelo sozinho. Só quando o
- * desligamento veio do settings (escolha reversível); env
- * VOICECAST_ASR_HOST=0 é kill-switch de máquina e não é sobrescrito.
- * Retorna true quando religou.
+ * EXPLICIT transcription request (F9 dictation, "transcrever agora" button,
+ * --transcribe) with the switch off → turns the model back on by itself. Only when the
+ * shutdown came from settings (reversible choice); env
+ * VOICECAST_ASR_HOST=0 is a machine-level kill-switch and is not overridden.
+ * Returns true when it re-enabled.
  */
 export async function asrAutoEnableIfNeeded(): Promise<boolean> {
   const st = asrHostStatus();
   if (st.enabled || st.source === "env") return false;
-  logInfo("ASR host: pedido de transcrição com o switch off — religando o modelo");
+  logInfo("ASR host: transcription request with the switch off — re-enabling the model");
   await setAsrHostEnabled(true);
   return true;
 }
 
-/** Dirs de libs CUDA das wheels nvidia pip (cublas/cudnn) no venv — o
- * ctranslate2 dlopen-as no primeiro uso e precisa de LD_LIBRARY_PATH. */
+/** CUDA lib dirs of the pip nvidia wheels (cublas/cudnn) in the venv —
+ * ctranslate2 dlopens them on first use and needs LD_LIBRARY_PATH. */
 function cudaLibDirs(): string[] {
   try {
     const libRoot = path.join(asrBackendDir(), ".venv", "lib");
@@ -155,11 +155,11 @@ function spawnBackend(): void {
     PYTHONPATH: src,
     VOICE_APP_DIR: asrBackendDir(),
     VOICE_ASR_MODEL: process.env.VOICE_ASR_MODEL ?? "large-v3-turbo",
-    OTEL_ENABLED: "0", // venv próprio não instala deps OTel; telemetria do serviço fica off
+    OTEL_ENABLED: "0", // own venv doesn't install OTel deps; service telemetry stays off
   };
-  // libcublas/libcudnn das wheels pip (senão o transcribe 500 com
-  // "Library libcublas.so.12 is not found" — health diz cuda e a inferência
-  // falha, achado 19/10)
+  // libcublas/libcudnn from the pip wheels (otherwise transcribe 500s with
+  // "Library libcublas.so.12 is not found" — health says cuda but inference
+  // fails, finding from 19/10)
   const cuda = cudaLibDirs();
   if (cuda.length) {
     env.LD_LIBRARY_PATH = [...cuda, env.LD_LIBRARY_PATH ?? ""]
@@ -173,11 +173,11 @@ function spawnBackend(): void {
     windowsHide: true,
     stdio: ["ignore", logFd, logFd],
   });
-  logInfo(`ASR host: serviço de pé (pid ${child.pid}, porta ${asrPort()})`);
+  logInfo(`ASR host: service up (pid ${child.pid}, port ${asrPort()})`);
   child.on("exit", (code) => {
     child = null;
     crashes += 1;
-    logError(`ASR host: serviço saiu (code ${code}) — respawn em ${backoffDelayMs(crashes)}ms`);
+    logError(`ASR host: service exited (code ${code}) — respawn in ${backoffDelayMs(crashes)}ms`);
     scheduleRespawn();
   });
 }
@@ -188,9 +188,9 @@ function scheduleRespawn(): void {
     () => {
       respawnTimer = null;
       void (async () => {
-        // nunca duplica: se algo já responde na porta, adota
+        // never duplicate: if something already answers on the port, adopt it
         if (await probeHealth()) {
-          logInfo("ASR host: serviço externo responde na porta — adotado, sem spawn");
+          logInfo("ASR host: external service answering on the port — adopted, no spawn");
           return;
         }
         if (hostAction({ probeOk: false, childRunning: child !== null }) === "spawn") {
@@ -211,7 +211,7 @@ function startMonitor(): void {
         if (!stableSince) {
           stableSince = Date.now();
         } else if (crashes > 0 && backoffShouldReset(Date.now() - stableSince)) {
-          logInfo("ASR host: 60s estável — backoff zerado");
+          logInfo("ASR host: 60s stable — backoff reset");
           crashes = 0;
         }
         return;
@@ -224,9 +224,9 @@ function startMonitor(): void {
   }, PROBE_INTERVAL_MS);
 }
 
-/** Sobe o host se for dele (chamado no whenReady; fail-soft — nunca derruba o app).
- * Chamadas concorrentes compartilham a mesma promessa (F9 e transcrição explícita
- * podem pedir junto — sem isso, dois spawns brigam pela porta). */
+/** Brings the host up if it's on it (called on whenReady; fail-soft — never takes the app down).
+ * Concurrent calls share the same promise (F9 and explicit transcription
+ * may ask together — without this, two spawns fight over the port). */
 let ensureInProgress: Promise<void> | null = null;
 export function ensureAsrHost(): Promise<void> {
   if (!ensureInProgress) {
@@ -240,7 +240,7 @@ export function ensureAsrHost(): Promise<void> {
 async function ensureAsrHostOnce(): Promise<void> {
   try {
     if (process.env.VOICECAST_ASR_URLS || process.env.VOICE_ASR_URLS) {
-      logInfo("ASR host: VOICECAST_ASR_URLS/VOICE_ASR_URLS configurado — backend externo, não hospedo");
+      logInfo("ASR host: VOICECAST_ASR_URLS/VOICE_ASR_URLS configured — external backend, not hosting");
       return;
     }
     const sw = asrSwitch({
@@ -250,27 +250,27 @@ async function ensureAsrHostOnce(): Promise<void> {
     if (!sw.enabled) {
       logInfo(
         sw.source === "env"
-          ? "ASR host: desligado via VOICECAST_ASR_HOST=0"
-          : "ASR host: desligado pelo usuário (settings.json asrHost=false) — sem modelo de transcrição",
+          ? "ASR host: off via VOICECAST_ASR_HOST=0"
+          : "ASR host: off by the user (settings.json asrHost=false) — no transcription model",
       );
       return;
     }
     if (!backendPython() || !backendSrc()) {
       logError(
-        "ASR host: backend não instalado — rode scripts/setup-asr-backend.ps1 " +
-          "(transcrição/ditado ficam sem backend local)",
+        "ASR host: backend not installed — run scripts/setup-asr-backend.ps1 " +
+          "(transcription/dictation stay without a local backend)",
       );
       return;
     }
     if (await probeHealth()) {
-      logInfo("ASR host: serviço já responde na porta — adotado, sem spawn");
+      logInfo("ASR host: service already answering on the port — adopted, no spawn");
       startMonitor();
       return;
     }
     spawnBackend();
     startMonitor();
   } catch (e) {
-    logError("ASR host: falha ao subir (fail-soft):", e);
+    logError("ASR host: failed to start (fail-soft):", e);
   }
 }
 
@@ -280,7 +280,7 @@ export function stopAsrHost(): void {
   if (respawnTimer) clearTimeout(respawnTimer);
   respawnTimer = null;
   if (child) {
-    logInfo(`ASR host: encerrando serviço (pid ${child.pid})`);
+    logInfo(`ASR host: shutting down service (pid ${child.pid})`);
     child.kill();
     child = null;
   }

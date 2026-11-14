@@ -1,27 +1,27 @@
-"""Telemetria padrão dos componentes de voz (OTLP-HTTP -> collector unidocs).
+"""Standard telemetry for the voice components (OTLP-HTTP -> unidocs collector).
 
-Padrão espelhado da API do unidocs (apps/api/src/core/opentelemetry/tracing.ts):
-resource com service.name/host.name, export OTLP-HTTP para o collector local e
-degradação gracosa — com o collector fora do ar nada quebra, os exports caem
-no retry/drop do BatchProcessor.
+Pattern mirrored from the unidocs API (apps/api/src/core/opentelemetry/tracing.ts):
+resource with service.name/host.name, OTLP-HTTP export to the local collector and
+graceful degradation — with the collector down nothing breaks, the exports fall
+into the BatchProcessor retry/drop.
 
 Env:
-  OTEL_ENABLED                  (default: 1) 0 desliga toda a telemetria
+  OTEL_ENABLED                  (default: 1) 0 turns all telemetry off
   OTEL_EXPORTER_OTLP_ENDPOINT   (default: http://localhost:4318)
-                                              collector publica 4318 no host)
-  OTEL_SERVICE_NAME             default por caller (voice-asr / voice-dictate)
+                                              collector publishes 4318 on the host)
+  OTEL_SERVICE_NAME             per-caller default (voice-asr / voice-dictate)
 
-Uso (callers não precisam branch — sem SDK os objetos da API são no-op):
+Usage (callers don't need to branch — without the SDK the API objects are no-ops):
 
     from voice import telemetry
     telemetry.init_telemetry("voice-asr")
-    tracer = telemetry.tracer()          # no-op seguro se desligado
+    tracer = telemetry.tracer()          # safe no-op if disabled
     meter = telemetry.meter()
     counter = meter.create_counter("voice_x_total")
 
-Logs: init anexa um handler OTLP no root logger (logs vão pro Loki via
-collector). Registros do próprio opentelemetry são filtrados (evita spam/loop
-de erro de export).
+Logs: init attaches an OTLP handler to the root logger (logs go to Loki via
+the collector). opentelemetry's own records are filtered (avoids export
+error spam/loop).
 """
 
 from __future__ import annotations
@@ -56,17 +56,17 @@ def _resource(service_name: str, version: str) -> Any:
 
 
 class _OtelLogFilter(logging.Filter):
-    """Evita recursão/spam: logs do próprio opentelemetry não vão pro OTLP."""
+    """Avoids recursion/spam: opentelemetry's own logs don't go to OTLP."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         return not record.name.startswith("opentelemetry")
 
 
 def init_telemetry(service_name: str, version: str = "0.3.0") -> bool:
-    """Inicializa trace/métricas/logs OTLP. Retorna True se ativo.
+    """Initializes OTLP trace/metrics/logs. Returns True if active.
 
-    Qualquer falha (deps ausentes, collector fora) deixa o caller funcional —
-    a telemetria é best-effort por design.
+    Any failure (missing deps, collector down) leaves the caller functional —
+    telemetry is best-effort by design.
     """
     global _ENABLED, _INITIALIZED, _SERVICE_NAME, _ENDPOINT
     if _INITIALIZED:
@@ -75,7 +75,7 @@ def init_telemetry(service_name: str, version: str = "0.3.0") -> bool:
     _SERVICE_NAME = service_name
 
     if os.environ.get("OTEL_ENABLED", "1").strip().lower() in ("0", "false", "no"):
-        log.info("telemetria desligada via OTEL_ENABLED")
+        log.info("telemetry disabled via OTEL_ENABLED")
         return False
 
     _ENDPOINT = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", _ENDPOINT).rstrip("/")
@@ -98,7 +98,7 @@ def init_telemetry(service_name: str, version: str = "0.3.0") -> bool:
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
     except Exception:
-        log.warning("deps de telemetria ausentes — seguindo sem OTel", exc_info=True)
+        log.warning("telemetry deps missing — continuing without OTel", exc_info=True)
         return False
 
     try:
@@ -127,10 +127,10 @@ def init_telemetry(service_name: str, version: str = "0.3.0") -> bool:
         )
         _logs.set_logger_provider(logger_provider)
 
-        # silencia o spam de retry/drop do próprio SDK (BatchProcessor loga
-        # "Failed to export" a cada intervalo com collector fora/intermitente —
-        # 8% do asr.log era isso, escondendo erros reais). Falha de export
-        # continua visível por métrica de heartbeat, não por flood de log.
+        # silences the SDK's own retry/drop spam (the BatchProcessor logs
+        # "Failed to export" on every interval with the collector down/intermittent —
+        # 8% of asr.log was that, hiding real errors). Export failure
+        # remains visible via the heartbeat metric, not via a log flood.
         for otel_logger in ("opentelemetry.sdk",
                             "opentelemetry.exporter",
                             "opentelemetry.util._providers"):
@@ -140,7 +140,7 @@ def init_telemetry(service_name: str, version: str = "0.3.0") -> bool:
         handler.addFilter(_OtelLogFilter())
         logging.getLogger().addHandler(handler)
 
-        # erros de export do próprio OTel ficam em ERROR (senão spam a cada retry)
+        # OTel's own export errors stay at ERROR (otherwise spam on every retry)
         logging.getLogger("opentelemetry").setLevel(logging.ERROR)
 
         def _shutdown() -> None:
@@ -152,10 +152,10 @@ def init_telemetry(service_name: str, version: str = "0.3.0") -> bool:
 
         atexit.register(_shutdown)
         _ENABLED = True
-        log.info("telemetria ativa: service=%s endpoint=%s", service_name, _ENDPOINT)
+        log.info("telemetry active: service=%s endpoint=%s", service_name, _ENDPOINT)
         return True
     except Exception:
-        log.warning("falha ao inicializar telemetria — seguindo sem OTel", exc_info=True)
+        log.warning("failed to initialize telemetry — continuing without OTel", exc_info=True)
         return False
 
 
@@ -197,7 +197,7 @@ class _NullMeter:
 
 
 def tracer(name: str = "voice"):
-    """Tracer da API OTel — no-op seguro se o SDK/deps não estão disponíveis."""
+    """OTel API tracer — safe no-op if the SDK/deps are not available."""
     try:
         from opentelemetry import trace
 
@@ -207,7 +207,7 @@ def tracer(name: str = "voice"):
 
 
 def meter(name: str = "voice"):
-    """Meter da API OTel — no-op seguro se o SDK/deps não estão disponíveis."""
+    """OTel API meter — safe no-op if the SDK/deps are not available."""
     try:
         from opentelemetry import metrics
 
@@ -217,12 +217,12 @@ def meter(name: str = "voice"):
 
 
 def log_event(logger: logging.Logger, event: str, **fields: Any) -> None:
-    """Log estruturado JSON — mesmo padrão do sidecar do opencode.
+    """Structured JSON log — same pattern as the opencode sidecar.
 
-    Por quê: logs de texto ("texto transcrito (40 chars)") não são consultáveis
-    no Loki; JSON com `event` + campos vira `| json | event="dictation.ok"`,
-    dashboards e o auditor headless conseguem agregar por campo (modelo,
-    duração, motivo de rejeição). Best-effort: nunca levanta.
+    Why: text logs ("transcribed text (40 chars)") are not queryable
+    in Loki; JSON with `event` + fields becomes `| json | event="dictation.ok"`,
+    and dashboards and the headless auditor can aggregate by field (model,
+    duration, rejection reason). Best-effort: never raises.
     """
     try:
         payload = {"event": event, "host": socket.gethostname(), **fields}

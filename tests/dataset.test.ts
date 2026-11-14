@@ -1,7 +1,7 @@
 /**
- * Acesso ao dataset do voice (W2a — issue #3) contra FIXTURE em tmp —
- * NUNCA aponta para o corpus real do usuário. Layout espelha o disco:
- * transcriptions/YYYY-MM-DD/<id>.json com words + validation.
+ * Voice dataset access (W2a — issue #3) against a FIXTURE in tmp —
+ * NEVER points at the user's real corpus. Layout mirrors disk:
+ * transcriptions/YYYY-MM-DD/<id>.json with words + validation.
  */
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
@@ -56,7 +56,7 @@ afterAll(() => {
 });
 
 describe("listDatasetItems", () => {
-  it("lista mais recente primeiro, com preview e flag validated", () => {
+  it("lists newest first, with preview and validated flag", () => {
     corpusItem("010000-aaaaaaaa", "2026-09-18", "primeiro ditado antigo");
     corpusItem("120000-bbbbbbbb", "2026-09-19", "segundo ditado novo", {
       corrected_text: "segundo corrigido",
@@ -72,14 +72,14 @@ describe("listDatasetItems", () => {
     expect(items[1].preview).toBe("primeiro ditado antigo");
   });
 
-  it("query filtra por substring do texto (case-insensitive)", () => {
+  it("query filters by text substring (case-insensitive)", () => {
     corpusItem("010000-aaaaaaaa", "2026-09-18", "comprar café");
     corpusItem("010100-bbbbbbbb", "2026-09-18", "reunião às três");
     const items = listDatasetItems({ root: ROOT, query: "CAFÉ" });
     expect(items.map((i) => i.id)).toEqual(["010000-aaaaaaaa"]);
   });
 
-  it("filtro labeled=1 só rotuladas; 0 só sem correção", () => {
+  it("labeled=1 filter only labeled ones; 0 only uncorrected", () => {
     corpusItem("010000-aaaaaaaa", "2026-09-18", "sem correção");
     corpusItem("010100-bbbbbbbb", "2026-09-18", "com correção", {
       corrected_text: "x", ts: "2026-09-18T01:20:00", n_edits: 0, edits: [], labeled_by: "panel",
@@ -88,12 +88,12 @@ describe("listDatasetItems", () => {
     expect(listDatasetItems({ root: ROOT, labeled: "0" }).map((i) => i.id)).toEqual(["010000-aaaaaaaa"]);
   });
 
-  it("sem datasets dir → [] (fail-soft, nunca lança)", () => {
+  it("no datasets dir → [] (fail-soft, never throws)", () => {
     expect(listDatasetItems({ root: path.join(ROOT, "inexistente") })).toEqual([]);
     expect(listDatasetItems({ root: null })).toEqual([]);
   });
 
-  it("JSON ilegível é ignorado (paridade com o painel)", () => {
+  it("unreadable JSON is ignored (parity with the panel)", () => {
     corpusItem("010000-aaaaaaaa", "2026-09-18", "ok");
     fs.writeFileSync(path.join(ROOT, "transcriptions", "2026-09-18", "010200-cccccccc.json"), "{quebrado");
     expect(listDatasetItems({ root: ROOT })).toHaveLength(1);
@@ -101,7 +101,7 @@ describe("listDatasetItems", () => {
 });
 
 describe("getDatasetItem", () => {
-  it("detalhe completo: words, validation, audioUrl", () => {
+  it("full detail: words, validation, audioUrl", () => {
     const id = "010000-aaaaaaaa";
     corpusItem(id, "2026-09-18", "um dois três");
     fs.mkdirSync(path.join(ROOT, "raw", "2026-09-18"), { recursive: true });
@@ -115,14 +115,14 @@ describe("getDatasetItem", () => {
     expect(d?.audioUrl?.startsWith("file:///")).toBe(true);
   });
 
-  it("id com traversal → null; id inexistente → null", () => {
+  it("id with traversal → null; nonexistent id → null", () => {
     expect(getDatasetItem("../../etc", ROOT)).toBeNull();
     expect(getDatasetItem("999999-zzzzzzzz", ROOT)).toBeNull();
   });
 });
 
-describe("writeDatasetCorrection — escrita no corpus (dado real: atômica e conservadora)", () => {
-  it("grava bloco validation no MESMO JSON; text/words originais intocados", () => {
+describe("writeDatasetCorrection — corpus write (real data: atomic and conservative)", () => {
+  it("writes the validation block into the SAME JSON; original text/words untouched", () => {
     const id = "010000-aaaaaaaa";
     const file = corpusItem(id, "2026-09-18", "vamos favar isso");
     const before = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -132,11 +132,11 @@ describe("writeDatasetCorrection — escrita no corpus (dado real: atômica e co
     });
     expect(st).toBe("ok");
     const after = JSON.parse(fs.readFileSync(file, "utf8"));
-    // campos originais preservados (nunca truncar/reescrever o cru)
+    // original fields preserved (never truncate/rewrite the raw data)
     expect(after.text).toBe(before.text);
     expect(after.words).toEqual(before.words);
     expect(after.id).toBe(id);
-    // validation no schema do corpus
+    // validation in the corpus schema
     expect(after.validation).toEqual({
       corrected_text: "vamos fechar isso",
       ts: "2026-09-29T10:00:00",
@@ -144,11 +144,11 @@ describe("writeDatasetCorrection — escrita no corpus (dado real: atômica e co
       edits: [{ index: 1, originalW: "favar", correctedW: "fechar" }],
       labeled_by: "voicecast",
     });
-    // escrita atômica: nenhum .tmp sobrando
+    // atomic write: no .tmp left behind
     expect(fs.readdirSync(path.join(ROOT, "transcriptions", "2026-09-18")).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
 
-  it("idempotente: reaplicar sobrescreve o validation anterior (paridade corrections.py)", () => {
+  it("idempotent: reapplying overwrites the previous validation (corrections.py parity)", () => {
     const id = "010000-aaaaaaaa";
     corpusItem(id, "2026-09-18", "texto", {
       corrected_text: "antiga", ts: "2026-09-18T01:00:00", n_edits: 0, edits: [], labeled_by: "panel",
@@ -162,19 +162,19 @@ describe("writeDatasetCorrection — escrita no corpus (dado real: atômica e co
     expect(after.validation.labeled_by).toBe("voicecast");
   });
 
-  it("item inexistente → 'ausente' (fail-soft)", () => {
+  it("nonexistent item → 'ausente' (fail-soft)", () => {
     expect(writeDatasetCorrection("999999-zzzzzzzz", "x", [], { root: ROOT })).toBe("ausente");
   });
 
-  it("sem datasets dir → 'ausente', nada é escrito", () => {
+  it("no datasets dir → 'ausente', nothing is written", () => {
     expect(writeDatasetCorrection("010000-aaaaaaaa", "x", [], { root: null })).toBe("ausente");
   });
 
-  it("id com traversal → 'ausente'", () => {
+  it("id with traversal → 'ausente'", () => {
     expect(writeDatasetCorrection("../fuga", "x", [], { root: ROOT })).toBe("ausente");
   });
 
-  it("JSON ilegível → 'erro' (nunca sobrescreve dado que não conseguiu ler)", () => {
+  it("unreadable JSON → 'erro' (never overwrites data it failed to read)", () => {
     const dir = path.join(ROOT, "transcriptions", "2026-09-18");
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "010000-aaaaaaaa.json"), "{quebrado");

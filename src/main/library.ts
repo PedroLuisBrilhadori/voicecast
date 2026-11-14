@@ -1,6 +1,6 @@
 /**
- * Pós-processamento de sessão: transcrição automática, clipes, frames e
- * geração do contexto para agentes ("Copiar para o ZCode").
+ * Session post-processing: automatic transcription, clips, frames, and
+ * agent context generation ("Copiar para o ZCode").
  */
 import { clipboard } from "electron";
 import fs from "node:fs";
@@ -25,22 +25,22 @@ import {
 import { writeDatasetCorrection } from "./dataset";
 import { counter, histogram, withSpan } from "./telemetry";
 
-// voicecast_sessions_total é do capture.ts (que emite); duplicar aqui criava
-// confusão — com o core lazy cairia no mesmo instrumento, mas fica num lugar só
-const M_TRANSCRIBE = counter("voicecast_transcriptions_total", "transcrições por status");
-const H_TRANSCRIBE = histogram("voicecast_transcribe_seconds", "duração da transcrição ASR");
-const M_CUT = counter("voicecast_cuts_total", "cortes combinados por desfecho");
-const H_CUT = histogram("voicecast_cut_seconds", "duração do corte combinado (exportCut)");
-// AN.4: nº de marcações citadas no contexto (só emite quando há — sessão sem
-// anotação não gera seção nem métrica)
+// voicecast_sessions_total belongs to capture.ts (which emits it); duplicating it here caused
+// confusion — with the lazy core it would land on the same instrument, but it lives in one place only
+const M_TRANSCRIBE = counter("voicecast_transcriptions_total", "transcriptions by status");
+const H_TRANSCRIBE = histogram("voicecast_transcribe_seconds", "ASR transcription duration");
+const M_CUT = counter("voicecast_cuts_total", "combined cuts by outcome");
+const H_CUT = histogram("voicecast_cut_seconds", "combined cut duration (exportCut)");
+// AN.4: number of screen markers cited in the context (only emits when present — a session without
+// annotations generates neither section nor metric)
 const M_CTX_ANNOTATIONS = counter(
   "voicecast_context_annotations_total",
-  "marcações de tela incluídas no buildContext",
+  "screen markers included in buildContext",
 );
-// W2a: correções de ditado por alvo (voicecast | dataset | ambos)
-const M_CORRECTIONS = counter("voicecast_corrections_total", "correções de ditado por alvo");
+// W2a: dictation corrections by target (voicecast | dataset | both)
+const M_CORRECTIONS = counter("voicecast_corrections_total", "dictation corrections by target");
 
-// ── tipos de biblioteca ────────────────────────────────────────
+// ── library types ────────────────────────────────────────
 
 export interface SessionSummary {
   dir: string; // YYYY-MM-DD
@@ -56,13 +56,13 @@ export interface SessionSummary {
   hasMp4: boolean;
   hasTranscript: boolean;
   transcriptStatus: string | null;
-  thumb: string | null; // caminho Windows do thumb (ou null)
+  thumb: string | null; // Windows path of the thumb (or null)
   markers: number[];
-  /** Primeiras palavras da transcrição (subtítulo do card). */
+  /** First words of the transcript (card subtitle). */
   preview: string | null;
 }
 
-/** Julgamento Jev gravado no meta.json (Etapa 2 do PLANO-JEV-CU). */
+/** Jev judgment stored in meta.json (PLANO-JEV-CU step 2). */
 export interface JevMeta {
   model: string;
   judgedAt: string;
@@ -84,19 +84,19 @@ interface Meta {
   sizeBytes?: number;
   markers?: number[];
   transcriptStatus?: string;
-  /** Trechos nomeados do editor (fase B) — sempre sanitizados antes de gravar. */
+  /** Named segments from the editor (phase B) — always sanitized before writing. */
   segments?: SessionSegment[];
-  /** Ditado: primeira frase da transcrição (título automático). */
+  /** Dictation: first sentence of the transcript (automatic title). */
   textPreview?: string;
-  /** Julgamento Jev (fail-soft: ausente quando off/sem key/erro). */
+  /** Jev judgment (fail-soft: absent when off/no key/error). */
   jev?: JevMeta;
-  /** W2a: id do item correspondente no corpus do voice (link opcional). */
+  /** W2a: id of the matching item in the voice corpus (optional link). */
   datasetId?: string;
-  /** W2a: última correção gravada nesta sessão. */
+  /** W2a: last correction written in this session. */
   correction?: SessionCorrectionMeta;
 }
 
-// ── biblioteca ─────────────────────────────────────────────────
+// ── library ─────────────────────────────────────────────────
 
 export function listSessions(): SessionSummary[] {
   const root = sessionsRoot();
@@ -146,7 +146,7 @@ export function listSessions(): SessionSummary[] {
   return out;
 }
 
-/** Busca full-text simples: título + texto da transcrição + tags. */
+/** Simple full-text search: title + transcript text + tags. */
 export function searchSessions(query: string): SessionSummary[] {
   const q = query.trim().toLowerCase();
   const all = listSessions();
@@ -176,10 +176,10 @@ export function getSessionDetail(
 }
 
 /**
- * Persiste um ditado como sessão de áudio na biblioteca (mesmo layout).
- * `transcript: null` salva SÓ o áudio (transcriptStatus "pending") — a fala
- * não pode ser descartada porque o ASR estava off/fora do ar; o botão
- * "transcrever agora" do editor recupera depois.
+ * Persists a dictation as an audio session in the library (same layout).
+ * `transcript: null` saves ONLY the audio (transcriptStatus "pending") — the speech
+ * can't be discarded because the ASR was off/down; the editor's
+ * "transcribe now" button recovers it later.
  */
 export function saveDictationSession(
   startedAt: number,
@@ -206,7 +206,7 @@ export function saveDictationSession(
     durationS: +((Date.now() - startedAt) / 1000).toFixed(1),
     mode: "ditado",
     sourceLabel: "mic",
-    title: preview || "Ditado (sem transcrição)",
+    title: preview || "Dictation (no transcript)",
     textPreview: preview,
     transcriptStatus: transcript ? "done" : "pending",
     sizeBytes: fs.statSync(dirs.audio).size,
@@ -215,18 +215,18 @@ export function saveDictationSession(
       : {}),
   });
   logInfo(
-    `ditado salvo na biblioteca: ${dayDir}/${name} "${preview}"` +
-      (transcript ? "" : " — áudio pendente de transcrição (ASR indisponível no momento)"),
+    `dictation saved to the library: ${dayDir}/${name} "${preview}"` +
+      (transcript ? "" : " — audio pending transcription (ASR unavailable at the moment)"),
   );
   return { dir: dayDir, name };
 }
 
-// ── transcrição (chamada no fim da sessão e manual) ────────────
+// ── transcription (called at session end and manually) ────────────
 
 export async function transcribeAndStore(dir: string, name: string): Promise<boolean> {
   const dirs = sessionDirs(dir, name);
-  // sessão de vídeo (mp4) OU de ditado (audio.webm) — a retranscrição do
-  // ditado salvo sem fala depende do áudio, não do mp4
+  // video session (mp4) OR dictation session (audio.webm) — re-transcribing a
+  // saved dictation without speech depends on the audio, not the mp4
   const media = fs.existsSync(dirs.mp4) ? dirs.mp4 : fs.existsSync(dirs.audio) ? dirs.audio : null;
   if (!media) return false;
   const patch = (p: Partial<Meta>) => {
@@ -234,11 +234,11 @@ export async function transcribeAndStore(dir: string, name: string): Promise<boo
     writeMeta(dirs.meta, { ...m, ...p });
   };
   patch({ transcriptStatus: "pending" });
-  // espera o host do ASR abrir a porta (spawn no boot do app leva segundos —
-  // sem isso, --transcribe na cold start perde a corrida e marca sem-asr)
+  // waits for the ASR host to open the port (the app-boot spawn takes seconds —
+  // without this, --transcribe on cold start loses the race and marks sem-asr)
   const health = await asrHealth({ waitMs: 30_000 });
   if (!health.ok) {
-    logError("ASR fora do ar — transcrição ficará pendente (retranscreva depois)");
+    logError("ASR down — transcription will stay pending (re-transcribe later)");
     patch({ transcriptStatus: "sem-asr" });
     M_TRANSCRIBE?.add(1, { status: "sem-asr" });
     return false;
@@ -250,10 +250,10 @@ export async function transcribeAndStore(dir: string, name: string): Promise<boo
     patch({ transcriptStatus: "done" });
     H_TRANSCRIBE?.record((Date.now() - t0) / 1000, { kind: "sessao" });
     M_TRANSCRIBE?.add(1, { status: "ok" });
-    logInfo(`transcrição pronta: ${dir}/${name} (${t.words.length} palavras)`);
+    logInfo(`transcription ready: ${dir}/${name} (${t.words.length} words)`);
 
-    // Etapa 2: julgamento Jev da sessão (fail-soft — julgamento é melhoria,
-    // não dependência; falha aqui não afeta a transcrição pronta)
+    // Step 2: session Jev judgment (fail-soft — judgment is an improvement,
+    // not a dependency; a failure here doesn't affect the ready transcription)
     try {
       const m = JSON.parse(fs.readFileSync(dirs.meta, "utf8")) as Meta;
       const j = await judgeSession(t.text, { mode: m.mode, title: m.title });
@@ -270,15 +270,15 @@ export async function transcribeAndStore(dir: string, name: string): Promise<boo
           },
         });
         logInfo(
-          `jev: ${dir}/${name} → rota ${j.rota ?? "?"} · relevância ${j.relevancia?.toFixed(1) ?? "?"}/3 · ${j.latenciaMs.toFixed(0)}ms`,
+          `jev: ${dir}/${name} → route ${j.rota ?? "?"} · relevance ${j.relevancia?.toFixed(1) ?? "?"}/3 · ${j.latenciaMs.toFixed(0)}ms`,
         );
       }
     } catch (e) {
-      logError("jev: julgamento da sessão falhou (sessão intacta):", e);
+      logError("jev: session judgment failed (session intact):", e);
     }
     return true;
   } catch (e) {
-    logError("transcrição falhou:", e);
+    logError("transcription failed:", e);
     patch({ transcriptStatus: "erro" });
     M_TRANSCRIBE?.add(1, { status: "erro" });
     return false;
@@ -289,7 +289,7 @@ function writeMeta(metaPath: string, meta: unknown): void {
   fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
 }
 
-// ── clipes e frames ────────────────────────────────────────────
+// ── clips and frames ────────────────────────────────────────────
 
 export async function createClip(
   dir: string,
@@ -299,12 +299,12 @@ export async function createClip(
   label?: string,
 ): Promise<{ file: string; bytes: number } | { error: string }> {
   const dirs = sessionDirs(dir, name);
-  if (!fs.existsSync(dirs.mp4)) return { error: "mp4 ausente" };
+  if (!fs.existsSync(dirs.mp4)) return { error: "missing mp4" };
   fs.mkdirSync(dirs.clips, { recursive: true });
   const dest = path.join(dirs.clips, `${clipFileBase(label ?? "", inS, outS)}.mp4`);
   try {
     const ff = await resolveFfmpeg();
-    // corte exato: re-encode leve (corta em qualquer frame, não só keyframe)
+    // exact cut: light re-encode (cuts at any frame, not just keyframes)
     await runFfmpeg(ff, [
       "-y", "-ss", String(inS), "-i", dirs.mp4, "-to", String(Math.max(0.1, outS - inS)),
       "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-c:a", "aac", "-b:a", "96k",
@@ -312,12 +312,12 @@ export async function createClip(
     ]);
     return { file: dest, bytes: fs.statSync(dest).size };
   } catch (e) {
-    logError("clipe falhou:", e);
+    logError("clip failed:", e);
     return { error: String(e) };
   }
 }
 
-/** Clipes .mp4 existentes em clips/ — a lista do editor (fase A gravava, não listava). */
+/** Existing .mp4 clips in clips/ — the editor's list (phase A wrote, didn't list). */
 export function listClips(dir: string, name: string): ClipInfo[] {
   const dirs = sessionDirs(dir, name);
   if (!fs.existsSync(dirs.clips)) return [];
@@ -333,9 +333,9 @@ export function listClips(dir: string, name: string): ClipInfo[] {
 }
 
 /**
- * Corte combinado (fase B): recorta cada segmento (mesmo encode do createClip
- * — params idênticos são pré-requisito do concat) e junta num mp4 único em
- * clips/<label>-<N>seg.mp4. Re-export sobrescreve (nome determinístico).
+ * Combined cut (phase B): re-cuts each segment (same encode as createClip —
+ * identical params are a concat prerequisite) and joins into a single mp4 at
+ * clips/<label>-<N>seg.mp4. Re-export overwrites (deterministic name).
  */
 export async function exportCut(
   dir: string,
@@ -344,9 +344,9 @@ export async function exportCut(
   label = "corte",
 ): Promise<{ file: string; bytes: number } | { error: string }> {
   const segs = sanitizeSegments(segments);
-  if (!segs.length) return { error: "sem segmentos válidos" };
+  if (!segs.length) return { error: "no valid segments" };
   const dirs = sessionDirs(dir, name);
-  if (!fs.existsSync(dirs.mp4)) return { error: "mp4 ausente" };
+  if (!fs.existsSync(dirs.mp4)) return { error: "missing mp4" };
   fs.mkdirSync(dirs.clips, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "voicecast-cut-"));
   const t0 = Date.now();
@@ -362,17 +362,17 @@ export async function exportCut(
       ]);
       parts.push(part);
     }
-    // concat demuxer: paths escapados p/ aspas simples (sintaxe do próprio ffmpeg)
+    // concat demuxer: paths escaped for single quotes (ffmpeg's own syntax)
     const listFile = path.join(tmp, "list.txt");
     fs.writeFileSync(listFile, parts.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n"));
     const dest = path.join(dirs.clips, `${cutFileBase(label, segs.length)}.mp4`);
     await runFfmpeg(ff, ["-y", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", dest]);
     H_CUT?.record((Date.now() - t0) / 1000, { segments: String(segs.length) });
     M_CUT?.add(1, { status: "ok" });
-    logInfo(`corte combinado pronto: ${dir}/${name} (${segs.length} segmentos)`);
+    logInfo(`combined cut ready: ${dir}/${name} (${segs.length} segments)`);
     return { file: dest, bytes: fs.statSync(dest).size };
   } catch (e) {
-    logError("corte falhou:", e);
+    logError("cut failed:", e);
     M_CUT?.add(1, { status: "erro" });
     return { error: String(e) };
   } finally {
@@ -386,7 +386,7 @@ export async function captureFrame(
   atS: number,
 ): Promise<{ file: string } | { error: string }> {
   const dirs = sessionDirs(dir, name);
-  if (!fs.existsSync(dirs.mp4)) return { error: "mp4 ausente" };
+  if (!fs.existsSync(dirs.mp4)) return { error: "missing mp4" };
   fs.mkdirSync(dirs.frames, { recursive: true });
   const dest = path.join(dirs.frames, `frame-${String(Math.round(atS)).padStart(4, "0")}s.png`);
   try {
@@ -398,12 +398,12 @@ export async function captureFrame(
   }
 }
 
-// ── contexto para agentes ──────────────────────────────────────
+// ── agent context ──────────────────────────────────────
 
 export interface ContextInput {
   dir: string;
   name: string;
-  /** trecho selecionado (opcional): filtra transcrição e cita o clipe */
+  /** selected range (optional): filters the transcript and cites the clip */
   range?: { inS: number; outS: number } | null;
   includeFullTranscript?: boolean;
 }
@@ -412,25 +412,25 @@ export async function buildContext(
   input: ContextInput,
 ): Promise<{ markdown: string } | { error: string }> {
   const detail = getSessionDetail(input.dir, input.name);
-  if (!detail) return { error: "sessão não encontrada" };
+  if (!detail) return { error: "session not found" };
   const dirs = sessionDirs(input.dir, input.name);
   const { meta, transcript } = detail;
-  const title = meta.title || `Sessão ${input.name}`;
+  const title = meta.title || `Session ${input.name}`;
   const dur = meta.durationS ? `${fmtTs(meta.durationS)}` : "?";
 
   const lines: string[] = [];
   lines.push(
-    `### voicecast ${input.dir} ${input.name.slice(0, 4)} (${dur}) — ${title}${meta.mode === "ditado" ? " · ditado" : ""}`,
+    `### voicecast ${input.dir} ${input.name.slice(0, 4)} (${dur}) — ${title}${meta.mode === "ditado" ? " · dictation" : ""}`,
   );
 
-  // mídia principal
+  // main media
   if (fs.existsSync(dirs.mp4)) {
-    lines.push(`Vídeo: ${wslPathQuoted(dirs.mp4)}`);
+    lines.push(`Video: ${wslPathQuoted(dirs.mp4)}`);
   } else if (fs.existsSync(dirs.audio)) {
-    lines.push(`Áudio: ${wslPathQuoted(dirs.audio)}`);
+    lines.push(`Audio: ${wslPathQuoted(dirs.audio)}`);
   }
 
-  // trecho transcrito
+  // transcribed speech
   if (transcript) {
     const words = transcript.words ?? [];
     const inS = input.range?.inS ?? 0;
@@ -439,34 +439,34 @@ export async function buildContext(
     const slice = sel.length ? sel : input.range ? [] : words;
     if (slice.length) {
       const text = slice.map((w) => w.w).join(" ").replace(/\s+/g, " ").trim();
-      const from = input.range ? ` (${fmtTs(inS)}–${fmtTs(outS)})` : " (completa)";
-      lines.push(`Fala${from}: "${text}"`);
+      const from = input.range ? ` (${fmtTs(inS)}–${fmtTs(outS)})` : " (full)";
+      lines.push(`Speech${from}: "${text}"`);
     }
   } else if (meta.transcriptStatus === "pending") {
-    lines.push("Fala: (transcrição em andamento)");
+    lines.push("Speech: (transcription in progress)");
   }
 
-  // trechos nomeados (editor fase B): fala de cada segmento + clipe quando existe
+  // named segments (editor phase B): each segment's speech + clip when it exists
   const segs = meta.segments ?? [];
   if (segs.length) {
-    lines.push(`Trechos (${segs.length}):`);
+    lines.push(`Segments (${segs.length}):`);
     for (const [i, s] of segs.entries()) {
       const slice = transcript ? wordsInRange(transcript.words ?? [], s.inS, s.outS) : [];
       const text = slice.length
         ? slice.map((w) => w.w).join(" ").replace(/\s+/g, " ").trim()
-        : "(sem fala no trecho)";
+        : "(no speech in the segment)";
       lines.push(`${i + 1}. ${s.label} (${fmtTs(s.inS)}–${fmtTs(s.outS)}): ${text ? `"${text}"` : text}`);
       const clip = path.join(dirs.clips, `${clipFileBase(s.label, s.inS, s.outS)}.mp4`);
-      if (fs.existsSync(clip)) lines.push(`   Clipe: ${wslPathQuoted(clip)}`);
+      if (fs.existsSync(clip)) lines.push(`   Clip: ${wslPathQuoted(clip)}`);
     }
     const cut = path.join(dirs.clips, `${cutFileBase("corte", segs.length)}.mp4`);
     if (fs.existsSync(cut)) {
-      lines.push(`Corte combinado (${segs.length} trechos): ${wslPathQuoted(cut)}`);
+      lines.push(`Combined cut (${segs.length} segments): ${wslPathQuoted(cut)}`);
     }
   }
 
-  // anotações em tela (AN.4): marcações do jsonl + print queimado correspondente
-  // (path só quando o PNG existe em frames/ — linha sem print é normal)
+  // on-screen annotations (AN.4): jsonl markers + the matching burned-in shot
+  // (path only when the PNG exists in frames/ — a line without a shot is normal)
   const annotationsJsonl = path.join(dirs.root, "annotations.jsonl");
   if (fs.existsSync(annotationsJsonl)) {
     const frameFiles = fs.existsSync(dirs.frames)
@@ -483,23 +483,23 @@ export async function buildContext(
     }
   }
 
-  // julgamento Jev (Etapa 2) — triagem pronta para o agente consumir
+  // Jev judgment (step 2) — triage ready for the agent to consume
   if (meta.jev) {
     const partes: string[] = [];
-    if (meta.jev.rota) partes.push(`rota ${meta.jev.rota}${meta.jev.conf != null ? ` (conf ${meta.jev.conf.toFixed(2)})` : ""}`);
-    if (meta.jev.relevancia != null) partes.push(`relevância ${meta.jev.relevancia.toFixed(1)}/3`);
-    if (meta.jev.pedido != null) partes.push(`pedido-de-ação ${meta.jev.pedido.toFixed(2)}`);
-    if (meta.jev.risco != null) partes.push(`risco ${meta.jev.risco.toFixed(2)}`);
-    if (partes.length) lines.push(`Julgamento (Jev ${meta.jev.model}): ${partes.join(" · ")}`);
+    if (meta.jev.rota) partes.push(`route ${meta.jev.rota}${meta.jev.conf != null ? ` (conf ${meta.jev.conf.toFixed(2)})` : ""}`);
+    if (meta.jev.relevancia != null) partes.push(`relevance ${meta.jev.relevancia.toFixed(1)}/3`);
+    if (meta.jev.pedido != null) partes.push(`action-request ${meta.jev.pedido.toFixed(2)}`);
+    if (meta.jev.risco != null) partes.push(`risk ${meta.jev.risco.toFixed(2)}`);
+    if (partes.length) lines.push(`Judgment (Jev ${meta.jev.model}): ${partes.join(" · ")}`);
   }
 
-  // clipes e frames
+  // clips and frames
   const clips = fs.existsSync(dirs.clips)
     ? fs.readdirSync(dirs.clips).filter((f) => f.endsWith(".mp4"))
     : [];
   if (clips.length) {
     lines.push(
-      `Clipes: ${clips.map((c) => wslPathQuoted(path.join(dirs.clips, c))).join(" · ")}`,
+      `Clips: ${clips.map((c) => wslPathQuoted(path.join(dirs.clips, c))).join(" · ")}`,
     );
   }
   const frames = fs.existsSync(dirs.frames)
@@ -507,13 +507,13 @@ export async function buildContext(
     : [];
   if (frames.length) {
     lines.push(
-      `Prints: ${frames.map((f) => wslPathQuoted(path.join(dirs.frames, f))).join(" · ")}`,
+      `Shots: ${frames.map((f) => wslPathQuoted(path.join(dirs.frames, f))).join(" · ")}`,
     );
   }
-  lines.push(`Pasta da sessão: ${wslPathQuoted(dirs.root)}`);
+  lines.push(`Session folder: ${wslPathQuoted(dirs.root)}`);
   lines.push("");
   lines.push(
-    "Use os prints (PNG, leia como imagem) e o vídeo (MP4, leia como vídeo) para entender o contexto visual; os paths acima são WSL.",
+    "Use the shots (PNG, read as images) and the video (MP4, read as video) to understand the visual context; the paths above are WSL.",
   );
 
   return { markdown: lines.join("\n") };
@@ -537,16 +537,16 @@ export function updateSessionMeta(dir: string, name: string, patch: SessionMetaP
   writeMeta(dirs.meta, next);
 }
 
-// ── correção de ditados (W2a — issues #3+#5) ───────────────────
+// ── dictation corrections (W2a — issues #3+#5) ───────────────────
 
 export interface SessionCorrectionMeta {
   correctedAt: string;
   nEdits: number;
-  /** Desfecho da escrita no corpus do voice (quando a sessão tem datasetId). */
+  /** Outcome of the write into the voice corpus (when the session has a datasetId). */
   dataset?: DatasetWriteStatus;
 }
 
-/** Escrita atômica (tmp + rename) — transcript e corpus nunca truncados. */
+/** Atomic write (tmp + rename) — transcript and corpus never truncated. */
 function atomicWriteFile(file: string, data: string): void {
   const tmp = `${file}.tmp`;
   fs.writeFileSync(tmp, data, "utf8");
@@ -554,16 +554,16 @@ function atomicWriteFile(file: string, data: string): void {
 }
 
 /**
- * Salva a correção de um ditado da sessão:
- * 1. transcript.json: palavras editadas NO LUGAR (start/end/p preservados) e
- *    texto recomposto — ou texto puro trocado quando words vazio (ditados do
- *    gancho fake / antigos sem words);
- * 2. meta.json: bloco correction (quando/quanto);
- * 3. dataset do voice (fail-soft): se a sessão tem datasetId e o corpus existe,
- *    grava o bloco validation lá (text cru do corpus intocado, tmp+rename).
+ * Saves a session dictation's correction:
+ * 1. transcript.json: words edited IN PLACE (start/end/p preserved) and
+ *    recomposed text — or plain text swapped when words is empty (fake-hook
+ *    dictations / old ones without words);
+ * 2. meta.json: correction block (when/how much);
+ * 3. voice dataset (fail-soft): if the session has a datasetId and the corpus exists,
+ *    writes the validation block there (raw corpus text untouched, tmp+rename).
  *
- * alvo do counter: "ambos" quando os dois alvos gravam, "voicecast" quando só
- * o local (sem datasetId ou corpus ausente).
+ * counter target: "ambos" when both targets write, "voicecast" when only
+ * the local one (no datasetId or corpus absent).
  */
 export function saveCorrection(
   dir: string,
@@ -571,31 +571,31 @@ export function saveCorrection(
   req: { correctedText: string; edits: CorrectionEdit[] },
 ): CorrectionResult {
   const dirs = sessionDirs(dir, name);
-  if (!fs.existsSync(dirs.meta)) return { ok: false, error: "sessão não encontrada" };
-  if (!fs.existsSync(dirs.transcript)) return { ok: false, error: "sessão sem transcrição" };
+  if (!fs.existsSync(dirs.meta)) return { ok: false, error: "session not found" };
+  if (!fs.existsSync(dirs.transcript)) return { ok: false, error: "session without a transcript" };
   let transcript: Transcript;
   try {
     transcript = JSON.parse(fs.readFileSync(dirs.transcript, "utf8")) as Transcript;
   } catch (e) {
-    return { ok: false, error: `transcript ilegível: ${String(e)}` };
+    return { ok: false, error: `unreadable transcript: ${String(e)}` };
   }
   const edits = sanitizeEdits(req.edits);
 
   let corrected: string;
   let nEdits: number;
   if (transcript.words?.length && edits.length) {
-    // palavras são a fonte: edita no lugar (timings preservados) e recompõe
+    // words are the source: edit in place (timings preserved) and recompose
     const applied = applyEditsToWords(transcript.words, edits);
     corrected = applied.text;
     transcript = { ...transcript, words: applied.words, text: applied.text };
     nEdits = edits.length;
   } else {
-    // rewrite completo (✍️ modo texto, ou words vazio): o texto corrigido
-    // manda; words antigas são redistribuídas sobre o novo texto (timings
-    // aproximados, proporcional à duração original) — o dataset recebe
-    // validation com n_edits = diff de palavras do ASR p/ o corrigido
+    // full rewrite (✍️ text mode, or empty words): the corrected text
+    // rules; old words are redistributed over the new text (approximate
+    // timings, proportional to the original duration) — the dataset receives
+    // validation with n_edits = word diff from the ASR to the corrected text
     corrected = String(req.correctedText ?? "").replace(/\s+/g, " ").trim();
-    if (!corrected) return { ok: false, error: "correção vazia" };
+    if (!corrected) return { ok: false, error: "empty correction" };
     const nDiff = diffWordCount(transcript.text ?? "", corrected);
     transcript = { ...transcript, text: corrected, words: redistributeWords(transcript.words ?? [], corrected) };
     nEdits = nDiff;
@@ -604,10 +604,10 @@ export function saveCorrection(
   try {
     atomicWriteFile(dirs.transcript, JSON.stringify(transcript, null, 2));
   } catch (e) {
-    return { ok: false, error: `falha ao gravar transcript: ${String(e)}` };
+    return { ok: false, error: `failed to write transcript: ${String(e)}` };
   }
 
-  // dataset do voice: só quando a sessão está linkada a um item do corpus
+  // voice dataset: only when the session is linked to a corpus item
   const meta = JSON.parse(fs.readFileSync(dirs.meta, "utf8")) as Meta;
   const dsId = typeof meta.datasetId === "string" ? meta.datasetId : "";
   const dataset = dsId
@@ -622,7 +622,7 @@ export function saveCorrection(
   const alvo = dataset === "ok" ? "ambos" : "voicecast";
   M_CORRECTIONS?.add(1, { alvo });
   logInfo(
-    `correção salva: ${dir}/${name} (${nEdits} edições; dataset=${dataset}${dsId ? ` ${dsId}` : ""})`,
+    `correction saved: ${dir}/${name} (${nEdits} edits; dataset=${dataset}${dsId ? ` ${dsId}` : ""})`,
   );
   return { ok: true, alvo, dataset };
 }

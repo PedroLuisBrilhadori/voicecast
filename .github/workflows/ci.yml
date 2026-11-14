@@ -11,13 +11,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        # versão vem do campo packageManager do package.json
+        # version comes from the packageManager field of package.json
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --no-frozen-lockfile
-      # ELECTRON_SKIP_BINARY_DOWNLOAD: no CI só typecheck/testamos; o binário não é necessário
+      # ELECTRON_SKIP_BINARY_DOWNLOAD: on CI we only typecheck/test; the binary isn't needed
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm typecheck
       - run: pnpm test
       - run: ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm build

@@ -1,11 +1,11 @@
 /**
- * W1 — worker de telemetria OTel.
+ * W1 — OTel telemetry worker.
  *
- * Cobertura: (1) lógica do worker (protocolo, boot counter, spans com
- * hierarquia, shutdown com flush) com SDK injetado; (2) ponte do main
- * (kill-switch, degradação, mensagens em thread real); (3) init não bloqueia
- * o event loop do main (SDK pesado simulado no worker — o bug do W1);
- * (4) worker REAL compilado: sobe, importa o SDK de verdade e reporta pronto.
+ * Coverage: (1) worker logic (protocol, boot counter, spans with
+ * hierarchy, shutdown with flush) with an injected SDK; (2) main bridge
+ * (kill-switch, degradation, messages on a real thread); (3) init doesn't block
+ * the main event loop (heavy SDK simulated in the worker — the W1 bug);
+ * (4) REAL compiled worker: boots, imports the real SDK and reports ready.
  */
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
@@ -52,7 +52,7 @@ function fakePort() {
 async function until(cond: () => boolean, ms = 2_000): Promise<void> {
   const t0 = Date.now();
   while (!cond()) {
-    if (Date.now() - t0 > ms) throw new Error("timeout esperando condição do worker");
+    if (Date.now() - t0 > ms) throw new Error("timeout waiting for worker condition");
     await new Promise((r) => setTimeout(r, 5));
   }
 }
@@ -92,7 +92,7 @@ function fakeTracer() {
         parent,
         errors: [] as unknown[],
         endTime: undefined as number | undefined,
-        // o próprio registro É o span retornado — identidade preserva pai/filho
+        // the record itself IS the returned span — identity preserves parent/child
         recordException: (e: unknown) => {
           s.errors.push(e);
         },
@@ -123,13 +123,13 @@ function setEnv(key: string, value: string | undefined): void {
   else process.env[key] = value;
 }
 
-/** Captura chamadas do logger da ponte (a real vai pro main.log via logging.ts). */
+/** Captures bridge logger calls (the real one goes to main.log via logging.ts). */
 function spyLogger(): TelemetryBridgeLogger & { lines: string[] } {
   const lines: string[] = [];
   return { lines, info: (...a) => lines.push(a.join(" ")), error: (...a) => lines.push(a.join(" ")) };
 }
 
-/** Worker espião em JS puro (thread de verdade) que fala o protocolo mínimo. */
+/** Spy worker in plain JS (real thread) that speaks the minimal protocol. */
 function writeSpyWorker(dir: string, logFile: string): string {
   const file = path.join(dir, `spy-worker-${Math.random().toString(36).slice(2)}.js`);
   fs.writeFileSync(
@@ -149,7 +149,7 @@ parentPort.on("message", (m) => {
   return file;
 }
 
-/** Compila o worker REAL (TS → JS) onde os requires de @opentelemetry/* resolvem. */
+/** Builds the REAL worker (TS → JS) where the @opentelemetry/* requires resolve. */
 async function buildRealWorkerJs(): Promise<string> {
   const dir = path.join(REPO_ROOT, "node_modules", ".voicecast-vitest");
   fs.mkdirSync(dir, { recursive: true });
@@ -168,10 +168,10 @@ async function buildRealWorkerJs(): Promise<string> {
   return outfile;
 }
 
-// ---------------------------------------------------------------- worker (lógica)
+// ---------------------------------------------------------------- worker (logic)
 
-describe("telemetry-worker (protocolo, SDK injetado)", () => {
-  it("init → ready + counter de boot (telemetria sobre a telemetria)", async () => {
+describe("telemetry-worker (protocol, injected SDK)", () => {
+  it("init → ready + boot counter (telemetry about telemetry)", async () => {
     const port = fakePort();
     const m = fakeMeter();
     const t = fakeTracer();
@@ -186,7 +186,7 @@ describe("telemetry-worker (protocolo, SDK injetado)", () => {
     expect(m.added).toEqual([{ name: "voicecast_telemetry_worker_started_total", n: 1, attrs: undefined }]);
   });
 
-  it("counter/histogram preservam nome/descrição/valor/attrs; nome repetido = 1 instrumento", async () => {
+  it("counter/histogram preserve name/description/value/attrs; repeated name = 1 instrument", async () => {
     const port = fakePort();
     const m = fakeMeter();
     runTelemetryWorker(port, { initSdk: fakeHandle(m.meter, null, () => {}) });
@@ -197,8 +197,8 @@ describe("telemetry-worker (protocolo, SDK injetado)", () => {
     port.send({ type: "counter", name: "voicecast_sessions_total", description: "sessões finalizadas por modo", n: 1, attrs: { mode: "window" } });
     port.send({ type: "histogram", name: "voicecast_session_start_seconds", description: "duração do início de sessão", n: 2.5, attrs: { mode: "screen", stage: "total" } });
 
-    // nomes Prometheus intactos + dedupe por nome (mesmo core lazy de antes);
-    // o boot counter do próprio worker também passa pelo mesmo caminho
+    // Prometheus names intact + dedupe by name (same lazy core as before);
+    // the worker's own boot counter also goes through the same path
     expect(m.created).toEqual([
       "voicecast_telemetry_worker_started_total",
       "voicecast_sessions_total",
@@ -214,7 +214,7 @@ describe("telemetry-worker (protocolo, SDK injetado)", () => {
     ]);
   });
 
-  it("span-start/end recriam hierarquia (pai/filho), timing e erro", async () => {
+  it("span-start/end recreate hierarchy (parent/child), timing and error", async () => {
     const port = fakePort();
     const m = fakeMeter();
     const t = fakeTracer();
@@ -222,12 +222,12 @@ describe("telemetry-worker (protocolo, SDK injetado)", () => {
     port.send({ type: "init" });
     await until(() => port.outbox.some((x) => x.type === "ready"));
 
-    // padrão real do capture.ts: session.start { recorder.load, recorder.open }
+    // real pattern from capture.ts: session.start { recorder.load, recorder.open }
     port.send({ type: "span-start", id: 1, name: "session.start", attrs: { mode: "screen" }, startMs: 1000 });
     port.send({ type: "span-start", id: 2, parent: 1, name: "recorder.open", attrs: {}, startMs: 1100 });
     port.send({ type: "span-end", id: 2, endMs: 1200 });
     port.send({ type: "span-end", id: 1, endMs: 1500, error: "boom stack" });
-    port.send({ type: "span-end", id: 99, endMs: 1600 }); // desconhecido → no-op
+    port.send({ type: "span-end", id: 99, endMs: 1600 }); // unknown → no-op
 
     expect(t.spans).toHaveLength(2);
     const [parent, child] = t.spans;
@@ -236,12 +236,12 @@ describe("telemetry-worker (protocolo, SDK injetado)", () => {
     expect(parent.endTime).toBe(1500);
     expect(parent.errors).toEqual(["boom stack"]);
     expect(child.name).toBe("recorder.open");
-    expect(child.parent).toBe(parent); // hierarquia preservada pós-worker
+    expect(child.parent).toBe(parent); // hierarchy preserved post-worker
     expect(child.startTime).toBe(1100);
     expect(child.endTime).toBe(1200);
   });
 
-  it("emits antes do init são descartados sem lançar (semântica do core lazy)", () => {
+  it("emits before init are dropped without throwing (lazy core semantics)", () => {
     const port = fakePort();
     const m = fakeMeter();
     const t = fakeTracer();
@@ -256,7 +256,7 @@ describe("telemetry-worker (protocolo, SDK injetado)", () => {
     expect(t.spans).toHaveLength(0);
   });
 
-  it("shutdown → flush (sdk.shutdown) + shutdown-done; repetido responde", async () => {
+  it("shutdown → flush (sdk.shutdown) + shutdown-done; repeated one responds", async () => {
     const port = fakePort();
     const m = fakeMeter();
     let shutdowns = 0;
@@ -268,12 +268,12 @@ describe("telemetry-worker (protocolo, SDK injetado)", () => {
     await until(() => port.outbox.some((x) => x.type === "shutdown-done"));
     expect(shutdowns).toBe(1);
 
-    port.send({ type: "shutdown" }); // sem handle: responde direto
+    port.send({ type: "shutdown" }); // no handle: responds directly
     await until(() => port.outbox.filter((x) => x.type === "shutdown-done").length === 2);
     expect(shutdowns).toBe(1);
   });
 
-  it("OTEL_ENABLED=0 → disabled sem tocar o SDK", async () => {
+  it("OTEL_ENABLED=0 → disabled without touching the SDK", async () => {
     const prev = process.env.OTEL_ENABLED;
     process.env.OTEL_ENABLED = "0";
     try {
@@ -282,7 +282,7 @@ describe("telemetry-worker (protocolo, SDK injetado)", () => {
       runTelemetryWorker(port, {
         initSdk: async () => {
           called++;
-          throw new Error("SDK não deveria ser importado");
+          throw new Error("SDK should not have been imported");
         },
       });
       port.send({ type: "init" });
@@ -295,10 +295,10 @@ describe("telemetry-worker (protocolo, SDK injetado)", () => {
   });
 });
 
-// ---------------------------------------------------------------- ponte (main)
+// ---------------------------------------------------------------- bridge (main)
 
-describe("telemetry-bridge (spawn/lifecycle no main)", () => {
-  it("OTEL_ENABLED=0 → kill-switch: não sobe worker, resolve degradado", async () => {
+describe("telemetry-bridge (spawn/lifecycle in main)", () => {
+  it("OTEL_ENABLED=0 → kill-switch: doesn't boot the worker, resolves degraded", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vc-bridge-"));
     const logFile = path.join(dir, "worker.log");
     const logger = spyLogger();
@@ -311,16 +311,16 @@ describe("telemetry-bridge (spawn/lifecycle no main)", () => {
     try {
       await expect(bridge.init()).resolves.toBeUndefined();
       expect(bridge.isUp()).toBe(false);
-      expect(logger.lines.join("\n")).toContain("telemetria desligada");
+      expect(logger.lines.join("\n")).toContain("telemetry disabled");
     } finally {
       setEnv("OTEL_ENABLED", prev);
     }
-    // prova de que NÃO spawnou: o worker espião não chegou a receber init
+    // proof that it did NOT spawn: the spy worker never received init
     await new Promise((r) => setTimeout(r, 100));
     expect(fs.existsSync(logFile)).toBe(false);
   });
 
-  it("workerPath inexistente → degrada com log, sem lançar", async () => {
+  it("missing workerPath → degrades with a log, without throwing", async () => {
     const logger = spyLogger();
     const bridge = createTelemetryBridge({
       workerPath: path.join(os.tmpdir(), "telemetry-worker-que-nao-existe.js"),
@@ -328,11 +328,11 @@ describe("telemetry-bridge (spawn/lifecycle no main)", () => {
     });
     await expect(bridge.init()).resolves.toBeUndefined();
     expect(bridge.isUp()).toBe(false);
-    expect(logger.lines.join("\n")).toContain("worker não encontrado");
-    await bridge.stop(); // no-op seguro
+    expect(logger.lines.join("\n")).toContain("worker not found");
+    await bridge.stop(); // safe no-op
   });
 
-  it("emits do meter-ponte chegam no worker (thread real) e stop faz shutdown", async () => {
+  it("bridge-meter emits reach the worker (real thread) and stop shuts down", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vc-bridge-"));
     const logFile = path.join(dir, "worker.log");
     const logger = spyLogger();
@@ -340,9 +340,9 @@ describe("telemetry-bridge (spawn/lifecycle no main)", () => {
 
     await bridge.init();
     expect(bridge.isUp()).toBe(true);
-    expect(logger.lines.join("\n")).toContain("worker pronto — OTLP para http://spy:4318");
+    expect(logger.lines.join("\n")).toContain("worker ready — OTLP to http://spy:4318");
 
-    // caminho real dos callers: core lazy resolve instrumento no primeiro emit
+    // real callers path: lazy core resolves the instrument on the first emit
     bridge.meter.createCounter("voicecast_sessions_total", { description: "sessões" }).add(1, { mode: "screen" });
     bridge.meter.createHistogram("voicecast_finalize_seconds", { description: "finalize" }).record(0.4);
     bridge.post({ type: "span-start", id: 1, name: "session.start", attrs: {}, startMs: Date.now() });
@@ -358,10 +358,10 @@ describe("telemetry-bridge (spawn/lifecycle no main)", () => {
     await until(() => fs.readFileSync(logFile, "utf8").includes("shutdown"));
   }, 15_000);
 
-  it("init NÃO bloqueia o event loop do main (SDK pesado simulado no worker)", async () => {
-    // o bug do W1: o import do SDK (~9s) travava o main. Aqui o worker queima
-    // CPU 500ms DELE antes do ready; os timers do main têm que continuar
-    // pontuais — se alguém voltar o init p/ o main thread, este teste falha.
+  it("init does NOT block the main event loop (heavy SDK simulated in the worker)", async () => {
+    // the W1 bug: the SDK import (~9s) froze the main. Here the worker burns
+    // 500ms of ITS OWN CPU before ready; main timers have to stay
+    // punctual — if anyone moves init back to the main thread, this test fails.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vc-heavy-"));
     const file = path.join(dir, "heavy-worker.js");
     fs.writeFileSync(
@@ -371,7 +371,7 @@ const { parentPort } = require("node:worker_threads");
 parentPort.on("message", (m) => {
   if (m.type === "init") {
     const t0 = Date.now();
-    while (Date.now() - t0 < 500) {} // simula o import do SDK travando SÓ o worker
+    while (Date.now() - t0 < 500) {} // simulates the SDK import freezing ONLY the worker
     parentPort.postMessage({ type: "ready", endpoint: "http://heavy:4318" });
   } else if (m.type === "shutdown") {
     parentPort.postMessage({ type: "shutdown-done" });
@@ -389,26 +389,26 @@ parentPort.on("message", (m) => {
     clearInterval(timer);
 
     expect(bridge.isUp()).toBe(true);
-    expect(fires.length).toBeGreaterThanOrEqual(18); // ~450ms de ticks durante o burn do worker
+    expect(fires.length).toBeGreaterThanOrEqual(18); // ~450ms of ticks during the worker burn
     let worst = 0;
     for (let i = 0; i < fires.length; i++) {
       worst = Math.max(worst, fires[i] - (t0 + (i + 1) * 25));
     }
-    expect(worst).toBeLessThan(150); // init travando o main → drift ~500ms
+    expect(worst).toBeLessThan(150); // init blocking the main → ~500ms drift
     await bridge.stop();
   }, 20_000);
 });
 
-// ---------------------------------------------------------------- worker real
+// ---------------------------------------------------------------- real worker
 
-describe("telemetry-worker (REAL: SDK OTel de verdade dentro do worker)", () => {
-  it("sobe, importa o SDK e reporta pronto; stop faz flush e encerra", async () => {
+describe("telemetry-worker (REAL: the actual OTel SDK inside the worker)", () => {
+  it("boots, imports the SDK and reports ready; stop flushes and exits", async () => {
     const workerJs = await buildRealWorkerJs();
     const logger = spyLogger();
     const bridge = createTelemetryBridge({
       workerPath: workerJs,
       logger,
-      readyTimeoutMs: 60_000, // import do sdk-node: ~9s no cold start medido no Windows
+      readyTimeoutMs: 60_000, // sdk-node import: ~9s cold start measured on Windows
       stopTimeoutMs: 20_000,
     });
     const prev = process.env.OTEL_ENABLED;
@@ -416,8 +416,8 @@ describe("telemetry-worker (REAL: SDK OTel de verdade dentro do worker)", () => 
     try {
       await bridge.init();
       expect(bridge.isUp()).toBe(true);
-      expect(logger.lines.join("\n")).toContain("worker pronto — OTLP para");
-      // um emit atravessa a ponte real (core do main → worker → SDK) sem lançar
+      expect(logger.lines.join("\n")).toContain("worker ready — OTLP to");
+      // one emit crosses the real bridge (main core → worker → SDK) without throwing
       expect(() =>
         bridge.meter.createCounter("voicecast_sessions_total", { description: "smoke w1" }).add(1, { mode: "screen" }),
       ).not.toThrow();

@@ -8,13 +8,13 @@ import { WordFixer, correctionMsg, diffWords, fmt, type Word } from "./correctio
 const params = new URLSearchParams(location.search);
 const DIR = params.get("dir") ?? "";
 const NAME = params.get("name") ?? "";
-/** W2a: ?corpus (ou ?corpus=<id>) abre a tela do dataset do voice no lugar do editor. */
+/** W2a: ?corpus (or ?corpus=<id>) opens the voice dataset screen instead of the editor. */
 const CORPUS = params.get("corpus");
 
-/** Editor de sessão: player + transcrição sincronizada por palavra,
- *  segmentos nomeados (fase B), clipes, prints e copiar contexto p/ agente. */
+/** Session editor: player + word-synced transcript,
+ *  named segments (phase B), clips, screenshots and copy context for the agent. */
 export function EditorApp() {
-  // W2a: janela do dataset do voice (lista/detalhe/correção do corpus histórico)
+  // W2a: voice dataset window (historical corpus list/detail/correction)
   if (CORPUS !== null) return <CorpusView initialId={CORPUS} />;
   return <SessionEditor />;
 }
@@ -30,7 +30,7 @@ function SessionEditor() {
   const [clips, setClips] = useState<ClipInfo[]>([]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
-  // ── correção de ditado (W2a): editar palavras preservando timings ──
+  // ── dictation correction (W2a): edit words preserving timings ──
   const [fixing, setFixing] = useState(false);
   const [fixText, setFixText] = useState(false);
   const [draftWords, setDraftWords] = useState<Word[] | null>(null);
@@ -51,7 +51,7 @@ function SessionEditor() {
     void refreshClips();
   }, [refreshClips]);
 
-  // seek ← → highlight: o playhead manda no destaque
+  // seek ← → highlight: the playhead drives the highlight
   const words: Word[] = useMemo(() => detail?.transcript?.words ?? [], [detail]);
   const activeWord = useMemo(() => {
     const i = words.findIndex((w) => time >= w.start && time < w.end);
@@ -84,7 +84,7 @@ function SessionEditor() {
     setTimeout(() => setStatus(null), 4000);
   };
 
-  // ── segmentos (fase B): fonte da verdade é o meta.json (main sanitiza) ──
+  // ── segments (phase B): source of truth is meta.json (main sanitizes) ──
 
   const persistSegments = useCallback(async (next: SessionSegment[]) => {
     setSegments(next);
@@ -95,7 +95,7 @@ function SessionEditor() {
     if (!sel) return;
     const seg: SessionSegment = {
       id: newSegmentId(),
-      label: `Segmento ${segments.length + 1}`,
+      label: `Segment ${segments.length + 1}`,
       inS: +sel.inS.toFixed(2),
       outS: +sel.outS.toFixed(2),
     };
@@ -120,65 +120,65 @@ function SessionEditor() {
   };
 
   const segClip = async (s: SessionSegment) => {
-    notify(`gerando clipe de "${s.label}"…`);
+    notify(`generating clip of "${s.label}"…`);
     const r = await window.voicecast.createClip(DIR, NAME, s.inS, s.outS, s.label);
-    if ("error" in r) notify(`clipe falhou: ${r.error}`);
+    if ("error" in r) notify(`clip failed: ${r.error}`);
     else {
-      notify(`clipe criado (${(r.bytes / 1_048_576).toFixed(1)}MB)`);
+      notify(`clip created (${(r.bytes / 1_048_576).toFixed(1)}MB)`);
       void refreshClips();
     }
   };
 
   const doCut = async () => {
     if (!segments.length) return;
-    notify(`gerando corte de ${segments.length} trechos…`);
+    notify(`generating cut of ${segments.length} segments…`);
     const r = await window.voicecast.exportCut(DIR, NAME, segments, "corte");
-    if ("error" in r) notify(`corte falhou: ${r.error}`);
+    if ("error" in r) notify(`cut failed: ${r.error}`);
     else {
-      notify(`corte pronto (${(r.bytes / 1_048_576).toFixed(1)}MB)`);
+      notify(`cut ready (${(r.bytes / 1_048_576).toFixed(1)}MB)`);
       void refreshClips();
     }
   };
 
   const doClip = async () => {
     if (!sel) return;
-    notify("gerando clipe…");
+    notify("generating clip…");
     const r = await window.voicecast.createClip(DIR, NAME, sel.inS, sel.outS, "trecho");
-    if ("error" in r) notify(`clipe falhou: ${r.error}`);
+    if ("error" in r) notify(`clip failed: ${r.error}`);
     else {
-      notify(`clipe criado (${(r.bytes / 1_048_576).toFixed(1)}MB)`);
+      notify(`clip created (${(r.bytes / 1_048_576).toFixed(1)}MB)`);
       void refreshClips();
     }
   };
 
   const doFrame = async () => {
     const r = await window.voicecast.captureFrame(DIR, NAME, time);
-    if ("error" in r) notify(`print falhou: ${r.error}`);
-    else notify(`print salvo: ${r.file.split("\\").pop()}`);
+    if ("error" in r) notify(`screenshot failed: ${r.error}`);
+    else notify(`screenshot saved: ${r.file.split("\\").pop()}`);
   };
 
   const doContext = async () => {
     const r = await window.voicecast.buildContext(DIR, NAME, sel);
     if ("error" in r) return notify(r.error);
     await window.voicecast.copyText(r.markdown);
-    notify("contexto copiado — cole no ZCode");
+    notify("context copied — paste it into ZCode");
   };
 
   const saveTitle = async () => {
     await window.voicecast.updateSession(DIR, NAME, { title });
-    notify("título salvo");
+    notify("title saved");
   };
 
   const doCopyText = async () => {
     if (!t) return;
     const text = t.text.trim();
-    if (!text) return notify("nada para copiar");
+    if (!text) return notify("nothing to copy");
     await window.voicecast.copyText(text);
-    notify(`texto copiado (${text.length} chars) — cole onde quiser`);
+    notify(`text copied (${text.length} chars) — paste it anywhere`);
   };
 
   const retranscribe = async () => {
-    notify("transcrevendo…");
+    notify("transcribing…");
     const r = await window.voicecast.transcribeSession(DIR, NAME);
     if (!r.ok) return notify(r.error);
     const d = await window.voicecast.getSession(DIR, NAME);
@@ -186,12 +186,12 @@ function SessionEditor() {
       setDetail(d);
       setSegments(d.meta.segments ?? []);
     }
-    notify("transcrição pronta");
+    notify("transcription ready");
   };
 
-  // ── correção de ditado (W2a): words editáveis no lugar; texto puro quando
-  //    words vazio (ditados do gancho fake/antigos). Alvos: transcript.json +
-  //    meta.json sempre; dataset do voice quando a sessão tem datasetId. ──
+  // ── dictation correction (W2a): words editable in place; plain text when
+  //    words is empty (fake-hook/old dictations). Targets: transcript.json +
+  //    meta.json always; voice dataset when the session has datasetId. ──
 
   const startFix = () => {
     if (fixText || !t?.words.length) setDraftText(t?.text ?? "");
@@ -212,10 +212,10 @@ function SessionEditor() {
       req = { correctedText: wordsText(draftWords), edits: diffWords(t.words, draftWords) };
     } else {
       const corrected = (draftText ?? "").replace(/\s+/g, " ").trim();
-      if (!corrected) return notify("correção vazia");
-      // rewrite completo: o motor replaceia o texto do transcript; no dataset
-      // vai como validation com n_edits = diff de palavras (words perdem o
-      // alinhamento 1:1 de timings — trade-off aceito do modo texto)
+      if (!corrected) return notify("empty correction");
+      // full rewrite: the engine replaces the transcript text; on the dataset
+      // it goes as validation with n_edits = word diff (words lose the 1:1
+      // timing alignment — accepted trade-off of text mode)
       req = { correctedText: corrected, edits: [] };
     }
     const r: CorrectionResult = await window.voicecast.saveCorrection(DIR, NAME, req);
@@ -227,7 +227,7 @@ function SessionEditor() {
     }
   };
 
-  if (!detail) return <div className="app muted">carregando sessão…</div>;
+  if (!detail) return <div className="app muted">loading session…</div>;
 
   const t = detail.transcript;
   const isAudio = detail.mediaKind === "audio";
@@ -237,22 +237,22 @@ function SessionEditor() {
   return (
     <div className="app editor">
       <header className="ed-head">
-        <button onClick={() => window.close()} title="voltar">←</button>
+        <button onClick={() => window.close()} title="back">←</button>
         <input
           className="title-input"
           value={title}
-          placeholder="título da sessão…"
+          placeholder="session title…"
           onChange={(e) => setTitle(e.target.value)}
           onBlur={saveTitle}
         />
         <span className="tag">
-          {detail.meta.mode === "ditado" ? "🎙 ditado" : detail.meta.mode ?? "?"} ·{" "}
+          {detail.meta.mode === "ditado" ? "🎙 dictation" : detail.meta.mode ?? "?"} ·{" "}
           {fmt(dur)} · {detail.meta.markers?.length ?? 0} markers
         </span>
-        <button className="go big" onClick={doContext} title="Gera markdown com paths WSL e copia">
-          ⧉ Copiar contexto p/ ZCode
+        <button className="go big" onClick={doContext} title="Generates markdown with WSL paths and copies it">
+          ⧉ Copy context to ZCode
         </button>
-        <button onClick={() => void window.voicecast.openCorpus()} title="corrigir ditados do histórico (dataset do voice)">
+        <button onClick={() => void window.voicecast.openCorpus()} title="correct historical dictations (voice dataset)">
           📚 dataset
         </button>
       </header>
@@ -286,7 +286,7 @@ function SessionEditor() {
           </div>
           {!isAudio && (
             <>
-              {/* timeline de segmentos: bloco = trecho nomeado; verde fantasma = seleção I/O corrente */}
+              {/* segment timeline: block = named segment; ghost green = current I/O selection */}
               <div className="seg-track">
                 {sel && (
                   <span
@@ -300,23 +300,23 @@ function SessionEditor() {
                     className="seg-block"
                     style={{ left: `${pct(s.inS)}%`, width: `${pct(s.outS) - pct(s.inS)}%` }}
                     onClick={() => playSeg(s)}
-                    title={`${s.label} · ${fmt(s.inS)}–${fmt(s.outS)} (clique p/ tocar)`}
+                    title={`${s.label} · ${fmt(s.inS)}–${fmt(s.outS)} (click to play)`}
                   />
                 ))}
               </div>
               <div className="ed-tools">
-                <button onClick={markIn} disabled={!sel && time <= 0}>I marcar início</button>
-                <button onClick={markOut}>O marcar fim</button>
+                <button onClick={markIn} disabled={!sel && time <= 0}>I mark in</button>
+                <button onClick={markOut}>O mark out</button>
                 {sel && (
                   <span className="tag">
-                    trecho {fmt(sel.inS)}–{fmt(sel.outS)}
+                    selection {fmt(sel.inS)}–{fmt(sel.outS)}
                   </span>
                 )}
-                <button onClick={addSeg} disabled={!sel} title="Salva o trecho I/O como segmento nomeado">
-                  ＋ segmento
+                <button onClick={addSeg} disabled={!sel} title="Saves the I/O selection as a named segment">
+                  ＋ segment
                 </button>
-                <button onClick={doClip} disabled={!sel}>✂ clipe do trecho</button>
-                <button onClick={doFrame}>📷 print do frame</button>
+                <button onClick={doClip} disabled={!sel}>✂ clip selection</button>
+                <button onClick={doFrame}>📷 frame screenshot</button>
               </div>
             </>
           )}
@@ -324,27 +324,27 @@ function SessionEditor() {
 
         <div className="ed-transcript" ref={transcriptRef}>
           <div className="ed-transcript-head">
-            <h3>Transcrição</h3>
+            <h3>Transcription</h3>
             {detail.meta.transcriptStatus !== "done" && (
               <button onClick={retranscribe}>
-                {detail.meta.transcriptStatus === "pending" ? "transcrevendo…" : "transcrever agora"}
+                {detail.meta.transcriptStatus === "pending" ? "transcribing…" : "transcribe now"}
               </button>
             )}
             {t && (
               <span className="muted">
-                {t.language ?? "?"} · {t.words.length} palavras
+                {t.language ?? "?"} · {t.words.length} words
               </span>
             )}
             {detail.meta.correction && (
-              <span className="ok" title={`corrigida em ${detail.meta.correction.correctedAt}`}>
-                ✓ corrigido ({detail.meta.correction.nEdits} edições
+              <span className="ok" title={`corrected at ${detail.meta.correction.correctedAt}`}>
+                ✓ corrected ({detail.meta.correction.nEdits} edits
                 {detail.meta.correction.dataset === "ok" ? " · dataset" : ""})
               </span>
             )}
             {t && !fixing && detail.meta.mode === "ditado" && (
               <>
-                <button onClick={startFix} title="editar palavras erradas no lugar (timings preservados; dataset quando linkado)">
-                  ✏️ corrigir
+                <button onClick={startFix} title="edit wrong words in place (timings preserved; dataset when linked)">
+                  ✏️ correct
                 </button>
                 {t.words.length > 0 && (
                   <button
@@ -352,28 +352,28 @@ function SessionEditor() {
                       setFixText(true);
                       startFix();
                     }}
-                    title="reescrever o texto completo (o motor reaplica; timings aproximados)"
+                    title="rewrite the full text (the engine reapplies it; approximate timings)"
                   >
-                    ✍️ reescrever texto
+                    ✍️ rewrite text
                   </button>
                 )}
               </>
             )}
             {fixing && (
               <>
-                <button className="go" onClick={() => void saveFix()}>💾 salvar correção</button>
-                <button onClick={cancelFix}>cancelar</button>
+                <button className="go" onClick={() => void saveFix()}>💾 save correction</button>
+                <button onClick={cancelFix}>cancel</button>
               </>
             )}
             {t && t.text.trim() && (
-              <button className="copy-text" onClick={doCopyText} title="copiar somente o texto da transcrição">
-                📋 copiar texto
+              <button className="copy-text" onClick={doCopyText} title="copy only the transcript text">
+                📋 copy text
               </button>
             )}
           </div>
           {fixing && t && t.words.length > 0 && !fixText && (
             <p className="muted" style={{ marginTop: 0 }}>
-              clique na palavra errada, corrija e Enter — os timings são preservados
+              click the wrong word, fix it, press Enter — timings are preserved
             </p>
           )}
           {fixing && t && t.words.length > 0 && !fixText && (
@@ -382,14 +382,14 @@ function SessionEditor() {
           {fixing && fixText && (
             <>
               <p className="muted" style={{ marginTop: 0 }}>
-                reescreva o texto inteiro — os timings são redistribuídos sobre a fala original
+                rewrite the whole text — timings are redistributed over the original speech
               </p>
               <textarea
                 className="fix-text"
                 value={draftText ?? ""}
                 rows={8}
                 onChange={(e) => setDraftText(e.target.value)}
-                placeholder="texto corrigido completo"
+                placeholder="full corrected text"
               />
             </>
           )}
@@ -399,7 +399,7 @@ function SessionEditor() {
               value={draftText ?? ""}
               rows={8}
               onChange={(e) => setDraftText(e.target.value)}
-              placeholder="texto corrigido (ditado sem words — a correção é do texto inteiro)"
+              placeholder="corrected text (dictation without words — the whole text is corrected)"
             />
           )}
           {!fixing && t && t.words.length > 0 && (
@@ -420,7 +420,7 @@ function SessionEditor() {
           {!fixing && t && t.words.length === 0 && <p className="muted">{t.text}</p>}
           {!t && (
             <p className="muted">
-              Sem transcrição ainda. {detail.meta.transcriptStatus === "sem-asr" && "ASR estava fora do ar quando a sessão terminou."}
+              No transcript yet. {detail.meta.transcriptStatus === "sem-asr" && "ASR was down when the session ended."}
             </p>
           )}
 
@@ -439,11 +439,11 @@ function SessionEditor() {
 
           {!isAudio && segments.length > 0 && (
             <>
-              <h3>Segmentos ({segments.length})</h3>
+              <h3>Segments ({segments.length})</h3>
               <div className="seg-list">
                 {segments.map((s) => (
                   <div key={s.id} className="seg-row">
-                    <button onClick={() => playSeg(s)} title="tocar do início do trecho">▶</button>
+                    <button onClick={() => playSeg(s)} title="play from segment start">▶</button>
                     <input
                       value={s.label}
                       maxLength={80}
@@ -452,28 +452,28 @@ function SessionEditor() {
                       onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                     />
                     <span className="tag mono">{fmt(s.inS)}–{fmt(s.outS)}</span>
-                    <button onClick={() => void segClip(s)} title="gerar clipe mp4 do trecho">✂</button>
-                    <button onClick={() => rmSeg(s.id)} title="remover segmento">✕</button>
+                    <button onClick={() => void segClip(s)} title="generate mp4 clip of the segment">✂</button>
+                    <button onClick={() => rmSeg(s.id)} title="remove segment">✕</button>
                   </div>
                 ))}
               </div>
-              <button className="go" onClick={doCut} title="Concatena todos os trechos num mp4 único">
-                ⧉ exportar corte ({segments.length} trechos)
+              <button className="go" onClick={doCut} title="Concatenates all segments into a single mp4">
+                ⧉ export cut ({segments.length} segments)
               </button>
             </>
           )}
 
-          <h3>Clipes</h3>
+          <h3>Clips</h3>
           <div className="clip-list">
             {clips.length === 0 && (
-              <p className="muted">nenhum clipe ainda — marque I/O e recorte (ou use os segmentos)</p>
+              <p className="muted">no clips yet — mark I/O and cut (or use the segments)</p>
             )}
             {clips.map((c) => (
               <button
                 key={c.file}
                 className="clip-row"
                 onClick={() => void window.voicecast.openPath(c.file)}
-                title="mostrar no explorer"
+                title="show in explorer"
               >
                 <span className="mono">{c.name}</span>
                 <span className="muted">{(c.bytes / 1_048_576).toFixed(1)}MB</span>
@@ -485,7 +485,7 @@ function SessionEditor() {
             <button
               onClick={() => void window.voicecast.openPath(`C:\\Users\\pedro\\AppData\\Roaming\\voicecast\\sessions\\${DIR}\\${NAME}`)}
             >
-              abrir pasta da sessão
+              open session folder
             </button>
           </div>
         </div>

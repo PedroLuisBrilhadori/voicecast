@@ -7,7 +7,7 @@ declare global {
   }
 }
 
-/** Cores da linha de goal do cockpit (mesma linguagem do ditado-state). */
+/** Colors of the cockpit goal line (same language as the ditado-state). */
 const GOAL_UI: Record<GoalPhase, string> = {
   queued: "#f4b942",
   running: "#f4b942",
@@ -23,26 +23,26 @@ function fmt(s: number): string {
   return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
-/** Desfecho do julgamento Jev (ditado-state phase "done"). */
+/** Outcome of the Jev judgment (ditado-state phase "done"). */
 const ROTA_UI: Record<string, string> = {
-  ditado_texto: "✓ colado",
-  comando_agente: "→ agente (não colado)",
-  anotacao_contexto: "✎ guardado na sessão",
-  conversa_social: "— conversa (ignorada)",
+  ditado_texto: "✓ pasted",
+  comando_agente: "→ agent (not pasted)",
+  anotacao_contexto: "✎ saved to session",
+  conversa_social: "— chat (ignored)",
 };
 
 function desfechoDitado(r: { rota?: string; colado?: boolean; pendente?: boolean }): string {
-  if (r.colado) return "✓ colado";
-  if (r.pendente) return "🎙 áudio salvo — transcrição pendente";
-  return (r.rota && ROTA_UI[r.rota]) || "não colado";
+  if (r.colado) return "✓ pasted";
+  if (r.pendente) return "🎙 audio saved — transcription pending";
+  return (r.rota && ROTA_UI[r.rota]) || "not pasted";
 }
 
-/** Barra compacta frameless: REC + timer + waveform + markers + controles.
- *  Janela inteira arrastável (app-region: drag); botões no-drag.
- *  Modo ditado (query ditado=1): sem foco, só timer + waveform + parar. */
+/** Compact frameless bar: REC + timer + waveform + markers + controls.
+ *  Whole window draggable (app-region: drag); buttons no-drag.
+ *  Dictation mode (query ditado=1): no focus, only timer + waveform + stop. */
 export function BarApp() {
   const qs = new URLSearchParams(location.search);
-  const mode = qs.get("mode") ?? "Gravação";
+  const mode = qs.get("mode") ?? "Recording";
   const isDitado = qs.get("ditado") === "1";
   const noDrag = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
   const [elapsed, setElapsed] = useState(0);
@@ -53,16 +53,16 @@ export function BarApp() {
   const [resultado, setResultado] = useState<{ rota?: string; conf?: number; colado?: boolean; pendente?: boolean } | null>(null);
   const [markers, setMarkers] = useState(0);
   const [paused, setPaused] = useState(false);
-  /** C4: estado do goal do cockpit (linha dedicada, mesma linguagem do ditado-state). */
+  /** C4: cockpit goal state (dedicated line, same language as the ditado-state). */
   const [goal, setGoal] = useState<GoalState | null>(null);
   const goalClear = useRef<number | null>(null);
-  /** True entre o pedido de start e a captura abrir (main emite com arming). */
+  /** True between the start request and the capture opening (main emits with arming). */
   const [arming, setArming] = useState(false);
   const levels = useRef<number[]>([]);
   const [, forceRender] = useState(0);
 
   useEffect(() => {
-    // snapshot inicial (goal pode ter começado antes da barra abrir)
+    // initial snapshot (goal may have started before the bar opened)
     window.voicecast.agentGetState().then((s) => s && setGoal(s)).catch(() => {});
     const off = window.voicecast.onEvent((e) => {
       if (e.type === "mic-level") {
@@ -86,7 +86,7 @@ export function BarApp() {
         }
       } else if (e.type === "agent-state") {
         setGoal(e.state);
-        // desfecho aparece no fim e some depois — sem notificação intrusiva
+        // outcome appears at the end and fades away — no intrusive notification
         if (goalClear.current) window.clearTimeout(goalClear.current);
         goalClear.current = isGoalFinal(e.state.phase)
           ? window.setTimeout(() => setGoal(null), 6_000)
@@ -101,7 +101,7 @@ export function BarApp() {
     };
   }, []);
 
-  // timer por polling do estado (ditado não expõe startedAt via getState: usa relógio local)
+  // timer by state polling (dictation doesn't expose startedAt via getState: uses local clock)
   useEffect(() => {
     if (isDitado) {
       const t0 = Date.now();
@@ -116,7 +116,7 @@ export function BarApp() {
       window.voicecast.getState().then((s) => {
         if (!alive) return;
         setArming(!!s.arming);
-        if (!s.startedAt || s.arming) return; // arming: timer só depois do REC real
+        if (!s.startedAt || s.arming) return; // arming: timer only after the real REC
         setElapsed((Date.now() - s.startedAt) / 1000);
         setMarkers(s.markers.length);
         setPaused(s.paused);
@@ -159,15 +159,15 @@ export function BarApp() {
           </span>
         ) : transcribing ? (
           <span style={{ color: "#f4b942", fontSize: 12.5, fontWeight: 600 }}>
-            ⏳ transcrevendo · {Math.floor(transcribingS)}s
+            ⏳ transcribing · {Math.floor(transcribingS)}s
             {asrLoading && (
-              <span title="o modelo de transcrição carrega na GPU na primeira uso após o boot — as próximas são rápidas">
-                {" "}· ASR carregando modelo{expectedLoadS ? ` (≈${Math.round(expectedLoadS)}s)` : ""}
+              <span title="the transcription model loads on the GPU on first use after boot — subsequent ones are fast">
+                {" "}· ASR loading model{expectedLoadS ? ` (≈${Math.round(expectedLoadS)}s)` : ""}
               </span>
             )}
           </span>
         ) : arming && !isDitado ? (
-          <span style={{ color: "#f4b942", fontSize: 12.5, fontWeight: 600 }}>⏳ preparando captura…</span>
+          <span style={{ color: "#f4b942", fontSize: 12.5, fontWeight: 600 }}>⏳ preparing capture…</span>
         ) : (
           <>
             <span
@@ -186,7 +186,7 @@ export function BarApp() {
         <span style={{ color: "#9a9aa8", fontSize: 11 }}>{mode}</span>
       </div>
 
-      {/* C4: linha de estado do goal do cockpit — uma linha, sem intrusão */}
+      {/* C4: cockpit goal state line — one line, no intrusion */}
       {goal && (
         <span
           title={`goal: ${goal.goal}`}
@@ -225,12 +225,12 @@ export function BarApp() {
           onClick={() => void window.voicecast.ditadoToggle()}
           style={{ background: "#2d1b3d", borderColor: "#7c4dff", padding: "4px 14px", fontWeight: 700, ...noDrag }}
         >
-          ■ Parar
+          ■ Stop
         </button>
       ) : (
         <>
           <button
-            title="Marcar momento (Ctrl+M)"
+            title="Mark moment (Ctrl+M)"
             onClick={() => void window.voicecast.addMarker()}
             disabled={arming}
             style={{ padding: "4px 10px", opacity: arming ? 0.4 : 1, ...noDrag }}
@@ -252,10 +252,10 @@ export function BarApp() {
             disabled={arming}
             style={{ background: "#2d1b3d", borderColor: "#7c4dff", padding: "4px 14px", fontWeight: 700, opacity: arming ? 0.4 : 1, ...noDrag }}
           >
-            ■ Parar
+            ■ Stop
           </button>
           <button
-            title="Cancelar (não salva)"
+            title="Cancel (doesn't save)"
             onClick={() => void window.voicecast.cancelRecording()}
             style={{ padding: "4px 10px", color: "#ff8a8a", ...noDrag }}
           >

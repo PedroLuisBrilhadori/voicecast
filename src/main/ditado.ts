@@ -1,10 +1,10 @@
 /**
- * Ditado (F9) — o modo v2 que absorve o voice-dictation.
+ * Dictation (F9) — the v2 mode that absorbs voice-dictation.
  *
- * F9 toggle: captura mic-only SEM janela (zero roubo de foco), no stop envia
- * o wav ao ASR :8701 e cola o texto na janela que estava em foco (clipboard +
- * Ctrl+V sintético). Antes de capturar, segura o F9 do daemon via hold no
- * :8700 (v2 transição); sem daemon, funciona igual (nada para suspender).
+ * F9 toggle: captures mic-only WITHOUT a window (zero focus stealing), on stop sends
+ * the wav to ASR :8701 and pastes the text into the window that was in focus (clipboard +
+ * synthetic Ctrl+V). Before capturing, holds the daemon's F9 via hold on
+ * :8700 (v2 transition); without a daemon, works the same (nothing to suspend).
  */
 import { BrowserWindow, clipboard, globalShortcut, ipcMain } from "electron";
 import { asrHealth, asrModelStatus, transcribeAudioFile, type Transcript } from "./asr";
@@ -22,9 +22,9 @@ import { decidePaste, judgeDictation } from "./jev";
 import { annotations } from "./annotations";
 import { sessionDirs } from "./storage";
 
-const M_DICTATIONS = counter("voicecast_dictations_total", "ditados por status");
-const M_ASR_COLD = counter("voicecast_asr_model_cold_total", "transcrições que esperaram o load do modelo (cold start pós-boot)");
-const H_TRANSCRIBE = histogram("voicecast_transcribe_seconds", "duração da transcrição ASR");
+const M_DICTATIONS = counter("voicecast_dictations_total", "dictations by status");
+const M_ASR_COLD = counter("voicecast_asr_model_cold_total", "transcriptions that waited for model load (post-boot cold start)");
+const H_TRANSCRIBE = histogram("voicecast_transcribe_seconds", "ASR transcription duration");
 
 function broadcast(e: CaptureEvent): void {
   for (const w of BrowserWindow.getAllWindows()) {
@@ -41,15 +41,15 @@ let blobPromise: Promise<{ b64: string; ext: string }> | null = null;
 let ditadoStartedAt = 0;
 let ditadoHwnd = 0;
 let hotkeyRegistered = false;
-/** O F9 religou o modelo de transcrição neste ditado (spawn em background
- *  desde o start) — o stop espera a porta abrir antes de transcrever. */
+/** F9 re-enabled the transcription model in this dictation (background spawn
+ *  since start) — stop waits for the port to open before transcribing. */
 let ditadoAsrLigadoAgora = false;
 
 export function ditadoState(): DictationState {
   return state;
 }
 
-// ── hold no daemon (:8700) ─────────────────────────────────────
+// ── daemon hold (:8700) ─────────────────────────────────────
 
 function panelUrl(): string {
   return (process.env.VOICE_PANEL_URL || "http://127.0.0.1:8700").replace(/\/$/, "");
@@ -70,7 +70,7 @@ async function daemonHold(on: boolean): Promise<boolean> {
     }
     return false;
   } catch {
-    return false; // daemon não existe (v2 completa) — ok
+    return false; // daemon doesn't exist (v2 complete) — ok
   }
 }
 
@@ -85,11 +85,11 @@ async function daemonRecording(): Promise<boolean> {
   }
 }
 
-// ── posse do F9 (heartbeat TTL — se o voicecast morrer, o F9 volta ao daemon) ──
+// ── F9 ownership (heartbeat TTL — if voicecast dies, F9 goes back to the daemon) ──
 
 let heartbeatTimer: NodeJS.Timeout | null = null;
 
-/** Reivindica (claim=true) ou devolve (claim=false) a posse do F9 no daemon. */
+/** Claims (claim=true) or gives back (claim=false) F9 ownership at the daemon. */
 export async function claimHotkey(claim: boolean): Promise<boolean> {
   try {
     const r = await fetch(`${panelUrl()}/api/external/hotkey`, {
@@ -120,18 +120,18 @@ export async function claimHotkey(claim: boolean): Promise<boolean> {
   }
 }
 
-// ── barra de feedback (sem roubar foco) ────────────────────────
+// ── feedback bar (without stealing focus) ────────────────────────
 
 function startDitadoBar(): void {
   const { screen } = require("electron") as typeof import("electron");
-  barWin = createBar("Ditado", { ditado: true });
+  barWin = createBar("Dictation", { ditado: true });
   if (!loadSavedBarBounds()) {
-    // primeira vez: canto inferior direito; depois, vale onde o usuário arrastou
+    // first time: bottom-right corner; after that, wherever the user dragged it wins
     const d = screen.getPrimaryDisplay();
     const b = barWin.getBounds();
     barWin.setPosition(d.workArea.x + d.workArea.width - b.width - 18, d.workArea.y + d.workArea.height - b.height - 18);
   }
-  barWin.showInactive(); // aparece SEM tomar foco — o Ctrl+V cola onde você estava
+  barWin.showInactive(); // appears WITHOUT taking focus — Ctrl+V pastes where you were
 }
 
 function closeDitadoBar(): void {
@@ -139,7 +139,7 @@ function closeDitadoBar(): void {
   barWin = null;
 }
 
-// ── captura mic-only (renderer oculto, sem foco) ───────────────
+// ── mic-only capture (hidden renderer, no focus) ───────────────
 
 async function startCapture(): Promise<{ ok: boolean; error?: string }> {
   const ch = `ditado:blob:${Date.now()}`;
@@ -161,7 +161,7 @@ async function startCapture(): Promise<{ ok: boolean; error?: string }> {
   )) as { ok: boolean; error?: string };
   if (!result?.ok) {
     await stopCaptureWindow();
-    return { ok: false, error: result?.error ?? "captura de mic falhou" };
+    return { ok: false, error: result?.error ?? "mic capture failed" };
   }
   return { ok: true };
 }
@@ -171,17 +171,17 @@ async function stopCaptureWindow(): Promise<void> {
   recorderWin = null;
 }
 
-// ── colagem na janela focada (clipboard + Ctrl+V sintético) ────
+// ── paste into the focused window (clipboard + synthetic Ctrl+V) ────
 
-// ── colagem na janela focada: o CÓDIGO PROVADO do daemon (v2 reusa) ──
+// ── paste into the focused window: the daemon's PROVEN CODE (v2 reuses it) ──
 // paste_into_focused (win32.py): clipboard + SendInput scan codes (struct
-// INPUT cbSize 40) + refoco do HWND capturado no início do ditado + fallback
-// unicode. Mesmo comportamento do F9 antigo, literalmente o mesmo código.
+// INPUT cbSize 40) + refocus of the HWND captured at dictation start + fallback
+// unicode. Same behavior as the old F9, literally the same code.
 
 function voicePython(): string | null {
-  // backend do voicecast primeiro (win: %LOCALAPPDATA%, linux: XDG_DATA_HOME —
-  // asr-host.ts é a fonte da verdade do layout); legado voice-dictation como
-  // fallback no Windows
+  // voicecast backend first (win: %LOCALAPPDATA%, linux: XDG_DATA_HOME —
+  // asr-host.ts is the source of truth for the layout); legacy voice-dictation as
+  // fallback on Windows
   const viaBackend = backendPython();
   if (viaBackend) return viaBackend;
   const local = process.env.LOCALAPPDATA ?? "";
@@ -197,10 +197,10 @@ function voiceSrc(): string {
 }
 
 export function pythonEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  // VOICE_APP_DIR alinha app_dir() do python à raiz de dados do backend;
-  // PYTHONUTF8/PYTHONIOENCODING: Node escreve stdin em UTF-8 mas o Python no
-  // Windows decodifica com a codepage da console (cp1252) → texto colado saía
-  // mojibake ("Não"→"NÃ£o"). Força UTF-8 nos dois lados do pipe.
+  // VOICE_APP_DIR aligns the python app_dir() to the backend data root;
+  // PYTHONUTF8/PYTHONIOENCODING: Node writes stdin in UTF-8 but Python on
+  // Windows decodes with the console codepage (cp1252) → pasted text came out
+  // mojibake ("Não"→"NÃ£o"). Forces UTF-8 on both sides of the pipe.
   const out: NodeJS.ProcessEnv = { ...env };
   const backendDir = path.join(process.env.LOCALAPPDATA ?? "", "voicecast", "asr-backend");
   if (fs.existsSync(backendDir)) out.VOICE_APP_DIR = backendDir;
@@ -234,10 +234,10 @@ async function captureForegroundHwnd(): Promise<number> {
 }
 
 /**
- * Cola via paste_into_focused do daemon (stdin = texto, argv1 = hwnd alvo).
- * Retorna o modo USADO ("clipboard"/"unicode") ou null se o python nem rodou —
- * o texto do stdout ("usado: <modo>") é a verdade: exit 0 sozinho não garante
- * que o Ctrl+V chegou (modos "...-falhou"/"ctrl-v-bloqueado" saem com exit 0).
+ * Pastes via the daemon's paste_into_focused (stdin = text, argv1 = target hwnd).
+ * Returns the USED mode ("clipboard"/"unicode") or null if python didn't even run —
+ * the stdout text ("usado: <mode>") is the truth: exit 0 alone doesn't guarantee
+ * the Ctrl+V landed (the "...-falhou"/"ctrl-v-bloqueado" modes exit with 0).
  */
 async function pasteViaDaemonCode(text: string, hwnd: number): Promise<string | null> {
   const py = voicePython();
@@ -245,8 +245,8 @@ async function pasteViaDaemonCode(text: string, hwnd: number): Promise<string | 
   return new Promise((res) => {
     const script =
       "import logging, sys\n" +
-      // sem basicConfig o log.info do platform é descartado (sem handler) —
-      // e é ele que traz o diagnóstico do foco/registro do clipboard
+      // without basicConfig the platform log.info is discarded (no handler) —
+      // and it's what carries the focus/clipboard registration diagnostics
       "logging.basicConfig(level=logging.INFO, stream=sys.stderr, format='%(message)s')\n" +
       `sys.path.insert(0, r"${voiceSrc()}"); ` +
       "from voice.platform import get_backend\n" +
@@ -262,10 +262,10 @@ async function pasteViaDaemonCode(text: string, hwnd: number): Promise<string | 
     child.on("error", () => res(null));
     child.on("exit", (code) => {
       const m = out.match(/usado:\s*(\S+)/);
-      if (code !== 0) logError(`[paste] python saiu ${code}: ${err.slice(-300)}`);
+      if (code !== 0) logError(`[paste] python exited ${code}: ${err.slice(-300)}`);
       else if (m) logInfo(`[paste] ${m[1]} chars: ${text.length}`);
-      // o python loga diagnóstico valioso no stderr (foco ativo no momento do
-      // paste, registro do clipboard, rc de wtype/ydotool) — sempre registrar
+      // python logs valuable diagnostics to stderr (active focus at paste time,
+      // clipboard registration, wtype/ydotool rc) — always log it
       if (err.trim() && code === 0) logInfo(`[paste] diag: ${err.trim().slice(-400).replace(/\n+/g, " | ")}`);
       res(code === 0 && m ? m[1] : null);
     });
@@ -273,19 +273,19 @@ async function pasteViaDaemonCode(text: string, hwnd: number): Promise<string | 
 }
 
 async function pasteToFocused(text: string, hwnd: number): Promise<void> {
-  // semeia o clipboard também pelo Electron (X11/XWayland): alvos X recebem
-  // o paste nativo, e o KWin espelha para o Wayland — cinturão + suspensório
-  // com o wl-copy do backend (o outro namespace pode ganhar a corrida)
+  // seeds the clipboard through Electron too (X11/XWayland): X targets receive
+  // the native paste, and KWin mirrors it to Wayland — belt and suspenders
+  // with the backend's wl-copy (the other namespace may win the race)
   clipboard.writeText(text);
-  // caminho principal: código provado do daemon (refoco do HWND + SendInput)
+  // main path: the daemon's proven code (HWND refocus + SendInput)
   const used = await pasteViaDaemonCode(text, hwnd);
   if (used && !/falhou|bloqueado/.test(used)) return;
-  // daemon indisponível ou falhou: último recurso só no Windows (clipboard +
-  // SendKeys). No Linux não existe esse fallback (powershell = ENOENT) — os
-  // modos de falha do daemon deixam o texto NO CLIPBOARD, colável à mão.
+  // daemon unavailable or failed: last resort on Windows only (clipboard +
+  // SendKeys). On Linux this fallback doesn't exist (powershell = ENOENT) — the
+  // daemon failure modes leave the text ON THE CLIPBOARD, pasteable by hand.
   if (process.platform === "win32") {
     clipboard.writeText(text);
-    logInfo("ditado: paste do daemon indisponível — fallback SendKeys");
+    logInfo("ditado: daemon paste unavailable — SendKeys fallback");
     const ps = spawn(
       "powershell.exe",
       [
@@ -296,56 +296,56 @@ async function pasteToFocused(text: string, hwnd: number): Promise<void> {
       ],
       { stdio: "ignore", detached: true, windowsHide: true },
     );
-    ps.on("error", (e) => logError("ditado: fallback SendKeys falhou:", e));
+    ps.on("error", (e) => logError("ditado: SendKeys fallback failed:", e));
     ps.unref();
-    logInfo(`ditado: fallback colou ${text.length} chars`);
+    logInfo(`ditado: fallback pasted ${text.length} chars`);
     return;
   }
   logError(
-    `[paste] colagem NÃO confirmada na janela focada (modo=${used ?? "python ausente"}) — ` +
-    "texto ficou no clipboard, cole com Ctrl+V",
+    `[paste] paste NOT confirmed in the focused window (mode=${used ?? "python missing"}) — ` +
+    "text stayed on the clipboard, paste with Ctrl+V",
   );
 }
 
-// ── toggle F9 ──────────────────────────────────────────────────
+// ── F9 toggle ──────────────────────────────────────────────────
 
 export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
   if (state === "idle") {
-    // BARRA PRIMEIRO: os checks do daemon (aposentado) custavam até ~4,5s de
-    // timeout ANTES da barra nascer — no cold start o F9 parecia morto. Os
-    // checks seguem, mas sem bloquear a UX (daemon vivo é caso histórico).
+    // BAR FIRST: the daemon (retired) checks used to cost up to ~4.5s of
+    // timeout BEFORE the bar was born — on cold start F9 looked dead. The
+    // checks stay, but without blocking the UX (a live daemon is a historical case).
     state = "recording";
     ditadoStartedAt = Date.now();
-    // F9 é pedido EXPLÍCITO de transcrição: com o switch off (fonte settings),
-    // religa o modelo sozinho — o spawn corre enquanto o usuário fala. Env
-    // VOICECAST_ASR_HOST=0 não é sobrescrito (kill-switch de máquina).
+    // F9 is an EXPLICIT transcription request: with the switch off (settings source),
+    // it re-enables the model on its own — the spawn runs while the user speaks. Env
+    // VOICECAST_ASR_HOST=0 is not overridden (machine-level kill-switch).
     const st = asrHostStatus();
     if (!st.enabled && st.source === "settings") {
       ditadoAsrLigadoAgora = true;
-      logInfo("ditado: transcrição estava desligada — religando o modelo (switch settings)");
+      logInfo("ditado: transcription was off — re-enabling the model (settings switch)");
       void asrAutoEnableIfNeeded();
     }
     void (async () => {
       if (await daemonRecording()) {
-        logError("ditado: daemon gravando — abortando captura por segurança");
+        logError("ditado: daemon recording — aborting capture for safety");
         state = "idle";
         closeDitadoBar();
         broadcast({ type: "ditado-state", phase: "done" });
         return;
       }
       const held = await daemonHold(true);
-      logInfo(`ditado: início (daemon hold ${held ? "aplicado" : "ausente"})`);
+      logInfo(`ditado: start (daemon hold ${held ? "applied" : "absent"})`);
     })();
-    // HWND da janela em foco AGORA — a colagem refoca ela, mesmo que você
-    // mude de janela enquanto o whisper transcreve (comportamento do daemon)
+    // HWND of the window in focus NOW — the paste refocuses it, even if you
+    // switch windows while whisper transcribes (daemon behavior)
     void captureForegroundHwnd().then((h) => {
       ditadoHwnd = h;
-      logInfo(`ditado: alvo da colagem hwnd=${h}`);
+      logInfo(`ditado: paste target hwnd=${h}`);
     });
     startDitadoBar();
-    // AN: overlay de anotação também no ditado (modo somente-transcrição) —
-    // anotar dispara print queimado automático (D7); buffer até o dir existir.
-    // Painel standalone aberto antes? É adotado (traços pré-ditado entram).
+    // AN: annotation overlay in dictation too (transcription-only mode) —
+    // annotating triggers an automatic burned-in shot (D7); buffered until the dir exists.
+    // Standalone panel opened earlier? It's adopted (pre-dictation strokes join).
     annotations.beginSession("ditado", ditadoStartedAt);
     broadcast({ type: "ditado-state", phase: "recording" });
     const cap = await startCapture();
@@ -353,7 +353,7 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
       state = "idle";
       closeDitadoBar();
       await daemonHold(false);
-      logError("ditado: captura falhou:", cap.error ?? "?");
+      logError("ditado: capture failed:", cap.error ?? "?");
       return cap;
     }
     return { ok: true };
@@ -362,9 +362,9 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
   if (state === "recording") {
     state = "transcribing";
     const startedAt = ditadoStartedAt;
-    // Visibilidade do cold start (pedido do mantenedor): se o modelo do ASR
-    // ainda está carregando (primeira uso pós-boot), a barra diz POR QUÊ a
-    // transcrição está lenta — com a estimativa que o próprio serviço calibra.
+    // Cold start visibility (maintainer request): if the ASR model
+    // is still loading (first use post-boot), the bar says WHY
+    // transcription is slow — with the estimate the service itself calibrates.
     const model = await asrModelStatus();
     const asrLoading = model ? !model.loaded : false;
     if (asrLoading) M_ASR_COLD?.add(1);
@@ -384,18 +384,18 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
     }, 2500);
     try {
       await withSpan("ditado.stop", { duration_s: +((Date.now() - startedAt) / 1000).toFixed(1) }, async () => {
-        // religamos o modelo no start? espera a porta abrir (spawn roda desde
-        // lá; o load do modelo continua depois — a barra mostra "carregando")
+        // did we re-enable the model at start? wait for the port to open (the spawn has been
+        // running since then; model load continues after — the bar shows "loading")
         if (ditadoAsrLigadoAgora) {
           const h = await asrHealth({ waitMs: 25_000 });
-          if (!h.ok) logError("ditado: ASR não abriu a porta após religar — áudio segue pendente");
+          if (!h.ok) logError("ditado: ASR didn't open the port after re-enable — audio stays pending");
         }
         ditadoAsrLigadoAgora = false;
         recorderWin?.webContents.executeJavaScript("window.vcStopDictation()", true).catch(() => {});
         const payload = await (blobPromise ?? Promise.resolve({ b64: "", ext: "webm" }));
         await stopCaptureWindow();
 
-        // o ASR só engole wav/pcm estáveis → extrai wav do webm via ffmpeg
+        // the ASR only swallows stable wav/pcm → extracts wav from webm via ffmpeg
         const { writeFileSync, mkdtempSync, rmSync } = await import("node:fs");
         const { tmpdir } = await import("node:os");
         const { join } = await import("node:path");
@@ -403,9 +403,9 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
         const src = join(tmpDir, `ditado.${payload.ext}`);
         writeFileSync(src, Buffer.from(payload.b64, "base64"));
       const t0 = Date.now();
-      // gancho de teste E2E: VOICECAST_DITADO_FAKE_TEXT pula o ASR (texto fixo)
+      // E2E test hook: VOICECAST_DITADO_FAKE_TEXT skips the ASR (fixed text)
       const fake = process.env.VOICECAST_DITADO_FAKE_TEXT;
-      // transcrição que falha NÃO descarta a fala: t = null → áudio salvo pendente
+      // a failed transcription does NOT discard the speech: t = null → audio saved pending
       let t: Transcript | null = null;
       let asrErro: string | null = null;
       try {
@@ -421,47 +421,47 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
           : await transcribeAudioFile(src);
       } catch (e) {
         asrErro = String(e);
-        logError("ditado: transcrição falhou — áudio vai p/ biblioteca pendente:", e);
+        logError("ditado: transcription failed — audio goes to the library as pending:", e);
       }
       if (t) H_TRANSCRIBE?.record((Date.now() - t0) / 1000, { kind: "ditado" });
         rmSync(tmpDir, { recursive: true, force: true });
         const text = t?.text.trim() ?? "";
 
-        // Jev (Etapa 2 do PLANO-JEV-CU): roteia a intenção ANTES de colar —
-        // comando pro agente, anotação e conversa não pertencem à janela focada.
-        // Fail-soft: sem julgamento (off/sem key/erro) cola como sempre colou.
+        // Jev (PLANO-JEV-CU step 2): routes the intent BEFORE pasting —
+        // agent commands, annotations, and conversation don't belong in the focused window.
+        // Fail-soft: without judgment (off/no key/error) pastes like it always did.
         const j = text ? await judgeDictation(text) : null;
         const acao = decidePaste(j);
 
-        // v2: ditado com fala vira sessão de áudio na biblioteca; silêncio
-        // descarta; ASR indisponível salva SÓ o áudio (pendente de transcrição)
+        // v2: dictation with speech becomes an audio session in the library; silence
+        // is discarded; ASR unavailable saves ONLY the audio (pending transcription)
         let saved: { dir: string; name: string } | null = null;
         if (text || asrErro) {
           try {
             saved = saveDictationSession(startedAt, payload.ext, payload.b64, t, j);
           } catch (e) {
-            logError("ditado: falhou ao salvar histórico:", e);
+            logError("ditado: failed to save history:", e);
           }
         } else {
-          logInfo("ditado: nada reconhecido — não salva histórico");
+          logInfo("ditado: nothing recognized — history not saved");
         }
-        // anotações do ditado: persiste log + prints queimados na sessão salva
-        // (flush do auto-print pendente acontece ANTES de fechar a overlay)
+        // dictation annotations: persists log + burned-in shots into the saved session
+        // (the pending auto-print flush happens BEFORE closing the overlay)
         await annotations.detach(saved ? sessionDirs(saved.dir, saved.name) : null);
 
-        // painel/biblioteca: ditado salvo é mudança de lista (sem isso a lista
-        // do picker fica stale — hide/show não remonta o React)
+        // panel/library: a saved dictation is a list change (without this the picker
+        // list goes stale — hide/show doesn't remount the React)
         if (saved) broadcast({ type: "sessions-changed" });
 
         if (text && acao.paste) {
           await pasteToFocused(text, ditadoHwnd);
         } else if (text) {
-          logInfo(`ditado: NÃO colado — rota ${j?.rota} (conf ${j?.confidence?.toFixed(2) ?? "?"})`);
+          logInfo(`ditado: NOT pasted — route ${j?.rota} (conf ${j?.confidence?.toFixed(2) ?? "?"})`);
         }
         const pendente = !text && asrErro && saved !== null;
         M_DICTATIONS?.add(1, { status: text ? (acao.paste ? "ok" : `rota:${j?.rota ?? "?"}`) : pendente ? "sem-asr" : "vazio" });
-        // a barra mostra o desfecho antes de fechar (finally) — quando nada é
-        // colado (ou a transcrição falhou), o usuário precisa saber POR QUÊ
+        // the bar shows the outcome before closing (finally) — when nothing is
+        // pasted (or transcription failed), the user needs to know WHY
         broadcast({
           type: "ditado-state",
           phase: "done",
@@ -476,9 +476,9 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
       return { ok: true };
     } catch (e) {
       M_DICTATIONS?.add(1, { status: "erro" });
-      logError("ditado: transcrição/colagem falhou:", e);
-      // a overlay de anotações (attach no start) não pode ficar presa na tela
-      // quando a transcrição falha — mesmo descarte do cancelamento
+      logError("ditado: transcription/paste failed:", e);
+      // the annotations overlay (attached at start) can't stay stuck on screen
+      // when transcription fails — same discard as cancel
       if (annotations.active) await annotations.detach();
       return { ok: false, error: String(e) };
     } finally {
@@ -488,7 +488,7 @@ export async function toggleDitado(): Promise<{ ok: boolean; error?: string }> {
       state = "idle";
     }
   }
-  return { ok: false, error: "ditado transcrevendo — aguarde" };
+  return { ok: false, error: "dictation is transcribing — wait" };
 }
 
 export function registerDitadoHotkey(): void {
@@ -497,5 +497,5 @@ export function registerDitadoHotkey(): void {
     void toggleDitado();
   });
   hotkeyRegistered = true;
-  logInfo("ditado: F9 registrado no voicecast");
+  logInfo("ditado: F9 registered in voicecast");
 }

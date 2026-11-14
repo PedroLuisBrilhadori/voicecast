@@ -1,13 +1,13 @@
 /**
- * Orquestrador de gravação (máquina de estados: idle → recording → processing).
+ * Recording orchestrator (state machine: idle → recording → processing).
  *
- * Fluxo: picker pede start → barra REC aparece NA HORA (estado "arming") →
- * cria renderer oculto (recorder) que roda getUserMedia(desktop) + mic +
- * MediaRecorder (padrão validado na F0) → ao abrir, startedAt real do
- * recorder.start() vira o relógio da sessão → no stop, blob (base64) volta
- * via IPC → main grava original.fmp4, remuxa
- * (-c copy +faststart) para session.mp4, extrai thumb e escreve meta.json
- * (draft ANTES, finalizada depois — crash-safe, padrão voice-11).
+ * Flow: picker asks for start → REC bar appears RIGHT AWAY ("arming" state) →
+ * creates hidden renderer (recorder) running getUserMedia(desktop) + mic +
+ * MediaRecorder (pattern validated in F0) → once open, the real startedAt of
+ * recorder.start() becomes the session clock → on stop, blob (base64) comes back
+ * via IPC → main writes original.fmp4, remuxes
+ * (-c copy +faststart) to session.mp4, extracts thumb and writes meta.json
+ * (draft FIRST, finalized later — crash-safe, voice-11 pattern).
  */
 import { BrowserWindow, desktopCapturer, ipcMain, screen } from "electron";
 import fs from "node:fs";
@@ -28,10 +28,10 @@ import { resolveFfmpeg, runFfmpeg, type Ffmpeg } from "./ffmpeg";
 import { logError, logInfo } from "./logging";
 import { counter, histogram, withSpan } from "./telemetry";
 
-const M_SESSIONS = counter("voicecast_sessions_total", "sessões finalizadas por modo");
-const H_FINALIZE = histogram("voicecast_finalize_seconds", "duração do pipeline de fim de sessão");
-const M_STARTS = counter("voicecast_session_starts_total", "inícios de gravação por modo/desfecho");
-const H_START = histogram("voicecast_session_start_seconds", "duração do início de sessão por estágio (total/gum-desktop/gum-mic)");
+const M_SESSIONS = counter("voicecast_sessions_total", "finalized sessions by mode");
+const H_FINALIZE = histogram("voicecast_finalize_seconds", "session finalization pipeline duration");
+const M_STARTS = counter("voicecast_session_starts_total", "recording starts by mode/outcome");
+const H_START = histogram("voicecast_session_start_seconds", "session start duration by stage (total/gum-desktop/gum-mic)");
 import { createBar, createRecorder, selectRegionOnDisplays } from "./windows";
 
 type Listener = (e: CaptureEvent) => void;
@@ -73,7 +73,7 @@ export function subscribeEvents(cb: Listener): () => void {
   return () => listeners.delete(cb);
 }
 
-// ── fontes ─────────────────────────────────────────────────────
+// ── sources ─────────────────────────────────────────────────────
 
 export async function listSources(kind: "screen" | "window"): Promise<SourceInfo[]> {
   return withSpan("sources.list", { kind }, async () => {
@@ -88,13 +88,13 @@ export async function listSources(kind: "screen" | "window"): Promise<SourceInfo
       .map((s) => ({
         id: s.id,
         kind,
-        name: s.name || (kind === "screen" ? "Tela" : "(sem título)"),
+        name: s.name || (kind === "screen" ? "Screen" : "(untitled)"),
         thumb: s.thumbnail.toDataURL(),
       }));
   });
 }
 
-// ── pipeline de finalização ────────────────────────────────────
+// ── finalization pipeline ────────────────────────────────────
 
 interface FinishInput {
   dir: string;
@@ -119,7 +119,7 @@ async function finalizeSession(input: FinishInput): Promise<void> {
   fs.mkdirSync(dirs.root, { recursive: true });
   fs.mkdirSync(dirs.thumbs, { recursive: true });
 
-  // draft ANTES de processar (crash-safe)
+  // draft BEFORE processing (crash-safe)
   writeMeta(dirs.meta, {
     status: "draft",
     startedAt: new Date(startedAt).toISOString(),
@@ -132,9 +132,9 @@ async function finalizeSession(input: FinishInput): Promise<void> {
   try {
     const ff = await resolveFfmpeg();
     if (mode === "region" && rect) {
-      // região: grava o display inteiro e CORTA no remux (re-encode leve,
-      // dims pares — exigência do h264). Coordenadas do rect são px físicos
-      // do display; o mp4 do getDisplayMedia é físico na mesma escala.
+      // region: records the whole display and CROPS on remux (light re-encode,
+      // even dims — h264 requirement). rect coordinates are physical px
+      // of the display; the getDisplayMedia mp4 is physical at the same scale.
       const w = rect.width - (rect.width % 2);
       const h = rect.height - (rect.height % 2);
       await runFfmpeg(ff, [
@@ -146,7 +146,7 @@ async function finalizeSession(input: FinishInput): Promise<void> {
         dirs.mp4,
       ]);
     } else {
-      // fMP4 do MediaRecorder vem sem duração → remux -c copy +faststart é obrigatório
+      // MediaRecorder fMP4 comes without duration → remux -c copy +faststart is mandatory
       await runFfmpeg(ff, ["-y", "-i", dirs.video, "-c", "copy", "-movflags", "+faststart", dirs.mp4]);
     }
     logInfo(`remux ok: ${dirs.mp4}`);
@@ -155,7 +155,7 @@ async function finalizeSession(input: FinishInput): Promise<void> {
       ["-y", "-ss", "1", "-i", dirs.mp4, "-frames:v", "1", "-vf", "scale=480:-2", path.join(dirs.thumbs, "session.png")],
     );
   } catch (e) {
-    logError("remux falhou:", String(e));
+    logError("remux failed:", String(e));
     writeMeta(dirs.meta, {
       status: "erro-remux",
       startedAt: new Date(startedAt).toISOString(),
@@ -164,8 +164,8 @@ async function finalizeSession(input: FinishInput): Promise<void> {
       sourceLabel,
       error: String(e),
     });
-    emit({ type: "session-error", message: `remux falhou: ${String(e)}` });
-    void annotations.detach(dirs); // dir existe com meta de erro — anotações ficam
+    emit({ type: "session-error", message: `remux failed: ${String(e)}` });
+    void annotations.detach(dirs); // dir exists with error meta — annotations stay
     cleanupAfterStop();
     return;
   }
@@ -183,10 +183,10 @@ async function finalizeSession(input: FinishInput): Promise<void> {
     sizeBytes,
   });
 
-  logInfo(`sessão finalizada: ${dir}/${name} (${(sizeBytes / 1_048_576).toFixed(1)}MB)`);
+  logInfo(`session finalized: ${dir}/${name} (${(sizeBytes / 1_048_576).toFixed(1)}MB)`);
   M_SESSIONS?.add(1, { mode });
   H_FINALIZE?.record((Date.now() - t0) / 1000);
-  // anotações: persiste log+prints agora que o dir existe (flush antes do done)
+  // annotations: persists log+shots now that the dir exists (flush before done)
   await annotations.detach(dirs);
   emit({ type: "session-done", dir, name, mp4: dirs.mp4 });
   cleanupAfterStop();
@@ -210,11 +210,11 @@ export function selectRegion(): Promise<RegionSelection | null> {
 }
 
 function startBar(mode: RecordingMode): void {
-  const label = mode === "screen" ? "Tela" : mode === "window" ? "Janela" : "Região";
+  const label = mode === "screen" ? "Screen" : mode === "window" ? "Window" : "Region";
   barWin = createBar(label);
 }
 
-/** Resultado do vcRecord no renderer oculto (timings do aquecimento da captura). */
+/** vcRecord result in the hidden renderer (capture warm-up timings). */
 interface VCRecordResult {
   ok: boolean;
   error?: string;
@@ -223,40 +223,40 @@ interface VCRecordResult {
 }
 
 export async function startRecording(req: StartRecordingRequest): Promise<{ ok: boolean; error?: string }> {
-  if (state.phase !== "idle") return { ok: false, error: "já existe gravação em andamento" };
-  if (req.mode === "window" && !req.sourceId) return { ok: false, error: "sourceId ausente" };
-  if (req.mode === "region" && !req.rect) return { ok: false, error: "retângulo ausente" };
+  if (state.phase !== "idle") return { ok: false, error: "a recording is already in progress" };
+  if (req.mode === "window" && !req.sourceId) return { ok: false, error: "missing sourceId" };
+  if (req.mode === "region" && !req.rect) return { ok: false, error: "missing rect" };
 
-  // região: resolver o sourceId do DISPLAY onde o retângulo está (ordem do
-  // desktopCapturer casa com screen.getAllDisplays) — sem isso o recorder
-  // gravava a tela errada ou nem iniciava
+  // region: resolve the sourceId of the DISPLAY where the rect is (desktopCapturer
+  // order matches screen.getAllDisplays) — without this the recorder
+  // recorded the wrong screen or wouldn't even start
   let regionSourceId: string | null = req.sourceId ?? null;
   if (req.mode === "region") {
     const screens = await listSources("screen");
     const idx = Math.max(0, Math.min(req.displayIndex ?? 0, screens.length - 1));
     regionSourceId = screens[idx]?.id ?? null;
-    if (!regionSourceId) return { ok: false, error: "nenhuma tela disponível para a região" };
+    if (!regionSourceId) return { ok: false, error: "no screen available for the region" };
   }
 
   return withSpan("session.start", { mode: req.mode }, async () => {
     const t0 = Date.now();
     try {
-      // startedAt provisório (channel name/session naming); o REAL vem do
-      // recorder (startedAtReal, no recorder.start()) — timer/duração/markers
-      // têm que casar com o conteúdo do mp4, não com o warm-up da captura.
+      // provisional startedAt (channel name/session naming); the REAL one comes from
+      // the recorder (startedAtReal, at recorder.start()) — timer/duration/markers
+      // have to match the mp4 content, not the capture warm-up.
       setState({ phase: "recording", mode: req.mode, startedAt: Date.now(), paused: false, markers: [], arming: true });
       const startedAt = state.startedAt!;
 
-      // nome da sessão fixado no start (o crash deixa o draft achável)
+      // session name fixed at start (a crash leaves the draft findable)
       const now = new Date();
       const dayDir = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       const name = sessionDirName(now, `${startedAt}:${req.mode}:${Math.random()}`);
 
       const label =
-        req.mode === "region" ? `Região ${req.rect!.width}x${req.rect!.height}` : req.sourceId ?? req.mode;
+        req.mode === "region" ? `Region ${req.rect!.width}x${req.rect!.height}` : req.sourceId ?? req.mode;
 
-      // barra IMEDIATA (não espera a captura abrir — antes ela nascia com
-      // minutos de "atraso" imaginário porque o timer contava desde o startedAt)
+      // IMMEDIATE bar (doesn't wait for the capture to open — before, it was born with
+      // minutes of imaginary "delay" because the timer counted from startedAt)
       startBar(req.mode);
       startPreviewTimer();
 
@@ -283,12 +283,12 @@ export async function startRecording(req: StartRecordingRequest): Promise<{ ok: 
       if (!result?.ok) {
         M_STARTS.add(1, { mode: req.mode, outcome: "erro" });
         cleanupAfterStop();
-        setState({ error: result?.error ?? "falha ao iniciar captura" });
-        emit({ type: "session-error", message: result?.error ?? "falha ao iniciar captura" });
+        setState({ error: result?.error ?? "failed to start capture" });
+        emit({ type: "session-error", message: result?.error ?? "failed to start capture" });
         return { ok: false, error: result?.error };
       }
 
-      // armado: relógio da sessão passa a ser o do recorder.start()
+      // armed: the session clock becomes recorder.start()'s
       const armadoEm = result.startedAtReal ?? startedAt;
       setState({ startedAt: armadoEm, arming: false });
       const tm = result.timings;
@@ -302,16 +302,16 @@ export async function startRecording(req: StartRecordingRequest): Promise<{ ok: 
       }
       M_STARTS.add(1, { mode: req.mode, outcome: "ok" });
 
-      // pipeline no fim: blob → main processa (canal chega ao recorder via query ?ch=)
+      // pipeline at the end: blob → main processes (channel reaches the recorder via query ?ch=)
       ipcMain.once(ch, (_e, payload: { b64: string; ext: string }) => {
         void finalizeSession({ dir: dayDir, name, b64: payload.b64, startedAt: armadoEm, mode: req.mode, sourceLabel: label, rect: req.rect });
       });
 
       registerMarkerShortcut();
 
-      // AN.1: overlay de anotações junto com a barra (WYSIWYG — D2); o dir só
-      // existe no stop → log/prints em buffer até o detach. Painel standalone
-      // aberto antes? É adotado (traços pré-REC entram na sessão).
+      // AN.1: annotations overlay comes up with the bar (WYSIWYG — D2); the dir only
+      // exists at stop → log/shots buffered until detach. Standalone panel
+      // opened earlier? It's adopted (pre-REC strokes join the session).
       annotations.beginSession("session", armadoEm);
 
       return { ok: true };
@@ -323,7 +323,7 @@ export async function startRecording(req: StartRecordingRequest): Promise<{ ok: 
   });
 }
 
-/** Preview periódico p/ a barra (thumb leve da tela ativa) — roda desde o arming. */
+/** Periodic preview for the bar (light thumb of the active screen) — runs since arming. */
 function startPreviewTimer(): void {
   previewTimer = setInterval(async () => {
     try {
@@ -337,23 +337,23 @@ function startPreviewTimer(): void {
 }
 
 export async function stopRecording(): Promise<{ ok: boolean; error?: string }> {
-  if (state.phase !== "recording" || !recorderWin) return { ok: false, error: "nada gravando" };
-  // captura ainda abrindo: não há o que parar — cancela limpo (a barra trava
-  // o botão, mas o toggle do Ctrl+Shift+F9 chega aqui)
+  if (state.phase !== "recording" || !recorderWin) return { ok: false, error: "nothing recording" };
+  // capture still opening: nothing to stop — cancels cleanly (the bar locks
+  // the button, but the Ctrl+Shift+F9 toggle reaches here)
   if (state.arming) return cancelRecording();
-  logInfo("stop pedido — aguardando blob do recorder…");
+  logInfo("stop requested — waiting for the recorder blob…");
   setState({ phase: "processing" });
   await recorderWin.webContents.executeJavaScript("window.vcStop()", true).catch((e) => {
-    logError("vcStop falhou:", String(e));
+    logError("vcStop failed:", String(e));
   });
-  // o blob tem que chegar em 20s — sem ele o finalizeSession (e o detach das
-  // anotações dentro dele) nunca roda e a janela de pintura fica na tela
+  // the blob has to arrive within 20s — without it finalizeSession (and the
+  // annotations detach inside it) never runs and the drawing window stays on screen
   setTimeout(() => {
     if (state.phase !== "processing") return;
-    logError("stop: blob do recorder não chegou em 20s — descarto a sessão");
+    logError("stop: recorder blob didn't arrive within 20s — discarding the session");
     void annotations.detach();
     cleanupAfterStop();
-    emit({ type: "session-error", message: "gravador não entregou o vídeo — sessão descartada" });
+    emit({ type: "session-error", message: "recorder didn't deliver the video — session discarded" });
   }, 20_000).unref?.();
   return { ok: true };
 }
@@ -362,7 +362,7 @@ export async function cancelRecording(): Promise<{ ok: boolean }> {
   if (recorderWin && !recorderWin.isDestroyed()) {
     await recorderWin.webContents.executeJavaScript("window.vcCancel()", true).catch(() => {});
   }
-  void annotations.detach(); // cancelado: sessão não será salva, buffer descartado
+  void annotations.detach(); // canceled: session won't be saved, buffer discarded
   cleanupAfterStop();
   return { ok: true };
 }
@@ -371,20 +371,20 @@ export async function addMarker(): Promise<{ ok: boolean }> {
   if (state.phase !== "recording" || state.arming || !state.startedAt) return { ok: false };
   state.markers.push(Date.now());
   emit({ type: "state", state: { ...state } });
-  // D6: marker vira âncora de contexto — print com as marcações queimadas
+  // D6: marker becomes a context anchor — shot with the markers burned in
   void annotations.marker(state.markers.length);
   return { ok: true };
 }
 
 export function setPaused(p: boolean): void {
-  if (state.arming) return; // sem MediaRecorder ainda — estado ia dessincronizar
+  if (state.arming) return; // no MediaRecorder yet — state would desync
   if (recorderWin && !recorderWin.isDestroyed()) {
     void recorderWin.webContents.executeJavaScript(`window.vcPause(${p})`, true).catch(() => {});
     setState({ paused: p });
   }
 }
 
-// Ctrl+M só existe enquanto grava (não rouba a tecla no dia a dia)
+// Ctrl+M only exists while recording (doesn't steal the key day-to-day)
 function registerMarkerShortcut(): void {
   if (markerShortcutRegistered) return;
   const { globalShortcut } = require("electron") as typeof import("electron");
@@ -402,7 +402,7 @@ function registerMarkerShortcut(): void {
   }, 1000);
 }
 
-/** Retenção: apaga sessões mais velhas que N dias no boot (default 30). */
+/** Retention: deletes sessions older than N days on boot (default 30). */
 export function applyRetention(days = Number(process.env.VOICECAST_RETENTION_DAYS ?? "30")): void {
   const root = sessionsRoot();
   if (!fs.existsSync(root) || !Number.isFinite(days) || days <= 0) return;

@@ -1,9 +1,9 @@
 /**
- * Testes do resumo de anotações para o buildContext (AN.4) —
- * src/shared/annotations-context.ts. Contrato: jsonl → seção "Anotações (N):"
- * com tempo relativo (fmtTs), tipo e print queimado correspondente (path só
- * quando o PNG existe em frames/); sem marcações → null (seção some, como a
- * de Trechos).
+ * Tests of the annotations summary for buildContext (AN.4) —
+ * src/shared/annotations-context.ts. Contract: jsonl → "Anotações (N):"
+ * section with relative time (fmtTs), type and matching burned print (path
+ * only when the PNG exists in frames/); no marks → null (section disappears,
+ * like the Segments one).
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -15,11 +15,11 @@ import type { AnnotationEvent, Pt } from "../src/shared/annotations";
 
 const pt = (x: number, y: number, ms = 0): Pt => ({ x, y, ms });
 
-/** Monta o jsonl como o engine grava (1 evento JSON por linha). */
+/** Assembles the jsonl the way the engine writes it (1 JSON event per line). */
 const jsonlOf = (...events: AnnotationEvent[]): string =>
   events.map((e) => JSON.stringify(e)).join("\n") + "\n";
 
-// fixture do briefing: ≥3 eventos (stroke, laser, clear) + print queimado
+// briefing fixture: ≥3 events (stroke, laser, clear) + burned print
 const FIXTURE = jsonlOf(
   { t: 100.32, seq: 1, type: "stroke", id: "1", color: "#ff4444", width: 4, points: [pt(10, 10), pt(200, 120, 400)] },
   { t: 132.4, seq: 2, type: "laser", points: [pt(300, 300), pt(400, 310, 300)] },
@@ -33,13 +33,13 @@ const FIXTURE = jsonlOf(
 );
 
 describe("fmtTs", () => {
-  it("m:ss com zero à esquerda", () => {
+  it("m:ss with leading zero", () => {
     expect(fmtTs(0)).toBe("0:00");
     expect(fmtTs(65.5)).toBe("1:06");
     expect(fmtTs(100.32)).toBe("1:40");
   });
 
-  it("W2b: arredonda o total antes de quebrar — 59.7 vira 1:00 (não 0:60)", () => {
+  it("W2b: rounds the total before splitting — 59.7 becomes 1:00 (not 0:60)", () => {
     expect(fmtTs(59.7)).toBe("1:00");
     expect(fmtTs(59.4)).toBe("0:59");
     expect(fmtTs(119.5)).toBe("2:00");
@@ -47,65 +47,65 @@ describe("fmtTs", () => {
 });
 
 describe("summarizeAnnotationEvents (fixture)", () => {
-  it("4 marcações com tempo relativo, tipo e contador", () => {
+  it("4 marks with relative time, type and counter", () => {
     const s = summarizeAnnotationEvents(FIXTURE, ["marker-1.png"])!;
-    expect(s.marks.map((m) => m.kind)).toEqual(["pincel", "laser", "limpar", "print (marker)"]);
+    expect(s.marks.map((m) => m.kind)).toEqual(["brush", "laser", "clear", "print (marker)"]);
     expect(s.marks.map((m) => m.t)).toEqual([100.32, 132.4, 150.9, 152.2]);
-    expect(s.activeStrokes).toBe(0); // clear levou o stroke no fold
+    expect(s.activeStrokes).toBe(0); // clear took the stroke in the fold
     expect(s.skipped).toBe(0);
   });
 
-  it("print queimado corresponde ao stroke queimado (id no evento print)", () => {
+  it("burned print matches the burned stroke (id in the print event)", () => {
     const s = summarizeAnnotationEvents(FIXTURE, ["marker-1.png"])!;
     expect(s.marks[0]!.print).toBe("marker-1.png");
-    expect(s.marks[3]!.print).toBe("marker-1.png"); // a própria linha do print
-    expect(s.marks[1]!.print).toBeUndefined(); // laser não é queimado
+    expect(s.marks[3]!.print).toBe("marker-1.png"); // the print line itself
+    expect(s.marks[1]!.print).toBeUndefined(); // laser is not burned
   });
 
-  it("PNG inexistente em frames/ → linha sem path (tolerante)", () => {
+  it("missing PNG in frames/ → line without path (tolerant)", () => {
     const s = summarizeAnnotationEvents(FIXTURE, [])!;
     expect(s.marks.every((m) => m.print === undefined)).toBe(true);
   });
 
-  it("stroke apagado no fim do log sai marcado (fold decide)", () => {
+  it("stroke erased at the end of the log comes out marked (fold decides)", () => {
     const s = summarizeAnnotationEvents(FIXTURE, [])!;
     expect(s.marks[0]!.gone).toBe(true);
   });
 });
 
 describe("annotationSection (render)", () => {
-  it("linhas da seção com header, marcações e path do print", () => {
+  it("section lines with header, marks and print path", () => {
     const sec = annotationSection(FIXTURE, ["marker-1.png"], "/data/sessions/2026-09-27/1010-abcd1234/frames")!;
     expect(sec.count).toBe(4);
     expect(sec.lines).toEqual([
-      "Anotações (4):",
-      "1. 1:40 pincel (apagado)",
+      "Annotations (4):",
+      "1. 1:40 brush (erased)",
       "   Print: /data/sessions/2026-09-27/1010-abcd1234/frames/marker-1.png",
       "2. 2:12 laser",
-      "3. 2:31 limpar",
+      "3. 2:31 clear",
       "4. 2:32 print (marker)",
       "   Print: /data/sessions/2026-09-27/1010-abcd1234/frames/marker-1.png",
     ]);
   });
 
-  it("framesDir com barra vira não duplica o separador", () => {
+  it("framesDir with trailing slash doesn't duplicate the separator", () => {
     const sec = annotationSection(FIXTURE, ["marker-1.png"], "/data/frames/")!;
     expect(sec.lines[2]).toBe("   Print: /data/frames/marker-1.png");
   });
 
-  it("sem print existente → seção sem linha de Print", () => {
+  it("no existing print → section without a Print line", () => {
     const sec = annotationSection(FIXTURE, [], "/data/frames")!;
     expect(sec.lines.some((l) => l.includes("Print:"))).toBe(false);
   });
 
-  it("path com espaço sai quotado (wslPathQuoted)", () => {
+  it("path with space comes out quoted (wslPathQuoted)", () => {
     const sec = annotationSection(FIXTURE, ["marker-1.png"], "/data/my frames")!;
     expect(sec.lines[2]).toBe('   Print: "/data/my frames/marker-1.png"');
   });
 });
 
-describe("undo/redo e borracha (fold reaproveitado)", () => {
-  it("undo/redo contam como marcação e o estado final reflete o fold", () => {
+describe("undo/redo and eraser (reused fold)", () => {
+  it("undo/redo count as marks and the final state reflects the fold", () => {
     const jsonl = jsonlOf(
       { t: 10, seq: 1, type: "stroke", id: "1", color: "#ff4444", width: 4, points: [pt(0, 0), pt(9, 9)] },
       { t: 11, seq: 2, type: "stroke", id: "2", color: "#ffd60a", width: 4, points: [pt(0, 10), pt(9, 19)] },
@@ -115,17 +115,17 @@ describe("undo/redo e borracha (fold reaproveitado)", () => {
     const sec = annotationSection(jsonl, [], "/f")!;
     expect(sec.count).toBe(4);
     expect(sec.activeStrokes).toBe(2);
-    expect(sec.lines).toEqual(["Anotações (4):", "1. 0:10 pincel", "2. 0:11 pincel", "3. 0:12 desfazer", "4. 0:13 refazer"]);
+    expect(sec.lines).toEqual(["Annotations (4):", "1. 0:10 brush", "2. 0:11 brush", "3. 0:12 undo", "4. 0:13 redo"]);
   });
 
-  it("borracha nos dois modos tem rótulo próprio e derruba o stroke no fold", () => {
+  it("eraser in both modes has its own label and drops the stroke in the fold", () => {
     const stroke = { id: "1", color: "#ff4444", width: 4, points: [pt(0, 0), pt(9, 9)] };
     const jsonl = jsonlOf(
       { t: 10, seq: 1, type: "stroke", ...stroke },
       { t: 12, seq: 2, type: "erase", mode: "stroke", snapshots: [stroke] },
     );
     const sec = annotationSection(jsonl, [], "/f")!;
-    expect(sec.lines).toEqual(["Anotações (2):", "1. 0:10 pincel (apagado)", "2. 0:12 borracha (traço)"]);
+    expect(sec.lines).toEqual(["Annotations (2):", "1. 0:10 brush (erased)", "2. 0:12 eraser (stroke)"]);
     expect(sec.activeStrokes).toBe(0);
 
     const area = annotationSection(
@@ -143,19 +143,19 @@ describe("undo/redo e borracha (fold reaproveitado)", () => {
       [],
       "/f",
     )!;
-    expect(area.lines[2]).toBe("2. 0:12 borracha (área)");
-    expect(area.activeStrokes).toBe(1); // pedaço que sobrou
+    expect(area.lines[2]).toBe("2. 0:12 eraser (area)");
+    expect(area.activeStrokes).toBe(1); // the piece that survived
   });
 });
 
-describe("jsonl ausente/vazio/corrompido", () => {
-  it("string vazia ou só whitespace → null (seção não aparece)", () => {
+describe("missing/empty/corrupted jsonl", () => {
+  it("empty string or whitespace only → null (section doesn't appear)", () => {
     expect(summarizeAnnotationEvents("", [])).toBeNull();
     expect(summarizeAnnotationEvents("  \n\n ", [])).toBeNull();
     expect(annotationSection("", [], "/f")).toBeNull();
   });
 
-  it("linhas corrompidas são puladas (best-effort) e contadas", () => {
+  it("corrupted lines are skipped (best-effort) and counted", () => {
     const s = summarizeAnnotationEvents(`{{{não sou json\n${JSON.stringify({ t: 5, seq: 1, type: "laser", points: [pt(1, 1)] })}\n`, [])!;
     expect(s.marks).toHaveLength(1);
     expect(s.marks[0]!.kind).toBe("laser");

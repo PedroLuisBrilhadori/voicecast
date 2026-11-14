@@ -1,18 +1,18 @@
 /**
- * Acesso ao dataset de treino do voice-dictation (W2a — issue #3).
+ * voice-dictation training dataset access (W2a — issue #3).
  *
- * O corpus em %LOCALAPPDATA%\voice-dictation\datasets\ é a spec: leitura e
- * escrita no MESMO layout (transcriptions/YYYY-MM-DD/<id>.json, words
- * {w,start,end,p}, correção no bloco validation). É o mesmo corpo que o
- * export JSONL (voice-export) consome.
+ * The corpus at %LOCALAPPDATA%\voice-dictation\datasets\ is the spec: reads and
+ * writes in the SAME layout (transcriptions/YYYY-MM-DD/<id>.json, words
+ * {w,start,end,p}, correction in the validation block). It's the same body the
+ * JSONL export (voice-export) consumes.
  *
- * Regras duras (dado real de treino):
- * - escrita SEMPRE atômica (tmp + rename) — nunca truncar/reescriver por cima;
- * - o `text` original NUNCA é alterado — a correção entra no bloco validation;
- * - fail-soft: sem datasets dir, as funções devolvem "ausente"/[] sem lançar;
- * - ids com separators/traversal são rejeitados (guard do history.py).
+ * Hard rules (real training data):
+ * - writes ALWAYS atomic (tmp + rename) — never truncate/overwrite in place;
+ * - the original `text` is NEVER changed — the correction goes in the validation block;
+ * - fail-soft: without a datasets dir, functions return "ausente"/[] without throwing;
+ * - ids with separators/traversal are rejected (history.py guard).
  *
- * Sem electron — testável direto com fixture em tmp.
+ * No electron — directly testable with a tmp fixture.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -28,7 +28,7 @@ import {
 import type { DatasetItemDetail, DatasetItemSummary } from "../shared/ipc";
 import { logError, logInfo } from "./logging";
 
-/** Raiz do dataset do voice (override VOICECAST_DATASET_DIR; null = indisponível). */
+/** Voice dataset root (override VOICECAST_DATASET_DIR; null = unavailable). */
 export function datasetRoot(): string | null {
   return datasetRootFrom(process.env);
 }
@@ -47,14 +47,14 @@ interface CorpusMeta {
   [k: string]: unknown;
 }
 
-/** JSON do corpus legível e com id — mesmo critério do history._load_json. */
+/** Readable corpus JSON with an id — same criterion as history._load_json. */
 function loadJson(file: string): CorpusMeta | null {
   try {
     const meta = JSON.parse(fs.readFileSync(file, "utf8")) as CorpusMeta;
     if (typeof meta !== "object" || meta === null || !meta.id) return null;
     return meta;
   } catch {
-    return null; // json ilegível ignorado (paridade com o painel)
+    return null; // unreadable json ignored (panel parity)
   }
 }
 
@@ -66,9 +66,9 @@ function preview(meta: CorpusMeta): string {
 }
 
 /**
- * Lista o histórico do corpus (mais recente primeiro, paridade com
- * history.list_transcriptions): busca case-insensitive por substring no texto,
- * filtro por rotuladas. Scan direto dos JSONs — sem índice (igual ao painel).
+ * Lists the corpus history (newest first, parity with
+ * history.list_transcriptions): case-insensitive substring search on the text,
+ * filter by labeled. Direct scan of the JSONs — no index (same as the panel).
  */
 export function listDatasetItems(
   opts: {
@@ -127,8 +127,8 @@ export function listDatasetItems(
 }
 
 /**
- * Detalhe completo de um item do corpus (meta inteiro — words/quality/
- * validation — como history.get_detail) + URL file:// do wav quando existe.
+ * Full detail of a corpus item (whole meta — words/quality/
+ * validation — like history.get_detail) + file:// URL of the wav when it exists.
  */
 export function getDatasetItem(
   id: string,
@@ -145,7 +145,7 @@ export function getDatasetItem(
       .sort()
       .map((d) => path.join(trDir, d, `${id}.json`))
       .filter((p) => fs.existsSync(p));
-    file = matches.length ? matches[matches.length - 1] : null; // último dia (paridade)
+    file = matches.length ? matches[matches.length - 1] : null; // last day (parity)
   } catch {
     return null;
   }
@@ -169,7 +169,7 @@ export function getDatasetItem(
   };
 }
 
-/** Escrita atômica (tmp + rename) — o padrão do corrections.py. */
+/** Atomic write (tmp + rename) — the corrections.py pattern. */
 function atomicWriteJson(file: string, data: unknown): void {
   const tmp = `${file}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
@@ -179,9 +179,9 @@ function atomicWriteJson(file: string, data: unknown): void {
 export type DatasetWriteStatus = "ok" | "ausente" | "erro";
 
 /**
- * Grava a correção de um item do corpus: lê o JSON, adiciona o bloco
- * `validation` (text/words originais intocados) e regrava com tmp+rename.
- * Idempotente: reaplicar sobrescreve o validation anterior (igual ao painel).
+ * Writes a corpus item's correction: reads the JSON, adds the
+ * `validation` block (original text/words untouched) and rewrites with tmp+rename.
+ * Idempotent: reapplying overwrites the previous validation (same as the panel).
  */
 export function writeDatasetCorrection(
   id: string,
@@ -190,7 +190,7 @@ export function writeDatasetCorrection(
   opts: { root?: string | null; labeledBy?: string; now?: Date } = {},
 ): DatasetWriteStatus {
   const root = opts.root ?? datasetRoot();
-  if (!root) return "ausente"; // fail-soft: sem datasets dir, nada é escrito
+  if (!root) return "ausente"; // fail-soft: without a datasets dir, nothing is written
   if (!isValidItemId(id)) return "ausente";
   const trDir = path.join(root, "transcriptions");
   if (!fs.existsSync(trDir)) return "ausente";
@@ -204,13 +204,13 @@ export function writeDatasetCorrection(
       .filter((p) => fs.existsSync(p));
     file = matches.length ? matches[matches.length - 1] : null;
   } catch (e) {
-    logError(`dataset: scan falhou p/ ${id}:`, e);
+    logError(`dataset: scan failed for ${id}:`, e);
     return "erro";
   }
   if (!file) return "ausente";
   const meta = loadJson(file);
   if (!meta) {
-    logError(`dataset: JSON ilegível, correção abortada: ${file}`);
+    logError(`dataset: unreadable JSON, correction aborted: ${file}`);
     return "erro";
   }
   const cleanEdits = sanitizeEdits(edits);
@@ -223,9 +223,9 @@ export function writeDatasetCorrection(
   try {
     atomicWriteJson(file, { ...meta, validation });
   } catch (e) {
-    logError(`dataset: falha ao gravar correção em ${file}:`, e);
+    logError(`dataset: failed to write correction at ${file}:`, e);
     return "erro";
   }
-  logInfo(`dataset: correção aplicada em ${id} (${cleanEdits.length} edições)`);
+  logInfo(`dataset: correction applied to ${id} (${cleanEdits.length} edits)`);
   return "ok";
 }

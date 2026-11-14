@@ -10,11 +10,11 @@ import { SESSION_CONTEXT_BEGIN, SESSION_CONTEXT_END } from "../src/shared/agent-
 import { goalSummary as goalSummaryDaFonte, isGoalFinal, type GoalState } from "../src/shared/agent-goal";
 
 /**
- * Runner do cockpit (C2) contra um agente FAKE (tests/fixtures/fake-agent.sh)
- * — valida spawn/collect/timeout/fila sem rede e sem electron.
+ * Cockpit runner (C2) against a FAKE agent (tests/fixtures/fake-agent.sh)
+ * — validates spawn/collect/timeout/queue without network and without electron.
  */
 describe("agentRunnerConfig", () => {
-  it("defaults: runtime C2b (zcode + node24 do runtime dir), habilitado, timeout 15min, direct no linux", () => {
+  it("defaults: C2b runtime (zcode + node24 from the runtime dir), enabled, 15min timeout, direct on linux", () => {
     const cfg = agentRunnerConfig({});
     expect(cfg.enabled).toBe(true);
     expect(cfg.agentBin).toBe(path.join(os.homedir(), ".local/state/voicecast/zcode-runtime", "zcode"));
@@ -25,20 +25,20 @@ describe("agentRunnerConfig", () => {
     expect(cfg.direct).toBe(process.platform !== "win32");
   });
 
-  it("windows (não-direct): paths WSL ($HOME expandido dentro do WSL), nunca paths Windows", () => {
+  it("windows (non-direct): WSL paths ($HOME expanded inside WSL), never Windows paths", () => {
     const win = agentRunnerConfig({}, "win32");
     expect(win.direct).toBe(false);
     expect(win.agentBin).toBe("$HOME/.local/state/voicecast/zcode-runtime/zcode");
     expect(win.nodeBin).toBe("$HOME/.local/state/voicecast/zcode-runtime/node24/bin/node");
     expect(win.runtime).toBe(true);
     expect(win.runtimeDir).toBeUndefined();
-    // override de runtime dir (path WSL) é respeitado e repassado
+    // runtime dir override (WSL path) is respected and passed through
     const custom = agentRunnerConfig({ VOICECAST_RUNTIME_DIR: "/home/x/custom-rt" }, "win32");
     expect(custom.agentBin).toBe("/home/x/custom-rt/zcode");
     expect(custom.runtimeDir).toBe("/home/x/custom-rt");
   });
 
-  it("kill-switch e overrides por env (ZCODE_AGENT_BIN desliga o runtime setup)", () => {
+  it("kill-switch and env overrides (ZCODE_AGENT_BIN turns off the runtime setup)", () => {
     const off = agentRunnerConfig({ VOICECAST_AGENT_BRIDGE: "0" });
     expect(off.enabled).toBe(false);
     const cfg = agentRunnerConfig({ ZCODE_AGENT_BIN: "/x/y", ZCODE_AGENT_TIMEOUT_MS: "1000" });
@@ -48,7 +48,7 @@ describe("agentRunnerConfig", () => {
     expect(cfg.nodeBin).toBeUndefined();
   });
 
-  it("goalSpawnArgs: direct usa argv; windows usa sh -lc com goal por ENV", () => {
+  it("goalSpawnArgs: direct uses argv; windows uses sh -lc with goal via ENV", () => {
     const cfg: RunnerConfig = { enabled: true, agentBin: "/home/x/zcode-agent", timeoutMs: 1, direct: true };
     const d = goalSpawnArgs(cfg, "abre um PR");
     expect(d.cmd).toBe("/home/x/zcode-agent");
@@ -59,11 +59,11 @@ describe("agentRunnerConfig", () => {
     const win = goalSpawnArgs(w, "goal com 'aspas' e $coisas");
     expect(win.cmd).toBe("wsl.exe");
     expect(win.env.VOICECAST_GOAL).toBe("goal com 'aspas' e $coisas");
-    // goal nunca vai em argv do windows (injeção/aspas)
+    // goal never goes in the windows argv (injection/quotes)
     expect(win.args.join(" ")).not.toContain("aspas");
   });
 
-  it("goalSpawnArgs runtime direct: spawn é node24 do runtime + binário (nunca o node do sistema)", () => {
+  it("goalSpawnArgs runtime direct: spawn is the runtime's node24 + binary (never the system node)", () => {
     const cfg: RunnerConfig = {
       enabled: true,
       agentBin: "/rt/zcode",
@@ -78,12 +78,12 @@ describe("agentRunnerConfig", () => {
     expect(d.args[0]).toBe("/rt/zcode");
     expect(d.args).toContain("-p");
     expect(d.args[d.args.indexOf("-p") + 1]).toBe("abre um PR");
-    // envs do runtime setup (data-dir curado) entram no spawn
+    // runtime setup envs (curated data-dir) go into the spawn
     expect(d.env.ZCODE_DATA_BASE_DIR).toBe("/rt/zcode-data");
     expect(d.env.ZCODE_BUILTIN_PROVIDER_CONFIG_FILE).toBe("/rt/provider/zcode-builtin.json");
   });
 
-  it("goalSpawnArgs runtime windows: script WSL com paths $HOME, self-heal e exit 87; goal só por ENV", () => {
+  it("goalSpawnArgs runtime windows: WSL script with $HOME paths, self-heal and exit 87; goal only via ENV", () => {
     const cfg: RunnerConfig = {
       enabled: true,
       agentBin: "$HOME/.local/state/voicecast/zcode-runtime/zcode",
@@ -95,23 +95,23 @@ describe("agentRunnerConfig", () => {
     const win = goalSpawnArgs(cfg, "goal com 'aspas' e $coisas");
     expect(win.cmd).toBe("wsl.exe");
     const script = win.args[win.args.indexOf("-lc") + 1];
-    // spawn é node24 do runtime + zcode do runtime (paths WSL)
+    // spawn is the runtime's node24 + the runtime's zcode (WSL paths)
     expect(script).toContain('"$RT/node24/bin/node" "$RT/zcode" --surface terminal -p "$VOICECAST_GOAL"');
-    // self-heal de credentials roda dentro do WSL via node24 -e
+    // credentials self-heal runs inside WSL via node24 -e
     expect(script).toContain('-e "$VOICECAST_SETUP_JS"');
     expect(win.env.VOICECAST_SETUP_JS).toBe(SETUP_CREDENTIALS_JS);
-    // pré-requisito ausente → exit code distinto (87)
+    // missing prerequisite → distinct exit code (87)
     expect(script).toContain("exit 87");
-    // goal nunca vai em argv (só por ENV) e nenhum path Windows aparece
+    // goal never goes in argv (only via ENV) and no Windows path appears
     expect(win.args.join(" ")).not.toContain("aspas");
     expect(JSON.stringify(win.args)).not.toMatch(/[A-Za-z]:\\\\/);
-    // override de runtime dir é repassado
+    // runtime dir override is passed through
     const win2 = goalSpawnArgs({ ...cfg, runtimeDir: "/home/x/custom-rt" }, "g");
     expect(win2.env.VOICECAST_RUNTIME_DIR).toBe("/home/x/custom-rt");
   });
 
-  // W2b item 1: o goal roda no req.cwd nos DOIS caminhos (paridade WSL/Windows).
-  it("W2b goalSpawnArgs windows: cwd resolvido p/ WSL vai por ENV (nunca argv) e o script faz cd", () => {
+  // W2b item 1: the goal runs in req.cwd on BOTH paths (WSL/Windows parity).
+  it("W2b goalSpawnArgs windows: cwd resolved to WSL goes via ENV (never argv) and the script does cd", () => {
     const cfg: RunnerConfig = {
       enabled: true,
       agentBin: "$HOME/.local/state/voicecast/zcode-runtime/zcode",
@@ -120,23 +120,23 @@ describe("agentRunnerConfig", () => {
       timeoutMs: 1,
       direct: false,
     };
-    // modo runtime: path Windows vira /mnt/c/... no ENV
+    // runtime mode: Windows path becomes /mnt/c/... in the ENV
     const winRt = goalSpawnArgs(cfg, "g", undefined, "C:\\Users\\pedro\\Meu Proj");
     expect(winRt.env.VOICECAST_CWD).toBe("/mnt/c/Users/pedro/Meu Proj");
     const scriptRt = winRt.args[winRt.args.indexOf("-lc") + 1];
     expect(scriptRt.startsWith('if [ -n "$VOICECAST_CWD" ]; then cd "$VOICECAST_CWD"')).toBe(true);
-    expect(scriptRt).toContain("exit 86"); // cd falhou → exit distinto do 87
-    // modo legado (override): mesmo contrato
+    expect(scriptRt).toContain("exit 86"); // cd failed → exit distinct from 87
+    // legacy mode (override): same contract
     const legacy: RunnerConfig = { enabled: true, agentBin: "/x/agent", timeoutMs: 1, direct: false };
     const winLegacy = goalSpawnArgs(legacy, "g", undefined, "C:\\Users\\pedro\\proj");
     expect(winLegacy.env.VOICECAST_CWD).toBe("/mnt/c/Users/pedro/proj");
-    // path nunca interpolado no argv do wsl.exe (só o placeholder ENV no script)
+    // path never interpolated in wsl.exe's argv (only the ENV placeholder in the script)
     expect(winRt.args.join(" ")).not.toContain("/mnt/c");
     expect(winRt.args.join(" ")).not.toMatch(/[A-Za-z]:\\\\/);
-    // sem cwd → sem ENV (script pula o cd pela guarda -n)
+    // no cwd → no ENV (script skips cd via the -n guard)
     const noCwd = goalSpawnArgs(cfg, "g");
     expect(noCwd.env.VOICECAST_CWD).toBeUndefined();
-    // caminho direto: cwd é do spawn (runGoal), não do ENV
+    // direct path: cwd is the spawn's (runGoal), not the ENV's
     const direct: RunnerConfig = { enabled: true, agentBin: "/x/agent", timeoutMs: 1, direct: true };
     expect(goalSpawnArgs(direct, "g", undefined, "/home/x/proj").env.VOICECAST_CWD).toBeUndefined();
   });
@@ -147,7 +147,7 @@ const setEnv = (key: string, value: string | undefined) => {
   else process.env[key] = value;
 };
 
-describe("runGoal (agente fake)", () => {
+describe("runGoal (fake agent)", () => {
   let bin: string;
   let cfg: RunnerConfig;
 
@@ -157,7 +157,7 @@ describe("runGoal (agente fake)", () => {
     cfg = { enabled: true, agentBin: bin, timeoutMs: 10_000, direct: true };
   });
 
-  it("coleta stdout/stderr e exit 0 → completed", async () => {
+  it("collects stdout/stderr and exit 0 → completed", async () => {
     const r = await runGoal(
       { id: "1", goal: "teste", cwd: os.tmpdir() },
       { ...cfg, agentBin: bin },
@@ -168,7 +168,7 @@ describe("runGoal (agente fake)", () => {
     expect(r.durationMs).toBeGreaterThan(0);
   });
 
-  it("W2b: goal roda no cwd pedido (caminho direto/WSL)", async () => {
+  it("W2b: goal runs in the requested cwd (direct/WSL path)", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vc-cwd-"));
     process.env.FAKE_PWD = "1";
     const r = await runGoal({ id: "w2b-cwd", goal: "x", cwd: dir }, cfg);
@@ -177,7 +177,7 @@ describe("runGoal (agente fake)", () => {
     expect(r.stdout).toContain(`pwd: ${dir}`);
   });
 
-  it("exit != 0 → failed com stderr na cauda", async () => {
+  it("exit != 0 → failed with stderr in the tail", async () => {
     setEnv("FAKE_EXIT", "3");
     const r = await runGoal({ id: "2", goal: "teste", cwd: os.tmpdir() }, cfg);
     setEnv("FAKE_EXIT", undefined);
@@ -185,7 +185,7 @@ describe("runGoal (agente fake)", () => {
     expect(r.exitCode).toBe(3);
   });
 
-  it("timeout mata o processo e devolve phase=timeout", async () => {
+  it("timeout kills the process and returns phase=timeout", async () => {
     setEnv("FAKE_SLEEP", "5");
     const r = await runGoal({ id: "3", goal: "x", cwd: os.tmpdir(), timeoutMs: 400 }, { ...cfg, timeoutMs: 400 });
     setEnv("FAKE_SLEEP", undefined);
@@ -193,13 +193,13 @@ describe("runGoal (agente fake)", () => {
     expect(r.error).toContain("timeout");
   });
 
-  it("kill-switch devolve failed imediato sem spawn", async () => {
+  it("kill-switch returns immediate failed without spawn", async () => {
     const r = await runGoal({ id: "4", goal: "x", cwd: os.tmpdir() }, { ...cfg, enabled: false });
     expect(r.phase).toBe("failed");
     expect(r.error).toContain("VOICECAST_AGENT_BRIDGE");
   });
 
-  it("C3: enrich injetado altera o goal que chega ao agente", async () => {
+  it("C3: injected enrich changes the goal that reaches the agent", async () => {
     const enrich: GoalEnricher = async (goal) => ({
       goal: `${goal}\n\n${SESSION_CONTEXT_BEGIN}\nfala da sessão\n${SESSION_CONTEXT_END}`,
       included: true,
@@ -215,7 +215,7 @@ describe("runGoal (agente fake)", () => {
     expect(r.stdout).toContain(SESSION_CONTEXT_END);
   });
 
-  it("C3: enricher quebrado NUNCA quebra o goal (fail-soft)", async () => {
+  it("C3: broken enricher NEVER breaks the goal (fail-soft)", async () => {
     const r = await runGoal({
       id: "6",
       goal: "base",
@@ -238,24 +238,24 @@ describe("GoalQueue", () => {
     cfg = { enabled: true, agentBin: bin, timeoutMs: 10_000, direct: true };
   });
 
-  it("enfileira e roda serializando estados: queued→running→completed", async () => {
+  it("queues and runs serializing states: queued→running→completed", async () => {
     const states: string[] = [];
     const q = new GoalQueue((s) => states.push(s.phase));
     expect(q.enqueue({ id: "a", goal: "g1", cwd: os.tmpdir() }, cfg)).toEqual({ ok: true });
     q.enqueue({ id: "b", goal: "g2", cwd: os.tmpdir() }, cfg);
-    expect(q.enqueue({ id: "c", goal: "  ", cwd: os.tmpdir() }, cfg)).toEqual({ ok: false, error: "goal vazio" });
+    expect(q.enqueue({ id: "c", goal: "  ", cwd: os.tmpdir() }, cfg)).toEqual({ ok: false, error: "empty goal" });
     await new Promise((r) => setTimeout(r, 800));
     expect(states).toContain("running");
     expect(states.filter((s) => s === "completed").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("recusa goal vazio e bridge off", () => {
+  it("rejects empty goal and bridge off", () => {
     const q = new GoalQueue();
-    expect(q.enqueue({ id: "x", goal: "  ", cwd: "." })).toEqual({ ok: false, error: "goal vazio" });
+    expect(q.enqueue({ id: "x", goal: "  ", cwd: "." })).toEqual({ ok: false, error: "empty goal" });
     expect(q.enqueue({ id: "y", goal: "g", cwd: "." }, { enabled: false, agentBin: "", timeoutMs: 1, direct: true }).ok).toBe(false);
   });
 
-  it("C3: enricher injetado no GoalQueue chega ao agente pelo goal enriquecido", async () => {
+  it("C3: enricher injected into the GoalQueue reaches the agent via the enriched goal", async () => {
     const enrich: GoalEnricher = async (goal) => ({
       goal: `${goal}\n\n${SESSION_CONTEXT_BEGIN}\ncontexto pela fila\n${SESSION_CONTEXT_END}`,
       included: true,
@@ -276,10 +276,10 @@ describe("GoalQueue", () => {
   });
 });
 
-// W2b item 2: UMA fonte p/ goalSummary — shared/agent-goal.ts; o runner só
-// re-exporta (identidade de função prova que não há segunda implementação).
-describe("goalSummary (fonte única)", () => {
-  it("re-export do runner É a função de shared/agent-goal", () => {
+// W2b item 2: ONE source for goalSummary — shared/agent-goal.ts; the runner
+// only re-exports it (function identity proves there's no second implementation).
+describe("goalSummary (single source)", () => {
+  it("the runner's re-export IS the shared/agent-goal function", () => {
     expect(goalSummaryDoRunner).toBe(goalSummaryDaFonte);
   });
 });

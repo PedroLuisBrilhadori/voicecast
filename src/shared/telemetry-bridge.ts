@@ -1,14 +1,14 @@
 /**
- * Ponte main → worker de telemetria (W1). Spawn do worker, lifecycle por
- * mensagens e o meter-ponte que o main usa no core lazy: cada emit vira uma
- * mensagem (src/shared/telemetry-protocol.ts). Puro Node — sem electron —
- * para ser unit-testável (o logging vem injetado).
+ * Telemetry main → worker bridge (W1). Worker spawn, message-driven
+ * lifecycle and the meter-bridge main uses in the lazy core: each emit
+ * becomes a message (src/shared/telemetry-protocol.ts). Pure Node — no
+ * electron — so it is unit-testable (logging is injected).
  *
- * Semânticas preservadas do desenho antigo (SDK no main):
- * - OTEL_ENABLED=0 → nada sobe (log "telemetria desligada");
- * - init resolve no ready do worker (ou degrada com log, nunca lança);
- * - emits antes do ready são descartados (core do main sem meter);
- * - stop = shutdown com flush (aguarda shutdown-done, termina por timeout).
+ * Semantics preserved from the old design (SDK in main):
+ * - OTEL_ENABLED=0 → nothing comes up (log "telemetry disabled");
+ * - init resolves on worker ready (or degrades with a log, never throws);
+ * - emits before ready are discarded (main's core without a meter);
+ * - stop = shutdown with flush (waits for shutdown-done, terminates on timeout).
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -25,10 +25,10 @@ export interface TelemetryBridgeLogger {
 }
 
 export interface TelemetryBridgeOpts {
-  /** Default: sibling compilado (dist/shared/telemetry-worker.js). Testes passam caminho próprio. */
+  /** Default: compiled sibling (dist/shared/telemetry-worker.js). Tests pass their own path. */
   workerPath?: string;
   logger?: TelemetryBridgeLogger;
-  /** Callbacks de lifecycle — o main liga/desliga o meter do core lazy neles. */
+  /** Lifecycle callbacks — main attaches/detaches the lazy core's meter in them. */
   onReady?: (endpoint: string) => void;
   onDown?: (reason: string) => void;
   readyTimeoutMs?: number;
@@ -36,15 +36,15 @@ export interface TelemetryBridgeOpts {
 }
 
 export interface TelemetryBridge {
-  /** Spawn + init; resolve no ready, timeout ou falha — NUNCA rejeita. */
+  /** Spawn + init; resolves on ready, timeout or failure — NEVER rejects. */
   init(): Promise<void>;
-  /** Shutdown com flush; resolve no shutdown-done (ou termina por timeout). NUNCA rejeita. */
+  /** Shutdown with flush; resolves on shutdown-done (or terminates on timeout). NEVER rejects. */
   stop(): Promise<void>;
-  /** Meter-ponte: core do main resolve instruments nele no primeiro emit. */
+  /** Bridge meter: main's core resolves instruments in it on the first emit. */
   meter: MeterLike;
-  /** Envia mensagem crua ao worker (spans do withSpan). No-throw. */
+  /** Sends a raw message to the worker (withSpan's spans). No-throw. */
   post(msg: TelemetryWorkerInbound): void;
-  /** Worker spawnado, pronto e não parado — gates spans/emits "vivos". */
+  /** Worker spawned, ready and not stopped — gates "live" spans/emits. */
   isUp(): boolean;
 }
 
@@ -91,17 +91,17 @@ export function createTelemetryBridge(opts: TelemetryBridgeOpts = {}): Telemetry
     switch (m.type) {
       case "ready":
         ready = true;
-        logger.info("telemetria: worker pronto — OTLP para", m.endpoint);
+        logger.info("telemetry: worker ready — OTLP to", m.endpoint);
         opts.onReady?.(m.endpoint);
         finishInit();
         return;
       case "disabled":
-        logger.error("telemetria desligada (OTEL_ENABLED=0, reportado pelo worker)");
+        logger.error("telemetry disabled (OTEL_ENABLED=0, reported by the worker)");
         opts.onDown?.("disabled");
         finishInit();
         return;
       case "error":
-        logger.error("telemetria: worker reportou erro:", m.message);
+        logger.error("telemetry: worker reported an error:", m.message);
         opts.onDown?.("error");
         finishInit();
         return;
@@ -123,7 +123,7 @@ export function createTelemetryBridge(opts: TelemetryBridgeOpts = {}): Telemetry
     });
 
     if (process.env.OTEL_ENABLED === "0") {
-      logger.error("telemetria desligada (OTEL_ENABLED=0)");
+      logger.error("telemetry disabled (OTEL_ENABLED=0)");
       opts.onDown?.("disabled");
       finishInit();
       return initPromise;
@@ -131,7 +131,7 @@ export function createTelemetryBridge(opts: TelemetryBridgeOpts = {}): Telemetry
 
     const file = workerFile();
     if (!file) {
-      logger.error("telemetria: worker não encontrado (build ausente?) — seguindo sem ela");
+      logger.error("telemetry: worker not found (missing build?) — continuing without it");
       opts.onDown?.("worker-missing");
       finishInit();
       return initPromise;
@@ -140,30 +140,30 @@ export function createTelemetryBridge(opts: TelemetryBridgeOpts = {}): Telemetry
     worker = new Worker(file);
     worker.on("message", handleOutbound);
     worker.on("error", (e) => {
-      logger.error("telemetria: worker com erro:", (e as Error)?.message ?? String(e));
+      logger.error("telemetry: worker error:", (e as Error)?.message ?? String(e));
       opts.onDown?.("worker-error");
       ready = false;
       finishInit();
     });
     worker.on("exit", (code) => {
       if (!stopped && ready) {
-        logger.error(`telemetria: worker saiu (code=${code}) — seguindo sem ela`);
+        logger.error(`telemetry: worker exited (code=${code}) — continuing without it`);
         opts.onDown?.("exit");
       }
       ready = false;
       finishInit();
-      finishStop(); // worker morreu no meio do stop: não esperar o timeout
+      finishStop(); // worker died mid-stop: don't wait for the timeout
     });
 
-    logger.info("telemetria: spawn do worker (SDK OTel fora do main)");
+    logger.info("telemetry: worker spawn (OTel SDK out of main)");
     post({ type: "init" });
 
-    // Init não pode prender quem await: se o import pesado demorar além do
-    // timeout, segue degradado — se o worker ficar ready depois, onReady
-    // ainda liga o meter (emits passam a fluir na hora).
+    // Init must not hold its awaiter: if the heavy import takes longer than
+    // the timeout, continue degraded — if the worker becomes ready later,
+    // onReady still attaches the meter (emits start flowing right away).
     const timer = setTimeout(() => {
       if (resolveInit) {
-        logger.error(`telemetria: worker não ficou pronto em ${readyTimeoutMs}ms — seguindo degradado`);
+        logger.error(`telemetry: worker not ready within ${readyTimeoutMs}ms — continuing degraded`);
         finishInit();
       }
     }, readyTimeoutMs);
@@ -184,14 +184,14 @@ export function createTelemetryBridge(opts: TelemetryBridgeOpts = {}): Telemetry
     post({ type: "shutdown" });
     const timer = setTimeout(() => {
       if (resolveStop) {
-        logger.error(`telemetria: shutdown-done não chegou em ${stopTimeoutMs}ms — terminando worker`);
+        logger.error(`telemetry: shutdown-done didn't arrive within ${stopTimeoutMs}ms — terminating worker`);
         finishStop();
       }
     }, stopTimeoutMs);
     timer.unref?.();
     await stopPromise;
     clearTimeout(timer);
-    void worker.terminate(); // pós-flush (ou timeout): garante o fim
+    void worker.terminate(); // post-flush (or timeout): guarantees the end
     worker = null;
     ready = false;
   }

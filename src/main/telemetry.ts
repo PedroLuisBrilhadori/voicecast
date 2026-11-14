@@ -1,19 +1,19 @@
 /**
- * Telemetria OTel do voicecast — paridade com voice/telemetry.py (v2).
- * Métricas + traces via OTLP-HTTP para o collector local (:4318, stack
- * observability do unidocs). Degradação graciosa: collector fora → nada quebra.
+ * voicecast OTel telemetry — parity with voice/telemetry.py (v2).
+ * Metrics + traces via OTLP-HTTP to the local collector (:4318, unidocs
+ * observability stack). Graceful degradation: collector down → nothing breaks.
  *
- * W1: o SDK OTel inteiro (import ~9s que travava o event loop do main) subiu
- * para um worker_threads — src/shared/telemetry-worker.ts. O main continua
- * com o core lazy (API in-memory) e cada emit vira mensagem pela ponte
- * (src/shared/telemetry-bridge.ts); o worker recria os instruments com os
- * MESMOS nomes/descrições e exporta — nomes Prometheus intactos.
+ * W1: the whole OTel SDK (the ~9s import that blocked the main event loop)
+ * moved to a worker_threads — src/shared/telemetry-worker.ts. Main keeps
+ * the lazy core (in-memory API) and each emit becomes a message over the
+ * bridge (src/shared/telemetry-bridge.ts); the worker recreates the instruments with the
+ * SAME names/descriptions and exports them — Prometheus names intact.
  *
- * API pública inalterada (counter/histogram/withSpan/init/stop) — os callers
- * (capture/library/jev/ditado/annotations/agent) não conhecem o worker.
+ * Public API unchanged (counter/histogram/withSpan/init/stop) — callers
+ * (capture/library/jev/ditado/annotations/agent) don't know about the worker.
  *
  * Env: OTEL_ENABLED (default 1) · OTEL_EXPORTER_OTLP_ENDPOINT (default :4318)
- * · VOICECAST_OTEL_DEBUG=1 (diag no stderr do worker)
+ * · VOICECAST_OTEL_DEBUG=1 (diag on worker stderr)
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { logError, logInfo } from "./logging";
@@ -22,16 +22,16 @@ import { createTelemetryBridge, type TelemetryBridge } from "../shared/telemetry
 
 const core = createTelemetryCore();
 
-/** Lazy: resolvem o instrumento no primeiro emit (ver telemetry-core.ts). */
+/** Lazy: resolve the instrument on first emit (see telemetry-core.ts). */
 export const counter: typeof core.counter = core.counter;
 export const histogram: typeof core.histogram = core.histogram;
 
 /**
- * C4: pluga um meter NO PROCESSO CORRENTE — o worker do agente (utilityProcess)
- * usa isto para retransmitir counter/histogram do runner ao main pela porta
- * (agent-worker-protocol.ts): o SDK OTel continua existindo só no
- * worker-thread do main (W1) — o utilityProcess NÃO duplica o init. O main
- * nunca chama isto (seu meter é ligado pelo initTelemetry).
+ * C4: plugs a meter INTO THE CURRENT PROCESS — the agent worker (utilityProcess)
+ * uses this to relay counter/histogram from the runner to main over the port
+ * (agent-worker-protocol.ts): the OTel SDK keeps existing only in the
+ * main worker-thread (W1) — the utilityProcess does NOT duplicate the init. Main
+ * never calls this (its meter is wired by initTelemetry).
  */
 export function setProcessMeter(m: MeterLike | null): void {
   core.setMeter(m);
@@ -39,7 +39,7 @@ export function setProcessMeter(m: MeterLike | null): void {
 
 const bridge: TelemetryBridge = createTelemetryBridge({
   logger: { info: logInfo, error: logError },
-  // ready (ou ready tardio pós-timeout) liga o meter; queda desliga.
+  // ready (or late ready after timeout) wires the meter; going down unwires it.
   onReady: () => core.setMeter(bridge.meter),
   onDown: () => core.setMeter(null),
 });
@@ -49,29 +49,29 @@ let started = false;
 export async function initTelemetry(): Promise<void> {
   if (started) return;
   started = true;
-  await bridge.init(); // resolve no ready do worker (ou degradado) — nunca lança
+  await bridge.init(); // resolves on worker ready (or degraded) — never throws
 }
 
 /**
- * Flush+shutdown do worker (o reader exporta a cada 5s; sem flush o app.exit
- * perde as métricas do ciclo corrente). Chamar no will-quit e nos smokes que
- * saem (--autotest/--transcribe) ANTES do app.exit.
+ * Worker flush+shutdown (the reader exports every 5s; without a flush, app.exit
+ * loses the metrics of the current cycle). Call on will-quit and in smokes that
+ * exit (--autotest/--transcribe) BEFORE app.exit.
  */
 export async function stopTelemetry(): Promise<void> {
   await bridge.stop();
 }
 
-/** Pilha de spans ativos no main: preserva a hierarquia session.start → recorder.* pós-W1. */
+/** Stack of active spans in main: preserves the session.start → recorder.* hierarchy post-W1. */
 const activeSpan = new AsyncLocalStorage<number | undefined>();
 let spanSeq = 0;
 
-/** Span para blocos async: const r = await withSpan("ditado.toggle", async (s) => {...}) */
+/** Span for async blocks: const r = await withSpan("ditado.toggle", async (s) => {...}) */
 export async function withSpan<T>(
   name: string,
   attrs: Record<string, string | number | boolean>,
   fn: () => Promise<T>,
 ): Promise<T> {
-  if (!bridge.isUp()) return fn(); // sem worker pronto: sem span (como sem tracer antes)
+  if (!bridge.isUp()) return fn(); // no worker ready: no span (like without a tracer before)
   const id = ++spanSeq;
   const parent = activeSpan.getStore();
   bridge.post({ type: "span-start", id, parent, name, attrs, startMs: Date.now() });

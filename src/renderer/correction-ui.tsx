@@ -1,20 +1,20 @@
 /**
- * UI de correção de ditados (W2a) — peças compartilhadas entre o editor de
- * sessão (EditorApp) e a tela do dataset do voice (CorpusView).
+ * Dictation correction UI (W2a) — pieces shared between the session editor
+ * (EditorApp) and the voice dataset screen (CorpusView).
  */
 import { useState } from "react";
 import type { CorrectionEdit } from "../shared/ipc";
 
 export type Word = { w: string; start: number; end: number; p: number };
 
-/** fmt mm:ss local (mesmo formato do editor). */
+/** Local mm:ss fmt (same format as the editor). */
 export function fmt(s: number): string {
   const m = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
   return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
-/** Diff palavra a palavra entre o original e o rascunho editado. */
+/** Word-by-word diff between the original and the edited draft. */
 export function diffWords(original: Word[], draft: Word[]): CorrectionEdit[] {
   const edits: CorrectionEdit[] = [];
   for (let i = 0; i < Math.min(original.length, draft.length); i++) {
@@ -26,9 +26,9 @@ export function diffWords(original: Word[], draft: Word[]): CorrectionEdit[] {
 }
 
 /**
- * Transcrição por palavra em modo correção: clique numa palavra → input inline;
- * Enter/blur confirma (preserva start/end/p — só o texto muda), Esc cancela.
- * `activeIndex` destaca a palavra do playhead (como fora do modo correção).
+ * Word-by-word transcript in correction mode: click a word → inline input;
+ * Enter/blur confirms (preserves start/end/p — only the text changes), Esc cancels.
+ * `activeIndex` highlights the playhead's word (like outside correction mode).
  */
 export function WordFixer(props: {
   words: Word[];
@@ -68,7 +68,7 @@ export function WordFixer(props: {
             data-wi={i}
             className={`w ${i === activeIndex ? "on" : ""} ${w.p < 0.7 ? "low" : ""}`}
             onClick={() => setEditing(i)}
-            title={`${fmt(w.start)} · conf ${Math.round(w.p * 100)}% · clique p/ corrigir`}
+            title={`${fmt(w.start)} · conf ${Math.round(w.p * 100)}% · click to correct`}
           >
             {w.w}{" "}
           </span>
@@ -78,16 +78,16 @@ export function WordFixer(props: {
   );
 }
 
-/** Mensagem de desfecho da correção — sinaliza o que foi gravado (alvo/dataset). */
+/** Correction outcome message — signals what was saved (target/dataset). */
 export function correctionMsg(r: { ok: boolean; alvo?: string; dataset?: string; error?: string }): string {
-  if (!r.ok) return `correção falhou: ${r.error ?? "?"}`;
-  if (r.alvo === "ambos") return "correção gravada no voicecast e no dataset do voice";
-  if (r.alvo === "dataset") return "correção gravada no dataset do voice";
+  if (!r.ok) return `correction failed: ${r.error ?? "?"}`;
+  if (r.alvo === "ambos") return "correction saved to voicecast and the voice dataset";
+  if (r.alvo === "dataset") return "correction saved to the voice dataset";
   if (r.dataset === "ausente") {
-    return "correção gravada no voicecast (dataset do voice não encontrado — fail-soft)";
+    return "correction saved to voicecast (voice dataset not found — fail-soft)";
   }
   if (r.dataset === "erro") {
-    return "correção gravada no voicecast (dataset falhou — nada foi truncado)";
+    return "correction saved to voicecast (dataset failed — nothing was truncated)";
   }
-  return "correção gravada no voicecast";
+  return "correction saved to voicecast";
 }

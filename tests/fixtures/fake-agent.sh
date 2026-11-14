@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# fake-agent.sh — agente fake para os testes do runner (C2/C3/W2b).
-# Comportamento por env: FAKE_EXIT (exit code), FAKE_SLEEP (s antes de sair),
-# FAKE_STDOUT / FAKE_STDERR (textos), FAKE_ECHO_ARGS=1 (ecoa o argv recebido —
-# usado p/ provar que o goal enriquecido chega ao agente), FAKE_PWD=1 (ecoa o
-# cwd do processo — prova que o goal roda no diretório pedido).
+# fake-agent.sh — fake agent for the runner tests (C2/C3/W2b).
+# Behavior via env: FAKE_EXIT (exit code), FAKE_SLEEP (s before exiting),
+# FAKE_STDOUT / FAKE_STDERR (texts), FAKE_ECHO_ARGS=1 (echoes the received argv —
+# used to prove the enriched goal reaches the agent), FAKE_PWD=1 (echoes the
+# process cwd — proves the goal runs in the requested directory).
 set -u
 echo "${FAKE_STDOUT:-ok do agente}"
 [ "${FAKE_ECHO_ARGS:-0}" = "1" ] && echo "args: $*"

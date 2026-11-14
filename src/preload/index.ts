@@ -1,5 +1,5 @@
 /**
- * Preload: ponte mínima e tipada para o renderer (contextIsolation on).
+ * Preload: minimal typed bridge to the renderer (contextIsolation on).
  */
 import { contextBridge, ipcRenderer } from "electron";
 import {
@@ -59,13 +59,13 @@ const bridge: VoicecastBridge = {
   asrStatus: () => ipcRenderer.invoke(IPC.asrStatus),
   asrHostGet: () => ipcRenderer.invoke(IPC.asrHostGet),
   asrHostSet: (enabled: boolean) => ipcRenderer.invoke(IPC.asrHostSet, enabled),
-  // W2a — dataset de treino do voice
+  // W2a — voice training dataset
   listDatasetItems: (query?: string, labeled?: DatasetLabeledFilter) =>
     ipcRenderer.invoke(IPC.listDatasetItems, query, labeled),
   getDatasetItem: (id: string) => ipcRenderer.invoke(IPC.getDatasetItem, id),
   saveDatasetCorrection: (id: string, req: SaveCorrectionRequest) =>
     ipcRenderer.invoke(IPC.saveDatasetCorrection, id, req),
-  // C4 — cockpit de agente
+  // C4 — agent cockpit
   agentRunGoal: (goal: string) => ipcRenderer.invoke(IPC.agentRunGoal, goal),
   agentGetState: () => ipcRenderer.invoke(IPC.agentGetState),
   onEvent: (cb: (e: CaptureEvent) => void) => {
@@ -77,49 +77,49 @@ const bridge: VoicecastBridge = {
 
 contextBridge.exposeInMainWorld("voicecast", bridge);
 
-/** Extras só para páginas internas de captura (recorder/overlay/barra). */
+/** Extras only for internal capture pages (recorder/overlay/bar). */
 contextBridge.exposeInMainWorld("vcInternal", {
-  /** Nível do mic do recorder (0..1). */
+  /** Recorder mic level (0..1). */
   micLevel: (level: number) => ipcRenderer.send(IPC.micLevel, level),
-  /** Entrega do blob no stop — canais restritos aos prefixos de captura. */
+  /** Blob delivery on stop — channels restricted to capture prefixes. */
   sendBlob: (channel: string, payload: { b64: string; ext: string }) => {
     if (!channel.startsWith("recorder:blob:") && !channel.startsWith("ditado:blob:")) {
-      throw new Error("canal não autorizado");
+      throw new Error("unauthorized channel");
     }
     ipcRenderer.send(channel, payload);
   },
-  /** Resultado do overlay de região (canal único por seleção). */
+  /** Region overlay result (single channel per selection). */
   sendRegion: (channel: string, rect: unknown) => {
-    if (!channel.startsWith("region:result:")) throw new Error("canal não autorizado");
+    if (!channel.startsWith("region:result:")) throw new Error("unauthorized channel");
     ipcRenderer.send(channel, rect);
   },
-  // ── overlay de anotações (AN.1/AN.2) ─────────────────────────
-  /** Cria um evento de anotação — main atribui seq/t/ids e devolve o evento. */
+  // ── annotation overlay (AN.1/AN.2) ─────────────────────────
+  /** Creates an annotation event — main assigns seq/t/ids and returns the event. */
   annotationEvent: (req: AnnotationEventRequest): Promise<AnnotationEvent | null> =>
     ipcRenderer.invoke(IPC.annotationEvent, req),
-  /** Comandos do main: ferramenta, modo pass-through, captura p/ composite. */
+  /** Commands from main: tool, pass-through mode, capture for composite. */
   onAnnotationCmd: (cb: (cmd: AnnotationCmd) => void) => {
     const h = (_e: unknown, cmd: AnnotationCmd) => cb(cmd);
     ipcRenderer.on(IPC.annotationCmd, h);
     return () => ipcRenderer.removeListener(IPC.annotationCmd, h);
   },
-  /** PNG queimado (b64) devolvendo uma captura pedida pelo main. */
+  /** Burned-in PNG (b64) returned for a capture requested by main. */
   sendComposite: (id: string, b64: string) =>
     ipcRenderer.send(IPC.annotationComposite, { id, b64 }),
-  /** Mouse da janela: paleta hover (temporário), ESC (sai do desenho), entrar no desenho pela paleta ou drag da paleta. */
+  /** Window mouse: palette hover (temporary), ESC (leave drawing), enter drawing via the palette or palette drag. */
   annotationMouse: (req: { mouse: boolean; from: "palette" | "esc" | "draw" | "drag"; tool?: import("../shared/annotations").AnnotationTool }) =>
     ipcRenderer.invoke(IPC.annotationMouse, req),
-  /** Strokes/lasers ativos (sendSync — só no caminho do print). */
+  /** Active strokes/lasers (sendSync — print path only). */
   annotationContext: (): {
     strokes: import("../shared/annotations").StrokeSnapshot[];
     lasers: { at: number; points: import("../shared/annotations").Pt[] }[];
   } => ipcRenderer.sendSync(IPC.annotationContext),
-  /** Retângulo da paleta (CSS px) — main faz polling do cursor por cima. */
+  /** Palette rectangle (CSS px) — main polls the cursor on top of it. */
   annotationPaletteBounds: (rect: { x: number; y: number; w: number; h: number } | null) =>
     ipcRenderer.send(IPC.annotationPalette, rect),
   annotationPrint: () => ipcRenderer.invoke(IPC.annotationPrint),
   annotationPaletteToggle: () => ipcRenderer.invoke(IPC.annotationPaletteToggle),
   annotationClose: () => ipcRenderer.invoke(IPC.annotationClose),
-  /** AN.6: roda no modo desenho — one-way (não há resposta esperada). */
+  /** AN.6: runs in drawing mode — one-way (no response expected). */
   annotationWheel: (req: AnnotationWheelRequest) => ipcRenderer.send(IPC.annotationWheel, req),
 });

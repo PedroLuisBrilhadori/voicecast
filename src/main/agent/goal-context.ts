@@ -1,20 +1,20 @@
 /**
- * Enriquecedor do goal com o contexto BOUNDED da última sessão (C3) — ponte
- * main entre a biblioteca e a política pura de src/shared/agent-context.ts:
- * pega a última sessão (listSessions), monta o markdown pelo `buildContext`
- * (reuso obrigatório — nunca duplicar a montagem) e aplica
- * `boundSessionContext` (inclusão + truncamento ~2k tokens).
+ * Goal enricher with BOUNDED context from the last session (C3) — main-side
+ * bridge between the library and the pure policy in src/shared/agent-context.ts:
+ * fetches the last session (listSessions), builds the markdown via `buildContext`
+ * (mandatory reuse — never duplicate the assembly) and applies
+ * `boundSessionContext` (inclusion + ~2k token truncation).
  *
- * Fail-soft: qualquer falha (sem sessão, sem mídia, buildContext com erro,
- * exceção) devolve o goal ORIGINAL e emite o counter como "sem" — contexto é
- * melhoria, nunca dependência do goal.
+ * Fail-soft: any failure (no session, no media, buildContext error,
+ * exception) returns the ORIGINAL goal and emits the counter as "sem" — context
+ * is an improvement, never a dependency of the goal.
  *
- * Wiring: o runner aceita o enricher INJETADO (sem import de electron lá) —
- * `new GoalQueue(onState, goalContextEnricher())` no chamador de produção
- * (C4, painel do cockpit).
+ * Wiring: the runner accepts the INJECTED enricher (no electron import there) —
+ * `new GoalQueue(onState, goalContextEnricher())` in the production caller
+ * (C4, cockpit panel).
  *
- * Telemetria (DoD): counter `voicecast_agent_context_total{incluido=com|sem}`;
- * `context.chars` vai como attr do span `agent.goal` (runner.ts).
+ * Telemetry (DoD): counter `voicecast_agent_context_total{incluido=com|sem}`;
+ * `context.chars` goes as an attr of the `agent.goal` span (runner.ts).
  */
 import { counter } from "../telemetry";
 import { buildContext, getSessionDetail, listSessions } from "../library";
@@ -27,7 +27,7 @@ import {
 
 const M_CONTEXT = counter(
   "voicecast_agent_context_total",
-  "contexto da última sessão incluído no goal (com/sem)",
+  "last session context included in the goal (with/without)",
 );
 
 function sem(goal: string): EnrichedGoal {
@@ -35,7 +35,7 @@ function sem(goal: string): EnrichedGoal {
   return { goal, included: false, contextChars: 0 };
 }
 
-/** Enriquecedor de produção (usa a biblioteca real). Injetável p/ testes via runner. */
+/** Production enricher (uses the real library). Injectable for tests via the runner. */
 export function goalContextEnricher(): GoalEnricher {
   return async (goal: string): Promise<EnrichedGoal> => {
     try {

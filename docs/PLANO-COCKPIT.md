@@ -1,15 +1,15 @@
-# Plano — Cockpit de voz: voicecast como porta de entrada do agente (Onda 1)
+# Plan — Voice cockpit: voicecast as the agent's front door (Wave 1)
 
-Data: 2026-09-27 · Status: **ratificado pelo mantenedor** (decisões abaixo)
-Referências: [CRONOGRAMA](CRONOGRAMA.md) Onda 1 · [PLANO-JEV-CU](PLANO-JEV-CU.md)
-Etapa 2 (rota `comando_agente`) · [RELATORIO-E2](RELATORIO-E2.md)
+Date: 2026-09-27 · Status: **ratified by the maintainer** (decisions below)
+References: [CRONOGRAMA](CRONOGRAMA.md) Wave 1 · [PLANO-JEV-CU](PLANO-JEV-CU.md)
+Stage 2 (`comando_agente` route) · [RELATORIO-E2](RELATORIO-E2.md)
 
-## Descoberta FD.0 (2026-09-27) — o engine é dirigível, sem hacks
+## FD.0 discovery (2026-09-27) — the engine is drivable, no hacks
 
-O ZCode Desktop roda um server próprio — `~/.zcode/server/zcode-server.cjs`
-com node dedicado (`~/.zcode/server/node`) — e conversa com ele **por pipes
-stdio** (não há porta HTTP; confirmado no processo vivo). O protocolo extraído
-do bundle em produção expõe, entre outros:
+ZCode Desktop runs its own server — `~/.zcode/server/zcode-server.cjs`
+with a dedicated node (`~/.zcode/server/node`) — and talks to it **over stdio
+pipes** (no HTTP port; confirmed on the live process). The protocol extracted
+from the production bundle exposes, among others:
 
 ```
 initialize · session/create · session/send · session/list · session/read ·
@@ -19,136 +19,137 @@ turn.started · turn.completed · turn.failed · state.updated ·
 permission.respond · elicitation.respond · model.set · mode.set · workspace.set
 ```
 
-**Consequência**: o voicecast (main Electron, Node) pode spawnar o server e
-falar o MESMO protocolo do Desktop — acionamento de agente de primeira classe,
-sem colar texto nem ler UIA (que ficam só de fallback). Nada de server
-opencode2/4096: decisão #5 do PLANO-JEV-CU segue de pé (harness alvo = ZCode).
+**Consequence**: voicecast (Electron main, Node) can spawn the server and
+speak the SAME protocol as the Desktop — first-class agent triggering,
+without pasting text or reading UIA (which remain only as fallback). No
+opencode2/4096 server: decision #5 of PLANO-JEV-CU still stands (target
+harness = ZCode).
 
-Detalhe de ambiente: o server roda no WSL; o voicecast roda no Windows. O
-spawn atravessa `wsl.exe -e <node> <server.cjs>` — pipes stdio passam ilesos
-(mesmo mecanismo que o Desktop usa hoje na ponte Windows↔WSL).
+Environment detail: the server runs in WSL; voicecast runs on Windows. The
+spawn goes through `wsl.exe -e <node> <server.cjs>` — stdio pipes pass through
+unharmed (same mechanism the Desktop uses today in the Windows↔WSL bridge).
 
-## Objetivo / não-objetivos
+## Objective / non-objectives
 
-**Objetivo**: falar um goal no F9 (rota `comando_agente`) e ele executar num
-agente ZCode de verdade — sem digitar — com estado ao vivo na barra, gate de
-permissão local e desfecho auditável na sessão voicecast.
+**Objective**: speak a goal into the F9 (`comando_agente` route) and have it run on a
+real ZCode agent — without typing — with live state in the bar, a local
+permission gate and an auditable outcome in the voicecast session.
 
-**Não-objetivos**: embutir UI do ZCode no voicecast; substituir o CUA do
-ZCode; multi-máquina (isso é Onda 5); TTS (M3, depois).
+**Non-objectives**: embedding the ZCode UI in voicecast; replacing ZCode's
+CUA; multi-machine (that's Wave 5); TTS (M3, later).
 
-## Arquitetura
+## Architecture
 
 ```
-F9 (voz) → ditado → ASR → Jev rota comando_agente (conf ≥0.9)
-   └─► src/main/agent-bridge.ts (NOVO)
-         ├─ spawn zcode-server via wsl.exe (stdio; 1 goal por vez)
-         ├─ initialize → session/create (mode/model padrão)
-         ├─ session/send(goal + contexto bounded da última sessão)
-         ├─ session/subscribe → turn.* → estados na barra (broadcast)
-         ├─ permission.respond ← gate local (política do guardrail)
-         └─ turn.completed → desfecho → barra + meta.json.agentGoals[]
+F9 (voice) → dictation → ASR → Jev comando_agente route (conf ≥0.9)
+   └─► src/main/agent-bridge.ts (NEW)
+         ├─ spawn zcode-server via wsl.exe (stdio; 1 goal at a time)
+         ├─ initialize → session/create (default mode/model)
+         ├─ session/send(goal + bounded context from the last session)
+         ├─ session/subscribe → turn.* → states in the bar (broadcast)
+         ├─ permission.respond ← local gate (guardrail policy)
+         └─ turn.completed → outcome → bar + meta.json.agentGoals[]
 ```
 
 ## Work packages
 
-### C1 — Probe do protocolo (S) · CONCLUÍDO (2026-09-27)
-Script standalone em `scripts/probes/2026-09-27-acp/`:
-`probe-acp.mjs` (handshake+framing decodificados) e `probe-roundtrip.mjs`
-(roundtrip real). Resultados completos no `RESULTADOS.md` do probe. Em
-síntese: handshake ndjson `zcode-hello/ack` ✓ · framing binário VS Code
-(13B) ✓ · serializer byte-exato ✓ · args como ARRAY posicional ✓ ·
-`zcode-agent.createSession {workspacePath}` chega ao server ✓. **Porém**: o
-server é um *relay* — na criação de sessão o agente aninhado
-(`agents/glm/zcode-agent`) pede runtime preferences de volta e quem responde
-é a **autoridade desktop**; sem desktop, `createSession` estoura timeout.
-Replicar a autoridade = superfície instável e version-coupled.
+### C1 — Protocol probe (S) · DONE (2026-09-27)
+Standalone script in `scripts/probes/2026-09-27-acp/`:
+`probe-acp.mjs` (handshake+framing decoded) and `probe-roundtrip.mjs`
+(real roundtrip). Complete results in the probe's `RESULTADOS.md`. In
+short: ndjson handshake `zcode-hello/ack` ✓ · VS Code binary framing
+(13B) ✓ · byte-exact serializer ✓ · args as positional ARRAY ✓ ·
+`zcode-agent.createSession {workspacePath}` reaches the server ✓. **However**: the
+server is a *relay* — on session creation the nested agent
+(`agents/glm/zcode-agent`) asks for runtime preferences back and whoever answers
+is the **desktop authority**; without a desktop, `createSession` times out.
+Replicating the authority = unstable, version-coupled surface.
 
-**Pivot ratificado pelo achado (2026-09-27)**: o bridge v1 **não usa o
-middleman** — usa o modo headless de primeira classe do CLI do agente
-(`zcode-agent -p "<goal>" --surface terminal`, com `--attach`, `--resume`,
-`--mode`). Mesmo binário/plano/credenciais do desktop
-(`~/.zcode/v2/credentials.json`); zero protocolo reverso.
+**Pivot ratified by the finding (2026-09-27)**: bridge v1 **does not use the
+middleman** — it uses the CLI's first-class headless mode
+(`zcode-agent -p "<goal>" --surface terminal`, with `--attach`, `--resume`,
+`--mode`). Same binary/plan/credentials as the desktop
+(`~/.zcode/v2/credentials.json`); zero reverse protocol.
 
-### C2 — `agent-bridge` em utilityProcess (M) · núcleo implementado (2026-09-27)
-- `src/shared/agent-goal.ts`: máquina de estados pura
-  (queued→running→completed/failed/timeout/cancelled) + resumos p/ barra.
-- `src/main/agent/runner.ts`: runner do goal — Linux/WSL spawn direto,
-  Windows via `wsl.exe --exec sh -lc` com **goal por env** (nunca argv
-  interpolado), fila de 1 (`GoalQueue`), timeout com SIGTERM→SIGKILL,
-  kill-switch `VOICECAST_AGENT_BRIDGE=0`, telemetria
+### C2 — `agent-bridge` in a utilityProcess (M) · core implemented (2026-09-27)
+- `src/shared/agent-goal.ts`: pure state machine
+  (queued→running→completed/failed/timeout/cancelled) + summaries for the bar.
+- `src/main/agent/runner.ts`: goal runner — Linux/WSL direct spawn,
+  Windows via `wsl.exe --exec sh -lc` with **goal via env** (never interpolated
+  argv), queue of 1 (`GoalQueue`), timeout with SIGTERM→SIGKILL,
+  kill-switch `VOICECAST_AGENT_BRIDGE=0`, telemetry
   (`voicecast_agent_goals_total{desfecho}`, `voicecast_agent_goal_seconds`,
   span `agent.goal`).
-- Testes: `tests/agent-goal.test.ts` + `tests/agent-runner.test.ts` (agente
-  fake `tests/fixtures/fake-agent.sh`) — 14 novos, 86 no total.
-- **Bloqueio único (config, não código)**: o CLI headless exige seleção de
-  modelo prévia ("Select a model before continuing") — o desktop seleciona
-  via UI e o estado vive no db compartilhado (`runtime/model_selection`,
-  `session_entry` por sessão). Pendente definir o caminho oficial: primeira
-  seleção via TUI, flag/config do CLI, ou seed do db — a definir com o
-  mantenedor. UtilityProcess + IPC + barra = próximo passo (padrão já
-  ratificado, código aguarda o desbloqueio acima).
+- Tests: `tests/agent-goal.test.ts` + `tests/agent-runner.test.ts` (fake
+  agent `tests/fixtures/fake-agent.sh`) — 14 new, 86 total.
+- **Single blocker (config, not code)**: the headless CLI requires a prior
+  model selection ("Select a model before continuing") — the desktop selects
+  via UI and the state lives in the shared db (`runtime/model_selection`,
+  `session_entry` per session). Pending: define the official path — first
+  selection via TUI, CLI flag/config, or db seed — to be decided with the
+  maintainer. UtilityProcess + IPC + bar = next step (pattern already
+  ratified, code awaits the blocker above).
 
-### C3 — Contexto no goal (S)
-O goal leva o `buildContext` bounded da última sessão (se < N minutos e
-relevância Jev ≥2 — a mesma política desenhada p/ hook). Reusa `buildContext`,
-trunca em ~2k tokens, cita paths de artefatos.
-**Instrumentação**: `voicecast_agent_context_total{com,sem}`.
-**Aceite**: goal após uma sessão recente cita o contexto; goal frio não carrega nada.
+### C3 — Context in the goal (S)
+The goal carries the bounded `buildContext` of the last session (if < N minutes and
+Jev relevance ≥2 — the same policy designed for the hook). Reuses `buildContext`,
+truncates at ~2k tokens, cites artifact paths.
+**Instrumentation**: `voicecast_agent_context_total{com,sem}`.
+**Acceptance**: a goal after a recent session cites the context; a cold goal carries nothing.
 
-### C4 — Cockpit v1 na barra/painel (M) · o que você vê
-Estados no BarApp (complementando `ditado-state`): `idle → ouvindo →
-roteando → rodando(goal, com resumo dos turnos) → concluído | erro`. Entrada
-alternativa digitada no painel (sem voz). Desfecho persistido em
-`meta.json.agentGoals[]` da sessão corrente (liga voz↔agente na auditoria).
-**Aceite**: falar "abre um PR…" e acompanhar o ciclo na barra sem digitar.
+### C4 — Cockpit v1 in the bar/panel (M) · what you see
+States in BarApp (complementing `ditado-state`): `idle → listening →
+routing → running(goal, with turn summaries) → done | error`. Alternative
+typed input in the panel (no voice). Outcome persisted in the current
+session's `meta.json.agentGoals[]` (ties voice↔agent in the audit).
+**Acceptance**: say "abre um PR…" ("open a PR…" — example spoken goal) and follow the cycle in the bar without typing.
 
-### C5 — Gate de permissão local (M) · segurança da casa
-Quando o server pedir `permission.respond`, o bridge consulta o gate Jev
-local (`jev-questions`, mesma política do guardrail): leitura auto-aprovada,
-mutação de zona cinza → confirmação humana na barra (ou bloqueio direto, se
-risco alto). Segredo nunca vai no goal (Jev já pontua risco).
-**Instrumentação**: `voicecast_agent_permissions_total{decisão}`.
-**Aceite**: goal que tenta comando bloqueado pelo guardrail é negado sem
-intervenção de digitação; leitura flui sozinha.
+### C5 — Local permission gate (M) · house security
+When the server asks for `permission.respond`, the bridge consults the local Jev
+gate (`jev-questions`, same policy as the guardrail): read auto-approved,
+gray-zone mutation → human confirmation in the bar (or direct block if
+risk is high). A secret never goes into the goal (Jev already scores risk).
+**Instrumentation**: `voicecast_agent_permissions_total{decisão}`.
+**Acceptance**: a goal that tries a command blocked by the guardrail is denied without
+typing intervention; reads flow on their own.
 
-### C6 — AN.4: anotações no buildContext (S)
-Marcações (`annotations.jsonl` + prints queimados) entram como linhas de
-contexto no `buildContext` — fecha a pendência do plano de anotações.
+### C6 — AN.4: annotations in buildContext (S)
+Marks (`annotations.jsonl` + burned-in screenshots) enter as context
+lines in `buildContext` — closes the annotation plan's pending item.
 
-### C7 — ⚡ paralelos (não bloqueiam)
-Hook `UserPromptSubmit` + skill `.zcode/skills/voicecast/` (digest bounded no
-ZCode quando você trabalha lá dentro) · worker thread p/ import do SDK OTel ·
-spike do plugin `computer-use`.
+### C7 — ⚡ parallel (non-blocking)
+`UserPromptSubmit` hook + `.zcode/skills/voicecast/` skill (bounded digest in
+ZCode when you work inside it) · worker thread for the OTel SDK import ·
+`computer-use` plugin spike.
 
-## Segurança
+## Security
 
-Permissão julgada localmente (C5) · goals e desfechos auditados na sessão ·
-kill-switch do bridge · nenhum segredo no goal (política Jev existente).
+Permission judged locally (C5) · goals and outcomes audited in the session ·
+bridge kill-switch · no secret in the goal (existing Jev policy).
 
-## Testes
+## Tests
 
-Unit (WSL, sem rede): bridge × server fake stdio; gate; contexto bounded;
-contrato IPC novo (estado do agente p/ barra). Smoke Windows: `--agenttest`.
-CI segue `pnpm ci:local`.
+Unit (WSL, no network): bridge × fake stdio server; gate; bounded context;
+new IPC contract (agent state for the bar). Windows smoke: `--agenttest`.
+CI follows `pnpm ci:local`.
 
-## Decisões ratificadas pelo mantenedor (2026-09-27)
+## Decisions ratified by the maintainer (2026-09-27)
 
-1. **Workspace (cwd) dos goals**: por **diferentes diretórios** — selecionável
-   por goal (falado/ digitado), com default no último usado. O painel do
-   cockpit oferece a lista; o goal pode nomear o alvo.
-2. **Mode/model**: **config explícito do voicecast** (arquivo próprio em
-   `%APPDATA%\voicecast\agent.json`, não herda settings do ZCode); overridável
-   por goal.
-3. **Permissão**: auto-aprovar leitura, exigir humano para mutação (espelha o
+1. **Workspace (cwd) of goals**: per **different directories** — selectable
+   per goal (spoken/typed), defaulting to the last one used. The cockpit panel
+   offers the list; the goal can name the target.
+2. **Mode/model**: **voicecast's own explicit config** (own file in
+   `%APPDATA%\voicecast\agent.json`, doesn't inherit ZCode settings); overridable
+   per goal.
+3. **Permission**: auto-approve reads, require a human for mutation (mirrors the
    guardrail).
-4. **Onde roda o bridge**: **utilityProcess** (isolamento de crash — queda do
-   bridge não derruba gravação/ditado).
+4. **Where the bridge runs**: **utilityProcess** (crash isolation — a bridge
+   crash doesn't take down recording/dictation).
 
-## Sequência e estimativa
+## Sequence and estimate
 
 ```
-C1 (probe) → C2 (bridge) → C3 ∥ C4 → C5 → C6      ⚡ C7 o tempo todo
+C1 (probe) → C2 (bridge) → C3 ∥ C4 → C5 → C6      ⚡ C7 all the time
 ```
-~2–3 sessões de agente + 2 gates humanos (validação Windows). Tudo
-instrumentado por WP (regra transversal do cronograma).
+~2–3 agent sessions + 2 human gates (Windows validation). Everything
+instrumented per WP (cross-cutting rule of the schedule).

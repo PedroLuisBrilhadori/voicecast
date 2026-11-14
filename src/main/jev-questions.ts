@@ -1,63 +1,63 @@
 /**
- * Perguntas e limiares Jev do voicecast — arquivo único revisável
- * (espelho do padrão do workspace: scripts/lib/jev-questions.mjs; aqui os
- * textos vêm do probe validado em 2026-09-21, ver docs/RELATORIO-E1.md).
+ * Jev questions and thresholds for voicecast — single reviewable file
+ * (mirror of the workspace pattern: scripts/lib/jev-questions.mjs; here the
+ * texts come from the probe validated on 2026-09-21, see docs/RELATORIO-E1.md).
  *
- * Não editar os textos sem revalidar com o smoke test
+ * Do not edit the texts without revalidating with the smoke test
  * (VOICECAST_JEV_SMOKE=1 pnpm vitest run tests/jev.smoke.test.ts).
  */
 
-/** Rotas possíveis de uma entrada de voz (opções do choice — decidePaste depende delas). */
+/** Possible routes for a voice entry (choice options — decidePaste depends on them). */
 export const ROTAS = ["ditado_texto", "comando_agente", "anotacao_contexto", "conversa_social"] as const;
 export type Rota = (typeof ROTAS)[number];
 
-/** Acima desta confiança a rota é executada sozinha; abaixo, cola como ditado. */
+/** Above this confidence the route is executed on its own; below, pasted as dictation. */
 export const AUTO_CONFIDENCE = 0.9;
 
-/** F9 espera a resposta (antes de colar): orçamento curto, 1 tentativa. */
+/** F9 waits for the answer (before pasting): short budget, 1 attempt. */
 export const JEV_TIMEOUT_DITADO_MS = 4000;
-/** Sessão é julgada em background: orçamento folgado. */
+/** Session is judged in the background: generous budget. */
 export const JEV_TIMEOUT_SESSAO_MS = 15000;
 
-/** Roteamento de intenção do ditado F9 (choice — a pergunta rápida do caminho quente). */
+/** F9 dictation intent routing (choice — the quick question on the hot path). */
 export const Q_ROTA = {
   type: "choice",
-  instructions: "Rotear a entrada de voz do usuário capturada pelo voicecast.",
+  instructions: "Route the user's voice input captured by voicecast.",
   criteria: {
-    ditado_texto: "Usuário quer texto colado na janela focada (ditado puro)",
-    comando_agente: "Usuário está pedindo uma tarefa para o agente de código executar",
-    anotacao_contexto: "Contexto/observação para guardar e associar à sessão, sem ação imediata",
-    conversa_social: "Fala dirigida a outra pessoa ou pensamento solto, ignorar",
+    ditado_texto: "User wants text pasted into the focused window (pure dictation)",
+    comando_agente: "User is asking for a task for the code agent to execute",
+    anotacao_contexto: "Context/observation to store and associate with the session, no immediate action",
+    conversa_social: "Speech directed at another person or loose thought, ignore",
   },
 } as const;
 
-/** Julgamento de sessão (uma chamada, 3 perguntas em paralelo). */
+/** Session judgment (one call, 3 questions in parallel). */
 export const Q_RELEVANCIA = {
   type: "score",
-  instructions: "Relevância deste transcript como contexto para a próxima tarefa de código do agente.",
+  instructions: "Relevance of this transcript as context for the agent's next coding task.",
   criteria: [
-    "Conversa sem relação com código",
-    "Contexto geral do projeto",
-    "Contém pista útil: sintoma, suspeita ou módulo",
-    "Tarefa acionável com critérios claros",
+    "Conversation unrelated to code",
+    "General project context",
+    "Contains a useful clue: symptom, suspicion, or module",
+    "Actionable task with clear criteria",
   ],
 } as const;
 
 export const Q_PEDIDO = {
   type: "noul",
   instructions:
-    "O transcript contém um pedido direto para o agente executar uma tarefa (analisar, editar, rodar, responder)?",
+    "Does the transcript contain a direct request for the agent to execute a task (analyze, edit, run, answer)?",
   criteria: {
-    true: "Pedido explícito dirigido ao agente/assistente",
-    false: "Só conversa/observação, sem pedido",
+    true: "Explicit request directed at the agent/assistant",
+    false: "Just conversation/observation, no request",
   },
 } as const;
 
 export const Q_RISCO = {
   type: "noul",
-  instructions: "A tarefa pedida é somente-leitura e reversível (não muta código, infra nem dados)?",
+  instructions: "Is the requested task read-only and reversible (does not mutate code, infra, or data)?",
   criteria: {
-    true: "Só ler/diffar/consultar e responder",
-    false: "Envolve editar, deployar, deletar ou mutar algo",
+    true: "Only read/diff/query and answer",
+    false: "Involves editing, deploying, deleting, or mutating something",
   },
 } as const;

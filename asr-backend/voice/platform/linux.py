@@ -1,15 +1,15 @@
-"""Backend Linux (Wayland/Hyprland) — evdev + wl-clipboard/wtype.
+"""Linux backend (Wayland/Hyprland) — evdev + wl-clipboard/wtype.
 
-Paridade com o backend win32:
-  - hotkey: polling de /dev/input/event* (equivalente ao GetAsyncKeyState) —
-    requer o usuário no grupo `input` (ver runbook/recomendacoes do note);
-  - colagem: `wl-copy` (permanece residente — Popen, nunca run()) +
-    `wtype -k ctrl+v`; fallback unicode = `wtype "<texto>"` (UTF-8 direto,
-    independente de layout);
-  - beep: seno sintetizado tocado via sounddevice (sem kernel32.Beep);
-  - foco: Wayland entrega as teclas à janela focada — foreground_hwnd é no-op;
-  - painel: browser em modo app (chromium/firefox) ou xdg-open; resize no-op
-    (windowrule do Hyprland cobre se necessário).
+Parity with the win32 backend:
+  - hotkey: polling of /dev/input/event* (equivalent to GetAsyncKeyState) —
+    requires the user in the `input` group (see the note's runbook/recommendations);
+  - pasting: `wl-copy` (stays resident — Popen, never run()) +
+    `wtype -k ctrl+v`; unicode fallback = `wtype "<text>"` (direct UTF-8,
+    layout-independent);
+  - beep: synthesized sine played via sounddevice (no kernel32.Beep);
+  - focus: Wayland delivers keys to the focused window — foreground_hwnd is a no-op;
+  - panel: browser in app mode (chromium/firefox) or xdg-open; resize is a no-op
+    (the Hyprland windowrule covers it if needed).
 """
 
 from __future__ import annotations
@@ -47,28 +47,28 @@ _INPUT_EVENT = (
 VK_TO_EVDEV_FKEYS = {0x70 + i: 59 + i for i in range(10)}  # F1..F10
 VK_TO_EVDEV_FKEYS.update({0x7A: 87, 0x7B: 88})  # F11, F12
 
-# Modificadores rastreados p/ o combo Shift+F9 (abrir painel sem gravar)
+# Modifiers tracked for the Shift+F9 combo (open the panel without recording)
 KEY_LEFTSHIFT = 42
 KEY_RIGHTSHIFT = 54
 _SHIFT_CODES = {KEY_LEFTSHIFT, KEY_RIGHTSHIFT}
 
 
 def _keycode_from_vk(vk: int) -> int:
-    """VKCode -> código evdev. Só F1..F12 mapeados; override por env."""
+    """VKCode -> evdev code. Only F1..F12 mapped; env override."""
     env = os.environ.get("VOICE_HOTKEY_KEYCODE", "").strip()
     if env.isdigit():
         return int(env)
     if vk in VK_TO_EVDEV_FKEYS:
         return VK_TO_EVDEV_FKEYS[vk]
-    return 67  # KEY_F9 (default do plugin)
+    return 67  # KEY_F9 (plugin default)
 
 
 class _EvdevHotkey:
-    """Rastreia estado da tecla de ditado lendo /dev/input/event* diretamente.
+    """Tracks the dictation key state by reading /dev/input/event* directly.
 
-    Uma thread única varre todos os dispositivos em modo non-blocking; eventos
-    EV_KEY com o código alvo atualizam `_down`. Sem permissão (grupo input),
-    avisa uma vez e tenta rescan periódico.
+    A single thread scans all devices in non-blocking mode; EV_KEY events
+    with the target code update `_down`. Without permission (input group),
+    warns once and retries a periodic rescan.
     """
 
     def __init__(self, keycode: int) -> None:
@@ -88,9 +88,9 @@ class _EvdevHotkey:
             return self._down
 
     def shift_pressed(self) -> bool:
-        """Estado global do Shift — eventos evdev chegam na ordem física,
-        então um Shift apertado antes do F9 já está setado quando o poll
-        (~12ms) lê os dois estados juntos."""
+        """Global Shift state — evdev events arrive in physical order,
+        so a Shift pressed before F9 is already set when the poll
+        (~12ms) reads both states together."""
         if not self._started:
             self._started = True
             threading.Thread(target=self._run, daemon=True, name="evdev-hotkey").start()
@@ -104,9 +104,9 @@ class _EvdevHotkey:
             now = time.monotonic()
             if now - last_scan >= 5.0:
                 last_scan = now
-                # re-scan periódico incondicional: adota teclados que nasceram
-                # depois do boot (hotplug USB/BT, uinput de sessão remota —
-                # RustDesk recria os dispositivos a cada conexão)
+                # unconditional periodic re-scan: adopts keyboards born
+                # after boot (USB/BT hotplug, remote-session uinput —
+                # RustDesk recreates the devices on every connection)
                 fds = self._rescan(fds)
             if not fds:
                 time.sleep(1.0)
@@ -123,8 +123,8 @@ class _EvdevHotkey:
                 except BlockingIOError:
                     continue
                 except OSError:
-                    # dispositivo sumiu (BT/USB): fecha SÓ ele e segue;
-                    # o re-scan periódico devolve quem renascer
+                    # device vanished (BT/USB): close ONLY that one and move on;
+                    # the periodic re-scan brings back whoever is reborn
                     try:
                         os.close(fd)
                     except OSError:
@@ -138,21 +138,21 @@ class _EvdevHotkey:
         return self._rescan({})
 
     def _rescan(self, fds: dict[int, str]) -> dict[int, str]:
-        """Sincroniza os fds abertos com /dev/input/event* existentes.
+        """Syncs the open fds with the existing /dev/input/event* devices.
 
-        Sem isso, um teclado criado depois do primeiro scan (dongle USB/BT
-        plugado, uinput de sessão remota) nunca é monitorado — o F9 chega ao
-        kernel mas o daemon não lê.
+        Without this, a keyboard created after the first scan (USB/BT dongle
+        plugged in, remote-session uinput) is never monitored — the F9 reaches
+        the kernel but the daemon doesn't read it.
         """
         current = set(glob.glob("/dev/input/event*"))
-        # dispositivos que sumiram (unplug / fim de sessão remota)
+        # devices that vanished (unplug / end of remote session)
         for fd in [f for f, p in fds.items() if p not in current]:
             try:
                 os.close(fd)
             except OSError:
                 pass
             del fds[fd]
-        # dispositivos novos (hotplug)
+        # new devices (hotplug)
         opened = set(fds.values())
         had_fds = bool(fds)
         added, denied = 0, 0
@@ -166,23 +166,23 @@ class _EvdevHotkey:
                 continue
         if added and had_fds:
             log.info(
-                "hotkey evdev: +%d dispositivo(s) adotado(s) (hotplug), total=%d",
+                "hotkey evdev: +%d device(s) adopted (hotplug), total=%d",
                 added, len(fds),
             )
         if not fds and denied and not self._warned_no_perm:
             self._warned_no_perm = True
             log.error(
-                "sem permissao para ler /dev/input/event* (%d dispositivos negados) — "
-                "adicione o usuario ao grupo input: sudo usermod -aG input %s "
-                "(relogin necessario). Hotkey NAO funciona até lá.",
+                "no permission to read /dev/input/event* (%d devices denied) — "
+                "add the user to the input group: sudo usermod -aG input %s "
+                "(re-login required). Hotkey does NOT work until then.",
                 denied, os.environ.get("USER", "?"),
             )
         elif fds and not self._logged_total:
-            # primeira varredura bem-sucedida loga o total; adoções
-            # posteriores têm log próprio (evita spam a cada 5s)
+            # first successful scan logs the total; later
+            # adoptions get their own log (avoids spam every 5s)
             self._logged_total = True
             log.info(
-                "hotkey evdev: %d dispositivo(s) monitorado(s), keycode=%d",
+                "hotkey evdev: %d device(s) monitored, keycode=%d",
                 len(fds), self.keycode,
             )
         return fds
@@ -216,7 +216,7 @@ _hotkey: _EvdevHotkey | None = None
 def _get_hotkey() -> _EvdevHotkey:
     global _hotkey
     if _hotkey is None:
-        from voice.config import VoiceConfig  # hotkey configurável (hotkey_vk)
+        from voice.config import VoiceConfig  # configurable hotkey (hotkey_vk)
 
         try:
             vk = VoiceConfig().get()["hotkey_vk"]
@@ -235,13 +235,13 @@ def shift_pressed() -> bool:
 
 
 def beep(freq: int, ms: int) -> None:
-    """Beep sintetizado tocado via pw-play (cliente PipeWire).
+    """Synthesized beep played via pw-play (PipeWire client).
 
-    NÃO usar sounddevice/PortAudio aqui: portaudio do sistema é só-ALSA e,
-    ao abrir o device default, pode segurar o PCM hw (pcmC0D0p) com mmap
-    mesmo após o fim do stream — bloqueia o PipeWire e o sistema fica mudo
-    (sink cai no dummy "Saída de falsa"). pw-play é cliente do PipeWire:
-    nunca abre /dev/snd direto, então não existe risco de bloqueio.
+    Do NOT use sounddevice/PortAudio here: system portaudio is ALSA-only and,
+    when opening the default device, may hold the hw PCM (pcmC0D0p) with mmap
+    even after the stream ends — it blocks PipeWire and the system goes mute
+    (the sink falls back to the dummy "Saída de falsa"). pw-play is a PipeWire
+    client: it never opens /dev/snd directly, so there is no blocking risk.
     """
     try:
         import io
@@ -252,7 +252,7 @@ def beep(freq: int, ms: int) -> None:
 
         player = shutil.which("pw-play") or shutil.which("paplay")
         if not player:
-            log.warning("beep ignorado: sem pw-play/paplay no PATH")
+            log.warning("beep skipped: no pw-play/paplay in PATH")
             return
 
         sr = 44100
@@ -263,8 +263,8 @@ def beep(freq: int, ms: int) -> None:
         wave[:edge] *= np.linspace(0, 1, edge, dtype=np.float32)
         wave[-edge:] *= np.linspace(1, 0, edge, dtype=np.float32)
 
-        # cache em /tmpfs: gera o wav 1x por boot por (freq, ms); evita
-        # re-sintetizar a cada F9 e dispensa limpeza (some no reboot)
+        # cache in /tmpfs: generates the wav 1x per boot per (freq, ms); avoids
+        # re-synthesizing on every F9 and needs no cleanup (gone on reboot)
         cache = Path("/dev/shm/voice-dictation-beeps")
         cache.mkdir(exist_ok=True)
         path = cache / f"{freq}-{ms}.wav"
@@ -278,7 +278,7 @@ def beep(freq: int, ms: int) -> None:
             buf.seek(0)
             path.write_bytes(buf.read())
 
-        # fire-and-forget destacado do daemon (não herda fds nem morre junto)
+        # fire-and-forget detached from the daemon (inherits no fds, doesn't die with it)
         subprocess.Popen(
             [player, str(path)],
             stdout=subprocess.DEVNULL,
@@ -286,12 +286,12 @@ def beep(freq: int, ms: int) -> None:
             start_new_session=True,
         )
     except Exception:
-        log.exception("beep falhou (ignorado)")
+        log.exception("beep failed (ignored)")
 
 
-# ── Foco / janela alvo ────────────────────────────────────────────
+# ── Focus / target window ─────────────────────────────────────────
 def foreground_hwnd() -> int:
-    """No-op no Wayland: a janela focada recebe as teclas naturalmente."""
+    """No-op on Wayland: the focused window receives the keys naturally."""
     return 0
 
 
@@ -308,20 +308,20 @@ def pid_alive(pid: int) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
-        return True  # processo existe, mas é de outro usuário
+        return True  # process exists, but belongs to another user
     except OSError:
         return False
 
 
-# ── Colagem ───────────────────────────────────────────────────────
+# ── Pasting ───────────────────────────────────────────────────────
 def _have(bin_name: str) -> bool:
     return shutil.which(bin_name) is not None
 
 
 def set_clipboard(text: str) -> bool:
-    """wl-copy PERMANECE residente para servir pastes futuros — Popen sem wait."""
+    """wl-copy STAYS resident to serve future pastes — Popen without wait."""
     if not _have("wl-copy"):
-        log.warning("wl-copy não encontrado (pacote wl-clipboard)")
+        log.warning("wl-copy not found (wl-clipboard package)")
         return False
     try:
         subprocess.Popen(
@@ -332,14 +332,14 @@ def set_clipboard(text: str) -> bool:
         )
         return True
     except Exception:
-        log.exception("wl-copy falhou")
+        log.exception("wl-copy failed")
         return False
 
 
 def _wtype(args: list[str]) -> bool:
     if not _have("wtype"):
         log.warning(
-            "wtype não encontrado (pacote community/wtype) — colagem indisponível"
+            "wtype not found (community/wtype package) — pasting unavailable"
         )
         return False
     try:
@@ -351,12 +351,12 @@ def _wtype(args: list[str]) -> bool:
             )
         return proc.returncode == 0
     except Exception:
-        log.exception("wtype falhou")
+        log.exception("wtype failed")
         return False
 
 
-# KWin (KDE) não implementa o protocolo de teclado virtual do wtype — o
-# fallback é o ydotool (uinput, via ydotoold do usuário; unit ydotool.service)
+# KWin (KDE) doesn't implement wtype's virtual keyboard protocol — the
+# fallback is ydotool (uinput, via the user's ydotoold; ydotool.service unit)
 _YDOTOOL_SOCKET = os.path.join(
     os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000"), ".ydotool_socket"
 )
@@ -364,7 +364,7 @@ _YDOTOOL_SOCKET = os.path.join(
 
 def _ydotool(args: list[str]) -> bool:
     if not _have("ydotool"):
-        log.info("ydotool ausente no PATH")
+        log.info("ydotool missing from PATH")
         return False
     try:
         proc = subprocess.run(
@@ -380,13 +380,13 @@ def _ydotool(args: list[str]) -> bool:
             )
         return proc.returncode == 0
     except Exception:
-        log.exception("ydotool falhou")
+        log.exception("ydotool failed")
         return False
 
 
 def _foco_ativo() -> str:
-    """Nome da janela ativa X11/XWayland — diagnóstico da colagem (foco vazio
-    = foco em janela Wayland nativa, invisível pro xprop)."""
+    """Name of the active X11/XWayland window — pasting diagnostics (empty focus
+    = focus on a native Wayland window, invisible to xprop)."""
     try:
         out = subprocess.run(
             ["xprop", "-root", "_NET_ACTIVE_WINDOW"],
@@ -394,9 +394,9 @@ def _foco_ativo() -> str:
         )
         win = out.stdout.decode(errors="replace").split("=")[-1].strip()
     except Exception as exc:
-        return f"(xprop indisponível: {exc})"
+        return f"(xprop unavailable: {exc})"
     if win in ("0x0", ""):
-        return "nenhuma (foco em janela Wayland nativa ou tela de bloqueio)"
+        return "none (focus on a native Wayland window or lock screen)"
     try:
         nome = subprocess.run(
             ["xdotool", "getwindowname", win],
@@ -408,26 +408,27 @@ def _foco_ativo() -> str:
 
 
 def _paste_ctrl_v() -> bool:
-    log.info("colagem: foco ativo: %s", _foco_ativo())
+    log.info("paste: active focus: %s", _foco_ativo())
     if _wtype(["-M", "Ctrl", "-k", "v", "-m", "Ctrl"]):
         return True
-    # evdev: 29=LeftCtrl, 47=KEY_V (25 é KEY_P — "Ctrl+V" com 25 apertava
-    # Ctrl+P e o paste nunca chegava; erro vindo da migração para o ydotool)
+    # evdev: 29=LeftCtrl, 47=KEY_V (25 is KEY_P — "Ctrl+V" with 25 pressed
+    # Ctrl+P and the paste never landed; bug from the ydotool migration)
     ok = _ydotool(["key", "29:1", "47:1", "47:0", "29:0"])
-    log.info("colagem: ydotool ctrl+v ok=%s", ok)
+    log.info("paste: ydotool ctrl+v ok=%s", ok)
     return ok
 
 
 def _clipboard_registrado(text: str, timeout_s: float = 0.6) -> bool:
-    """Espera o wl-copy aparecer como fonte do clipboard (poll com wl-paste).
+    """Waits for wl-copy to show up as the clipboard source (poll via wl-paste).
 
-    O Ctrl+V só cola o que o compositor já registrou: se a injeção vence o
-    registro, o alvo recebe o clipboard ANTIGO (ou nada) — e o paste manual
-    posterior do usuário funciona, pois aí a fonte já está no ar. Retorna
-    False por timeout (o chamador decide: injeta assim mesmo, fail-soft).
+    Ctrl+V only pastes what the compositor has already registered: if the
+    injection wins the race against the registration, the target receives the
+    OLD clipboard (or nothing) — and the user's later manual paste works,
+    because by then the source is in place. Returns False on timeout (the
+    caller decides: inject anyway, fail-soft).
     """
     if not _have("wl-paste"):
-        log.warning("wl-paste não encontrado — sem verificação de registro")
+        log.warning("wl-paste not found — no registration check")
         time.sleep(0.1)
         return False
     deadline = time.monotonic() + timeout_s
@@ -439,7 +440,7 @@ def _clipboard_registrado(text: str, timeout_s: float = 0.6) -> bool:
                 capture_output=True, timeout=2,
             )
             if cur.returncode == 0 and cur.stdout.decode("utf-8", "replace") == text:
-                log.info("clipboard registrado após %.0fms (%d polls)",
+                log.info("clipboard registered after %.0fms (%d polls)",
                          (timeout_s - (deadline - time.monotonic())) * 1000, attempt)
                 return True
         except Exception:
@@ -447,15 +448,15 @@ def _clipboard_registrado(text: str, timeout_s: float = 0.6) -> bool:
         attempt += 1
         time.sleep(delay)
         delay = min(delay * 1.6, 0.08)
-    log.warning("clipboard não confirmou registro em %.0fs (%d polls) — injetando assim mesmo", timeout_s, attempt)
+    log.warning("clipboard did not confirm registration in %.0fs (%d polls) — injecting anyway", timeout_s, attempt)
     return False
 
 
 def _paste_clipboard(text: str) -> str:
     if not set_clipboard(text):
         return "clipboard-set-falhou"
-    # espera o registro real da fonte no compositor antes do Ctrl+V (o sleep
-    # fixo de 50ms perdia a corrida e o alvo colava clipboard velho/vazio)
+    # waits for the source to be actually registered in the compositor before Ctrl+V (the
+    # fixed 50ms sleep was losing the race and the target pasted an old/empty clipboard)
     _clipboard_registrado(text)
     if not _paste_ctrl_v():
         return "ctrl-v-bloqueado"
@@ -469,38 +470,38 @@ def _paste_unicode(text: str) -> str:
 
 
 def paste_into_focused(text: str, mode: str, target_hwnd: int) -> str:
-    """Insere na janela focada. Mesma semântica do win32: UMA inserção por
-    ditado — clipboard→unicode apenas se a etapa anterior falhou de fato."""
+    """Inserts into the focused window. Same semantics as win32: ONE insertion per
+    dictation — clipboard→unicode only if the previous step actually failed."""
     if mode == "unicode":
         return _paste_unicode(text)
 
     used = _paste_clipboard(text)
     if used == "clipboard":
         return used
-    log.warning("clipboard %s - fallback unicode", used)
+    log.warning("clipboard %s - unicode fallback", used)
     return _paste_unicode(text)
 
 
-# ── Overlay do painel ─────────────────────────────────────────────
+# ── Panel overlay ─────────────────────────────────────────────────
 PANEL_TITLE = "Dictação por Voz"
 
-# Janela recém-aberta ainda não casa no match por título (o chromium só seta
-# o título da página depois de carregar; antes disso é initialTitle=URL) —
-# cooldown evita abrir uma SEGUNDA janela nesse vácuo.
+# A freshly opened window doesn't match by title yet (chromium only sets
+# the page title after loading; before that it's initialTitle=URL) —
+# the cooldown avoids opening a SECOND window in that gap.
 _PANEL_SPAWN_COOLDOWN_S = 5.0
 _panel_spawn_lock = threading.Lock()
-_panel_spawn_at = 0.0  # time.monotonic() do último spawn (0 = nunca spawnou)
+_panel_spawn_at = 0.0  # time.monotonic() of the last spawn (0 = never spawned)
 
 
 def _hypr_sigs() -> list[str]:
-    """Assinaturas de instância do Hyprland para tentar, mais recente primeiro.
+    """Hyprland instance signatures to try, most recent first.
 
-    O serviço pode subir antes de o autostart importar
-    HYPRLAND_INSTANCE_SIGNATURE ao systemd user — ou sobreviver a um restart
-    do Hyprland, que troca a assinatura. Nesses estados o `hyprctl` puro
-    falha ("HYPRLAND_INSTANCE_SIGNATURE not set!" / socket morto) e o painel
-    virava uma janela nova a cada F9. As instâncias vivas são descobertas
-    pelos sockets em $XDG_RUNTIME_DIR/hypr/<sig>/.socket.sock.
+    The service may start before autostart imports
+    HYPRLAND_INSTANCE_SIGNATURE into the systemd user session — or survive a
+    Hyprland restart, which changes the signature. In those states plain
+    `hyprctl` fails ("HYPRLAND_INSTANCE_SIGNATURE not set!" / dead socket) and
+    the panel used to spawn a new window on every F9. Live instances are
+    discovered via the sockets in $XDG_RUNTIME_DIR/hypr/<sig>/.socket.sock.
     """
     sigs: list[str] = []
     env_sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "").strip()
@@ -521,7 +522,7 @@ def _hypr_sigs() -> list[str]:
 
 
 def _hyprctl(sig: str, *args: str) -> str | None:
-    """roda `hyprctl -i <sig> ...`; stdout (str) se ok, None se falhou."""
+    """runs `hyprctl -i <sig> ...`; stdout (str) on success, None on failure."""
     try:
         out = subprocess.run(
             ["hyprctl", "-i", sig, *args], capture_output=True, timeout=3
@@ -534,13 +535,14 @@ def _hyprctl(sig: str, *args: str) -> str | None:
 
 
 def _focus_hypr_addr(sig: str, addr: str) -> bool:
-    """Foca a janela <addr> na instância <sig>; sucesso só com resposta 'ok'.
+    """Focuses window <addr> on instance <sig>; success only with an 'ok' reply.
 
-    Hyprland >= 0.56 (lua IPC) rejeita o request clássico
-    `dispatch focuswindow address:X` com erro de sintaxe Lua — a forma nova é
-    `eval hl.dispatch(hl.dsp.focus({window='address:X'}))`. Tentamos a nova
-    primeiro e caímos para a clássica (instâncias pré-0.56). Respostas
-    "warning:" (janela sumiu entre o clients e o foco) não valem sucesso.
+    Hyprland >= 0.56 (lua IPC) rejects the classic
+    `dispatch focuswindow address:X` request with a Lua syntax error — the new
+    form is `eval hl.dispatch(hl.dsp.focus({window='address:X'}))`. We try the
+    new one first and fall back to the classic (pre-0.56 instances).
+    "warning:" replies (window vanished between clients and the focus) don't
+    count as success.
     """
     replies = [
         _hyprctl(
@@ -554,9 +556,9 @@ def _focus_hypr_addr(sig: str, addr: str) -> bool:
 
 
 def _focus_existing_panel() -> bool:
-    """Foca a janela do painel se já existir (Hyprland IPC). True se achou.
+    """Focuses the panel window if it already exists (Hyprland IPC). True if found.
 
-    Sem isso, cada gravação abria OUTRA janela do browser em modo app.
+    Without this, every recording opened ANOTHER browser window in app mode.
     """
     ipc_ok = False
     for sig in _hypr_sigs():
@@ -575,15 +577,15 @@ def _focus_existing_panel() -> bool:
                     return True
     if not ipc_ok:
         log.warning(
-            "painel: IPC do Hyprland inacessível — foco de janela existente "
-            "falhou (sigs tentadas: %s)", _hypr_sigs() or "nenhuma",
+            "panel: Hyprland IPC unreachable — focusing the existing window "
+            "failed (sigs tried: %s)", _hypr_sigs() or "none",
         )
     return False
 
 
 def show_panel_window(expanded: bool = False) -> None:
-    """Foca a janela do painel existente; abre em modo app só se não houver."""
-    # largura acoplada a: web/src/App.tsx (resizeWindow) e platform/win32.py
+    """Focuses the existing panel window; opens in app mode only if absent."""
+    # width coupled to: web/src/App.tsx (resizeWindow) and platform/win32.py
     w, h = (
         (860, 880) if expanded else (860, 400)
     )
@@ -593,7 +595,7 @@ def show_panel_window(expanded: bool = False) -> None:
             _panel_spawn_at = 0.0
             return
         if time.monotonic() - _panel_spawn_at < _PANEL_SPAWN_COOLDOWN_S:
-            log.info("painel: janela recente em abertura — spawn em cooldown")
+            log.info("panel: recent window still opening — spawn in cooldown")
             return
         candidates = [
             ["chromium", f"--app={PANEL_URL}", f"--window-size={w},{h}"],
@@ -615,18 +617,18 @@ def show_panel_window(expanded: bool = False) -> None:
                     return
                 except Exception:
                     continue
-        log.warning("nenhum browser para abrir o painel %s (ignorado)", PANEL_URL)
+        log.warning("no browser to open the panel %s (ignored)", PANEL_URL)
 
 
 def resize_panel_window(width: int, height: int) -> None:
-    """No-op no Linux — fixe tamanho/posição com windowrule do Hyprland."""
+    """No-op on Linux — pin size/position with a Hyprland windowrule."""
 
 
-# ── Spawn do ASR ──────────────────────────────────────────────────
+# ── ASR spawn ─────────────────────────────────────────────────────
 def asr_command() -> list[str] | None:
     exe = venv_python()
     if not os.path.exists(exe):
-        log.error("venv não encontrado para spawn do ASR: %s", exe)
+        log.error("venv not found for ASR spawn: %s", exe)
         return None
     return [exe, "-m", "voice.asr_service", "--port", "8701"]
 

@@ -1,105 +1,105 @@
-# C6 — AN.4: anotações no buildContext · pronto
+# C6 — AN.4: annotations in buildContext · done
 
-## Objetivo
-O "Copiar contexto p/ ZCode" (`buildContext`) passa a citar as marcações de
-anotação da sessão (laser/pincel + prints queimados), para o agente consumidor
-saber O QUE foi destacado na tela, além do áudio/transcrição.
+## Objective
+"Copiar contexto p/ ZCode" ["Copy context to ZCode" — in-app button] (`buildContext`) now cites the session's
+annotation marks (laser/brush + burned screenshots), so the consuming
+agent knows WHAT was highlighted on screen, beyond audio/transcription.
 
-## Contexto obrigatório (ler antes)
-- `/home/pedro/programing/projetos/voicecast/AGENTS.md` (regras do repo)
+## Required context (read first)
+- `/home/pedro/programing/projetos/voicecast/AGENTS.md` (repo rules)
 - `/home/pedro/programing/projetos/voicecast/src/main/library.ts` — `buildContext`
-  (é aqui que a seção nova entra; note a seção "Trechos" como exemplo de formato)
-- `/home/pedro/programing/projetos/voicecast/src/shared/annotations.ts` — motor
-  puro: tipos de evento e fold do log (fonte da verdade do formato)
-- `/home/pedro/programing/projetos/voicecast/src/main/annotations.ts` — como o
-  `annotations.jsonl` é escrito (campo a campo) e onde ficam os prints queimados
+  (this is where the new section goes; note the "Trechos" section as a format example)
+- `/home/pedro/programing/projetos/voicecast/src/shared/annotations.ts` — pure
+  engine: event types and log fold (source of truth of the format)
+- `/home/pedro/programing/projetos/voicecast/src/main/annotations.ts` — how
+  `annotations.jsonl` is written (field by field) and where burned screenshots live
 - `/home/pedro/programing/projetos/voicecast/docs/PLANO-ANOTACOES-TELA.md` —
-  decisões do plano (WYSIWYG, prints D6/D7)
+  plan decisions (WYSIWYG, D6/D7 screenshots)
 
-## Escopo
-**Fazer:**
-- Em `buildContext` (src/main/library.ts): nova seção `Anotações (N):` com, por
-  marcação: tempo relativo (fmtTs), tipo (laser/stroke/erase…), e — quando
-  existir print queimado correspondente em `frames/` — o path
-  `wslPathQuoted(...)` do PNG.
-- Lógica de leitura/agregação do jsonl em função PURA nova
-  `src/shared/annotations-context.ts` (fold reaproveitando o motor puro),
-  testável sem electron; `library.ts` só consome.
-- Telemetria (DoD): counter `voicecast_context_annotations_total` (nº de
-  marcações incluídas no contexto; 0 também emite? não — só quando houver).
+## Scope
+**Do:**
+- In `buildContext` (src/main/library.ts): new section `Anotações (N):` (literal section name emitted by the app: "Annotations (N):") with, per
+  mark: relative time (fmtTs), type (laser/stroke/erase…), and — when a matching burned screenshot exists in `frames/` — the
+  `wslPathQuoted(...)` path of the PNG.
+- jsonl read/aggregation logic in a new PURE function
+  `src/shared/annotations-context.ts` (fold reusing the pure engine),
+  testable without electron; `library.ts` only consumes.
+- Telemetry (DoD): counter `voicecast_context_annotations_total` (number of
+  marks included in the context; 0 also emits? no — only when there are some).
 
-**Não tocar:** motor de desenho/overlay, IPC, editor UI, asr/jev, runner.
+**Don't touch:** drawing/overlay engine, IPC, editor UI, asr/jev, runner.
 
-## Aceite verificável
-- `pnpm ci:local` verde em `/home/pedro/programing/projetos/voicecast`.
-- Teste novo em `tests/annotations-context.test.ts` com fixture de jsonl
-  (≥3 eventos: stroke, laser, clear) validando o resumo gerado.
-- Teste em `tests/` provando que `buildContext` inclui a seção quando o
-  jsonl existe (mock de fs como os testes de storage fazem) e não quebra
-  quando não existe.
+## Verifiable acceptance
+- `pnpm ci:local` green in `/home/pedro/programing/projetos/voicecast`.
+- New test in `tests/annotations-context.test.ts` with a jsonl fixture
+  (≥3 events: stroke, laser, clear) validating the generated summary.
+- Test in `tests/` proving that `buildContext` includes the section when the
+  jsonl exists (fs mock as the storage tests do) and doesn't break
+  when it doesn't.
 
-## Riscos e gotchas
-- `annotations.jsonl` pode não existir (sessão sem anotação) — seção simples
-  não aparece (comportamento atual da seção Trechos).
-- Tempos do jsonl são relativos ao `startedAt` real (`recorder.start()`) —
-  usar fmtTs como nas outras seções.
-- Não ler prints de `frames/` além dos que existirem (readdir + match por
-  timestamp arredondado, tolerante a não achar — linha sem path).
+## Risks and gotchas
+- `annotations.jsonl` may not exist (session without annotation) — the section simply
+  doesn't appear (current Trechos section behavior).
+- jsonl times are relative to the real `startedAt` (`recorder.start()`) —
+  use fmtTs as in the other sections.
+- Don't read screenshots from `frames/` beyond the existing ones (readdir + match by
+  rounded timestamp, tolerant to not finding — line without path).
 
-## Entrega
-Commits convencionais (`feat(c6): …`) no repo, SEM push. Preencher a seção
-Resultado abaixo.
+## Delivery
+Conventional commits (`feat(c6): …`) in the repo, NO push. Fill in the
+Result section below.
 
-## Resultado (preenche o piloto)
-**Entregue (2026-09-27):**
-- `src/shared/annotations-context.ts` (novo, puro — sem electron):
-  `summarizeAnnotationEvents(jsonl, frameFiles)` faz o parse tolerante do
-  jsonl + o fold via motor puro (`foldEvents`) e devolve as marcações;
-  `annotationSection(jsonl, frameFiles, framesDir)` devolve as linhas prontas
-  (`{ count, activeStrokes, skipped, lines }`, null quando não há marcação).
-  `fmtTs` (m:ss) passou a morar aqui e o `library.ts` importa dela.
-- `src/main/library.ts` — `buildContext` ganhou a seção `Anotações (N):`
-  (entre Trechos e Julgamento): por marcação, tempo relativo + tipo; path do
-  print queimado via `wslPathQuoted(...)` só quando o PNG existe em `frames/`
-  (readdir; sem match → linha sem path). Counter
-  `voicecast_context_annotations_total` (DoD) declarado junto e emitido SÓ
-  quando há marcações (`add(count)` dentro do bloco da seção).
-- Testes: `tests/annotations-context.test.ts` (13 — fixture jsonl com
-  stroke+laser+clear+print, correlação stroke↔print queimado, undo/redo,
-  borracha nos 2 modos, jsonl vazio/corrompido, render exato das linhas) e
-  `tests/library-buildcontext.test.ts` (4 — seção entra quando o jsonl existe
-  com path absoluto do print; sem print correspondente; jsonl vazio; sem jsonl
-  não quebra). Electron mockado (`app.getPath` → tmpdir) + fs real em
-  diretório temporário.
+## Result (filled in by the pilot)
+**Delivered (2026-09-27):**
+- `src/shared/annotations-context.ts` (new, pure — no electron):
+  `summarizeAnnotationEvents(jsonl, frameFiles)` does the tolerant parse of
+  the jsonl + the fold via the pure engine (`foldEvents`) and returns the marks;
+  `annotationSection(jsonl, frameFiles, framesDir)` returns the ready lines
+  (`{ count, activeStrokes, skipped, lines }`, null when there are no marks).
+  `fmtTs` (m:ss) moved to live here and `library.ts` imports it from here.
+- `src/main/library.ts` — `buildContext` gained the `Anotações (N):` section
+  (between Trechos and Julgamento): per mark, relative time + type; path of the
+  burned screenshot via `wslPathQuoted(...)` only when the PNG exists in `frames/`
+  (readdir; no match → line without path). Counter
+  `voicecast_context_annotations_total` (DoD) declared alongside and emitted ONLY
+  when there are marks (`add(count)` inside the section block).
+- Tests: `tests/annotations-context.test.ts` (13 — jsonl fixture with
+  stroke+laser+clear+screenshot, stroke↔burned-screenshot correlation, undo/redo,
+  eraser in both modes, empty/corrupt jsonl, exact line render) and
+  `tests/library-buildcontext.test.ts` (4 — section enters when the jsonl exists
+  with the absolute screenshot path; no matching screenshot; empty jsonl; no jsonl
+  doesn't break). Electron mocked (`app.getPath` → tmpdir) + real fs in a
+  temporary directory.
 
-**Evidências:** `pnpm ci:local` verde em
+**Evidence:** `pnpm ci:local` green in
 `/home/pedro/programing/projetos/voicecast` (typecheck + 103 passed / 3
-skipped — skips pré-existentes, ex. jev.smoke + build main/preload/renderer).
+skipped — pre-existing skips, e.g. jev.smoke + main/preload/renderer build).
 
-**Decisões de interpretação (dentro do briefing):**
-- Rótulos pt-BR no vocabulário do plano AN: `pincel`, `laser`,
-  `borracha (traço|área)`, `limpar`, `desfazer`, `refazer`, `print (marker|
-  auto|manual)` — o briefing citava "laser/stroke/erase" como tipos, mantive a
-  nomenclatura do PLANO-ANOTACOES-TELA (exemplo do AN.4 usa pincel/borracha).
-- Undo/redo também contam como marcação (o log é a fonte da verdade); o fold
-  marca strokes que não sobreviveram ao fim com `(apagado)`.
-- Correlação print↔stroke pelo campo `strokes` do evento `print` (ids exatos
-  gravados pelo engine), não por heurística de timestamp; a existência do PNG
-  é checada contra o readdir de `frames/` (tolerante a não achar).
-- O briefing pedia "mock de fs como os testes de storage fazem", mas não há
-  teste de storage em `tests/`; usei o padrão dos testes existentes
-  (agent-runner.test.ts): electron mockado + fs real em `os.tmpdir()`.
+**Interpretation decisions (within the briefing):**
+- pt-BR labels in the AN plan's vocabulary: `pincel` [brush], `laser`,
+  `borracha (traço|área)` [eraser (stroke|area)], `limpar` [clear], `desfazer` [undo], `refazer` [redo], `print (marker|
+  auto|manual)` [screenshot (marker|auto|manual)] — the briefing cited "laser/stroke/erase" as types; kept the
+  PLANO-ANOTACOES-TELA nomenclature (the AN.4 example uses pincel/borracha).
+  (Labels kept in pt-BR: they are literal strings emitted by the app's code, which is out of this scope.)
+- Undo/redo also count as a mark (the log is the source of truth); the fold
+  marks strokes that didn't survive to the end with `(apagado)` ["(erased)" — literal marker emitted by the app].
+- Screenshot↔stroke correlation via the `print` event's `strokes` field (exact ids
+  recorded by the engine), not by timestamp heuristic; the PNG's existence
+  is checked against the `frames/` readdir (tolerant to not finding).
+- The briefing asked for "fs mock as the storage tests do", but there is no
+  storage test in `tests/`; used the pattern of the existing tests
+  (agent-runner.test.ts): mocked electron + real fs in `os.tmpdir()`.
 
-**Pendências:**
-- Validação no Windows via `pnpm dev:win` é o gate humano da onda (protocolo —
-  piloto não valida sozinho no Windows).
-- Valor emitido do counter segue o padrão lazy do telemetry-core (emite no
-  primeiro `add` pós-init); conferência visual fica p/ o dashboard Grafana
-  (`voicecast`), como as demais métricas.
+**Pending items:**
+- Windows validation via `pnpm dev:win` is the wave's human gate (protocol —
+  the pilot doesn't validate on Windows alone).
+- The counter's emitted value follows telemetry-core's lazy pattern (emits on the
+  first `add` after init); visual check stays for the Grafana dashboard
+  (`voicecast`), like the other metrics.
 
-**Achados (fora do escopo, não mexidos):**
-- `fmtTs` pré-existente arredonda segundos: t≈59.7 formata como `0:60`
-  (matemática original da fmtTs do library.ts, apenas movida p/ o shared).
-- O exemplo de formato do AN.4 no PLANO (linha única "Marcações: 6 (…)") foi
-  superseded pelo formato do briefing (lista numerada, como Trechos) —
-  briefing prevalece; doc do plano não foi alterado.
+**Findings (out of scope, untouched):**
+- The pre-existing `fmtTs` rounds seconds: t≈59.7 formats as `0:60`
+  (original math of library.ts's fmtTs, just moved to shared).
+- The AN.4 format example in the PLAN (single line "Marcações: 6 (…)" ["Marks: 6 (…)" — literal app format]) was
+  superseded by the briefing's format (numbered list, like Trechos) —
+  briefing prevails; the plan doc was not changed.
