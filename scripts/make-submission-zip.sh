@@ -56,11 +56,12 @@ bad = [n for n in names if n.startswith(".git/") or "/.git/" in n
 if bad:
     fail.append(f"conteúdo proibido no zip: {bad[:5]}")
 
-# 2. nada de node_modules/.env/dist
+# 2. nada de node_modules/.env/dist/docs/probes
 bad2 = [n for n in names if "node_modules" in n or n.endswith("/.env")
-        or "/dist/" in n or ".mimosa" in n]
+        or "/dist/" in n or ".mimosa" in n
+        or n.startswith(("voicecast/docs/", "voicecast/scripts/probes/"))]
 if bad2:
-    fail.append(f"artefatos de build/segredo no zip: {bad2[:5]}")
+    fail.append(f"artefato de build/histórico pessoal no zip: {bad2[:5]}")
 
 # 3. essenciais presentes
 for want in ("voicecast/package.json", "voicecast/pnpm-lock.yaml",
@@ -112,6 +113,9 @@ git -C "$REPO_ROOT" archive HEAD --prefix=voicecast/ | tar -x -C "$STAGE"
 
 log 2 4 "sanitizando"
 rm -rf "$STAGE/voicecast/AGENTS.md" "$STAGE/voicecast/.mimosa"
+# histórico interno com dado pessoal (transcripts, paths do usuário, nomes) —
+# não é necessário para as tasks de código; o repo mantém, o zip de submissão não
+rm -rf "$STAGE/voicecast/docs" "$STAGE/voicecast/scripts/probes"
 
 log 3 4 "empacotando"
 rm -f "$OUT"
