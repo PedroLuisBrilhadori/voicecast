@@ -6,7 +6,7 @@
  * synthetic Ctrl+V). Before capturing, holds the daemon's F9 via hold on
  * :8700 (v2 transition); without a daemon, works the same (nothing to suspend).
  */
-import { BrowserWindow, clipboard, globalShortcut, ipcMain } from "electron";
+import { clipboard, globalShortcut, ipcMain } from "electron";
 import { asrHealth, asrModelStatus, transcribeAudioFile, type Transcript } from "./asr";
 import { asrAutoEnableIfNeeded, asrHostStatus, backendPython, backendSrc } from "./asr-host";
 import { logError, logInfo } from "./logging";
@@ -17,7 +17,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { Buffer } from "node:buffer";
-import { IPC, type CaptureEvent } from "../shared/ipc";
+import { broadcast } from "./broadcast";
 import { decidePaste, judgeDictation } from "./jev";
 import { annotations } from "./annotations";
 import { sessionDirs } from "./storage";
@@ -25,12 +25,6 @@ import { sessionDirs } from "./storage";
 const M_DICTATIONS = counter("voicecast_dictations_total", "dictations by status");
 const M_ASR_COLD = counter("voicecast_asr_model_cold_total", "transcriptions that waited for model load (post-boot cold start)");
 const H_TRANSCRIBE = histogram("voicecast_transcribe_seconds", "ASR transcription duration");
-
-function broadcast(e: CaptureEvent): void {
-  for (const w of BrowserWindow.getAllWindows()) {
-    if (!w.isDestroyed()) w.webContents.send(IPC.event, e);
-  }
-}
 
 type DictationState = "idle" | "recording" | "transcribing";
 
