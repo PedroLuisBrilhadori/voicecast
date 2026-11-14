@@ -1,6 +1,6 @@
 /**
- * Cliente do ASR local (voice-dictation :8701) — serviço compartilhado da v2.
- * Failover de URLs (padrão asr_router do voice), health e transcrição de arquivo.
+ * Local ASR client (voice-dictation :8701) — the shared v2 service.
+ * URL failover (voice asr_router pattern), health, and file transcription.
  */
 import fs from "node:fs";
 import { tmpdir } from "node:os";
@@ -44,8 +44,8 @@ function asrUrls(): { name: string; url: string }[] {
     });
 }
 
-/** Espera o host subir antes de desistir (warmup do spawn: a porta abre
- *  em segundos; o load do modelo continua em background no serviço). */
+/** Waits for the host to come up before giving up (spawn warmup: the port opens
+ *  within seconds; model loading continues in the background on the service). */
 export async function asrHealth(opts?: {
   waitMs?: number;
 }): Promise<{ ok: boolean; source?: string }> {
@@ -62,9 +62,9 @@ export async function asrHealth(opts?: {
   }
 }
 
-/** Estado do modelo no ASR (/v1/model-status) — usado para mostrar na barra
- *  POR QUE a primeira transcrição após o boot é lenta (load do modelo na
- *  GPU). Fail-soft: null quando o serviço não responde. */
+/** Model status on the ASR (/v1/model-status) — used to show in the bar
+ *  WHY the first transcription after boot is slow (model load on the
+ *  GPU). Fail-soft: null when the service doesn't respond. */
 export async function asrModelStatus(): Promise<{
   loaded: boolean;
   expectedLoadS: number;
@@ -80,7 +80,7 @@ export async function asrModelStatus(): Promise<{
   return null;
 }
 
-/** Extrai o áudio do mp4 da sessão para wav 16k mono (padrão do uniscraper/asr.ts). */
+/** Extracts session mp4 audio to 16k mono wav (uniscraper/asr.ts pattern). */
 async function extractWav(mp4: string): Promise<string> {
   const wav = path.join(tmpdir(), `voicecast-${path.basename(mp4, ".mp4")}.wav`);
   const ff = await resolveFfmpeg();
@@ -88,17 +88,17 @@ async function extractWav(mp4: string): Promise<string> {
   return wav;
 }
 
-/** Transcreve bytes de áudio (webm/opus, wav…) direto via /v1/transcribe. */
+/** Transcribes audio bytes (webm/opus, wav…) directly via /v1/transcribe. */
 export async function transcribeBuffer(
   buf: Buffer,
   filename: string,
 ): Promise<Transcript> {
-  let lastErr = "sem endpoint";
+  let lastErr = "no endpoint";
   for (const ep of asrUrls()) {
     try {
       const form = new FormData();
       form.append("file", new Blob([new Uint8Array(buf)], { type: "audio/webm" }), filename);
-      logInfo(`ASR: transcrevendo via ${ep.name} (${(buf.length / 1_048_576).toFixed(2)}MB)`);
+      logInfo(`ASR: transcribing via ${ep.name} (${(buf.length / 1_048_576).toFixed(2)}MB)`);
       const r = await fetch(`${ep.url}/v1/transcribe`, {
         method: "POST",
         body: form,
@@ -127,10 +127,10 @@ export async function transcribeBuffer(
       lastErr = String(e);
     }
   }
-  throw new Error(`ASR indisponível (${lastErr})`);
+  throw new Error(`ASR unavailable (${lastErr})`);
 }
 
-/** Transcreve qualquer arquivo de áudio/vídeo: extrai wav 16k via ffmpeg e envia. */
+/** Transcribes any audio/video file: extracts 16k wav via ffmpeg and sends it. */
 export async function transcribeAudioFile(file: string): Promise<Transcript> {
   const wav = await extractWav(file);
   try {
@@ -140,7 +140,7 @@ export async function transcribeAudioFile(file: string): Promise<Transcript> {
   }
 }
 
-/** Transcreve o mp4 da sessão via /v1/transcribe (failover de endpoints). */
+/** Transcribes the session mp4 via /v1/transcribe (endpoint failover). */
 export async function transcribeSession(mp4: string): Promise<Transcript> {
   return transcribeAudioFile(mp4);
 }

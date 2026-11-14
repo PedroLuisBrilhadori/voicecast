@@ -1,8 +1,8 @@
 /**
- * goalContextEnricher (C3) — enriquecedor do goal contra a biblioteca REAL
- * (electron mockado → tmpdir, fs real) e integração ponta a ponta com o
- * agente fake do runner: o bloco delimitado do contexto tem que chegar no
- * argv do agente (e o goal frio não carrega nada).
+ * goalContextEnricher (C3) — goal enricher against the REAL library
+ * (electron mocked → tmpdir, real fs) and end-to-end integration with the
+ * runner's fake agent: the delimited context block has to reach the agent's
+ * argv (and the cold goal carries nothing).
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
@@ -40,7 +40,7 @@ interface MakeSessionOpts {
   comMidia?: boolean;
 }
 
-/** Sessão mínima na biblioteca real (meta + mp4 + transcript opcional). */
+/** Minimal session in the real library (meta + mp4 + optional transcript). */
 function makeSession(o: MakeSessionOpts): { dir: string; name: string } {
   seq += 1;
   const name = `${String(1000 + seq)}-c3s${seq}`;
@@ -95,50 +95,50 @@ afterEach(() => {
   delete process.env.FAKE_ECHO_ARGS;
 });
 
-describe("goalContextEnricher — política contra a biblioteca real", () => {
-  it("sessão recente e relevante → bloco delimitado com título e fala no goal", async () => {
+describe("goalContextEnricher — policy against the real library", () => {
+  it("recent and relevant session → delimited block with title and speech in the goal", async () => {
     makeSession({ ageMin: 5, relevancia: 2.7, transcriptText: "ajuda a abrir o PR do cockpit" });
     const r = await goalContextEnricher()("troca o título do PR");
     expect(r.included).toBe(true);
     expect(r.contextChars).toBeGreaterThan(0);
-    expect(r.goal.startsWith("troca o título do PR")).toBe(true); // goal vem primeiro
+    expect(r.goal.startsWith("troca o título do PR")).toBe(true); // goal comes first
     expect(r.goal).toContain(SESSION_CONTEXT_BEGIN);
     expect(r.goal).toContain(SESSION_CONTEXT_END);
     expect(r.goal).toContain("Sessão de teste 1");
     expect(r.goal).toContain("ajuda a abrir o PR do cockpit");
-    expect(r.goal).toContain("relevância 2.7/3"); // julgamento Jev vai junto
+    expect(r.goal).toContain("relevance 2.7/3"); // Jev judgment goes along
   });
 
-  it("sessão velha (2h), mesmo relevante → goal intacto", async () => {
+  it("old session (2h), even if relevant → goal intact", async () => {
     makeSession({ ageMin: 120, relevancia: 3, transcriptText: "fala antiga" });
     const r = await goalContextEnricher()("meu goal");
     expect(r).toEqual({ goal: "meu goal", included: false, contextChars: 0 });
   });
 
-  it("relevância < 2 → goal intacto", async () => {
+  it("relevance < 2 → goal intact", async () => {
     makeSession({ ageMin: 5, relevancia: 1.5, transcriptText: "fala irrelevante" });
     const r = await goalContextEnricher()("meu goal");
     expect(r.included).toBe(false);
   });
 
-  it("Jev ausente + recentíssima com transcript → inclui (política conservadora)", async () => {
+  it("Jev absent + very recent with transcript → includes (conservative policy)", async () => {
     makeSession({ ageMin: 2, transcriptText: "acabei de gravar isso" });
     const r = await goalContextEnricher()("meu goal");
     expect(r.included).toBe(true);
     expect(r.goal).toContain("acabei de gravar isso");
   });
 
-  it("Jev ausente + 10min → não inclui", async () => {
+  it("Jev absent + 10min → doesn't include", async () => {
     makeSession({ ageMin: 10, transcriptText: "fala de dez minutos atrás" });
     expect((await goalContextEnricher()("g")).included).toBe(false);
   });
 
-  it("Jev ausente + sem transcript → não inclui", async () => {
+  it("Jev absent + no transcript → doesn't include", async () => {
     makeSession({ ageMin: 2 });
     expect((await goalContextEnricher()("g")).included).toBe(false);
   });
 
-  it("Jev ok + sem transcript → inclui sem quebrar (markdown sem seção de fala)", async () => {
+  it("Jev ok + no transcript → includes without breaking (markdown without speech section)", async () => {
     makeSession({ ageMin: 5, relevancia: 3 });
     const r = await goalContextEnricher()("g");
     expect(r.included).toBe(true);
@@ -146,38 +146,38 @@ describe("goalContextEnricher — política contra a biblioteca real", () => {
     expect(r.goal).not.toContain("Fala:");
   });
 
-  it("sem sessões → goal intacto", async () => {
+  it("no sessions → goal intact", async () => {
     const r = await goalContextEnricher()("meu goal");
     expect(r).toEqual({ goal: "meu goal", included: false, contextChars: 0 });
   });
 
-  it("última sessão sem mídia (getSessionDetail null) → fail-soft, goal intacto", async () => {
+  it("last session without media (getSessionDetail null) → fail-soft, goal intact", async () => {
     makeSession({ ageMin: 5, relevancia: 3, comMidia: false });
     expect((await goalContextEnricher()("g")).included).toBe(false);
   });
 
-  it("a ÚLTIMA sessão é a mais recente (duas sessões, a mais nova decide)", async () => {
+  it("the LAST session is the most recent one (two sessions, the newest decides)", async () => {
     makeSession({ ageMin: 90, relevancia: 3, transcriptText: "sessão antiga" });
     makeSession({ ageMin: 3, relevancia: 1.2, transcriptText: "sessão nova irrelevante" });
     const r = await goalContextEnricher()("g");
-    expect(r.included).toBe(false); // a mais nova manda e ela é irrelevante
+    expect(r.included).toBe(false); // the newest rules and it's irrelevant
   });
 });
 
-describe("goalContextEnricher — truncamento obrigatório", () => {
-  it("transcript gigante → contexto truncado em ~2k tokens, nunca o transcript completo", async () => {
+describe("goalContextEnricher — mandatory truncation", () => {
+  it("huge transcript → context truncated to ~2k tokens, never the full transcript", async () => {
     makeSession({ ageMin: 5, relevancia: 3, transcriptText: "palavra ".repeat(3000) }); // ~21k chars
     const r = await goalContextEnricher()("g");
     expect(r.included).toBe(true);
-    // orçamento de ~2000 tokens ≈ 8k chars (+ margem do marcador)
+    // budget of ~2000 tokens ≈ 8k chars (+ marker margin)
     expect(r.contextChars).toBeLessThanOrEqual(8100);
-    expect(r.goal).toContain("… (contexto truncado)");
-    expect(r.goal.length).toBeLessThan(21_000); // transcript completo NUNCA vai
+    expect(r.goal).toContain("… (context truncated)");
+    expect(r.goal.length).toBeLessThan(21_000); // full transcript NEVER goes
   });
 });
 
-describe("integração ponta a ponta — o bloco chega no agente fake", () => {
-  it("runGoal + enricher real → bloco de contexto no argv do agente", async () => {
+describe("end-to-end integration — the block reaches the fake agent", () => {
+  it("runGoal + real enricher → context block in the agent's argv", async () => {
     makeSession({ ageMin: 5, relevancia: 2.7, transcriptText: "contexto que tem que chegar no agente" });
     process.env.FAKE_ECHO_ARGS = "1";
     const r = await runGoal(
@@ -191,7 +191,7 @@ describe("integração ponta a ponta — o bloco chega no agente fake", () => {
     expect(r.stdout).toContain(SESSION_CONTEXT_END);
   });
 
-  it("goal frio (sessão velha) → agente recebe o goal puro, sem bloco", async () => {
+  it("cold goal (old session) → agent receives the pure goal, no block", async () => {
     makeSession({ ageMin: 120, relevancia: 3, transcriptText: "fala antiga" });
     process.env.FAKE_ECHO_ARGS = "1";
     const r = await runGoal(

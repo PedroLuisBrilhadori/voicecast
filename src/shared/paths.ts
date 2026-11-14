@@ -1,13 +1,13 @@
 /**
- * Helpers de path puros (sem Electron) — testáveis em qualquer SO.
+ * Pure path helpers (no Electron) — testable on any OS.
  */
 
 const WIN_DRIVE = /^([A-Za-z]):[/\\](.*)$/;
 
 /**
- * Converte path Windows para o equivalente WSL (/mnt/c/...).
- * Usado pelo gerador de contexto ("Copiar para o ZCode") — o agente roda no
- * WSL e precisa ler os artefatos da sessão gravados no disco do Windows.
+ * Converts a Windows path to its WSL equivalent (/mnt/c/...).
+ * Used by the context generator ("Copy to ZCode") — the agent runs inside
+ * WSL and needs to read the session artifacts written to the Windows disk.
  */
 export function winPathToWsl(p: string): string {
   const m = WIN_DRIVE.exec(p);
@@ -17,15 +17,15 @@ export function winPathToWsl(p: string): string {
   return `/mnt/${drive}/${rest}`;
 }
 
-/** Igual ao acima, mas com aspas quando o path tem espaço (para colar em markdown). */
+/** Same as above, but quoted when the path has spaces (for pasting into markdown). */
 export function wslPathQuoted(p: string): string {
   const wsl = winPathToWsl(p);
   return /\s/.test(wsl) ? `"${wsl}"` : wsl;
 }
 
 /**
- * Nome de diretório de sessão: <hhmm>-<hash8> — legível e único.
- * hash determinístico a partir de chave estável (evita colisão no mesmo minuto).
+ * Session directory name: <hhmm>-<hash8> — readable and unique.
+ * Deterministic hash from a stable key (avoids collision within the same minute).
  */
 export function sessionDirName(
   now: Date,

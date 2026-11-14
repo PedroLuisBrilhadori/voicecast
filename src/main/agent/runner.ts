@@ -1,31 +1,31 @@
 /**
- * Runner de goals do cockpit (C2): executa o CLI do agente ZCode em modo
- * headless (-p) no diretório do goal, coletando stdout/stderr/exit.
+ * Cockpit goal runner (C2): executes the ZCode agent CLI in headless mode
+ * (-p) in the goal directory, collecting stdout/stderr/exit.
  *
- * - Runtime C2b (default, sem override): usa o CLI buildado do open source
- *   materializado por runtime-setup.ts (~/.local/state/voicecast/zcode-runtime)
- *   com o node24 do próprio runtime (o binário é esbuild p/ node 24 — nunca o
- *   node do sistema) e o data-dir próprio auto-curado com as identity keys
- *   (desbloqueio U2). O setup roda 1x por start do processo (self-heal por
- *   mtime do credentials do desktop).
- * - Override (legado): ZCODE_AGENT_BIN aponta o binário direto e desliga o
- *   runtime setup — spawn é o binário puro, como antes.
- * - Linux/WSL (testes): spawn direto. Windows (produção): `wsl.exe --exec
- *   /bin/sh -lc` com o goal via ENV (nunca argv interpolado — evita quebra de
- *   aspas/injeção no shell do WSL) e paths WSL ($HOME expandido dentro do
- *   WSL — nunca paths Windows); o self-heal de credentials roda dentro do
+ * - C2b runtime (default, no override): uses the built CLI of the open source
+ *   materialized by runtime-setup.ts (~/.local/state/voicecast/zcode-runtime)
+ *   with the runtime's own node24 (the binary is an esbuild build for node 24 — never the
+ *   system node) and its own auto-curated data-dir with the identity keys
+ *   (U2 unlock). The setup runs once per process start (self-heal by
+ *   the desktop credentials' mtime).
+ * - Override (legacy): ZCODE_AGENT_BIN points to the binary directly and turns off the
+ *   runtime setup — the spawn is the pure binary, as before.
+ * - Linux/WSL (tests): direct spawn. Windows (production): `wsl.exe --exec
+ *   /bin/sh -lc` with the goal via ENV (never interpolated argv — avoids
+ *   quote breaking/injection in the WSL shell) and WSL paths ($HOME expanded inside
+ *   WSL — never Windows paths); the credentials self-heal runs inside
  *   WSL via node24 -e (SETUP_CREDENTIALS_JS).
- * - W2b: o goal roda no `req.cwd` nos DOIS caminhos — direto usa o cwd do
- *   spawn; Windows resolve o path p/ WSL (winPathToWsl) e vai por ENV
- *   (VOICECAST_CWD), com `cd` no script (nunca argv interpolado — igual ao
- *   goal). cd falhou → exit 86 (distinto do 87 de pré-requisito).
- * - Fila de 1 goal por vez; timeout com kill; kill-switch VOICECAST_AGENT_BRIDGE=0.
- * - C3: o goal pode ser ENRIQUECIDO com o contexto bounded da última sessão
- *   (`req.enrich`, injetado pelo chamador — goal-context.ts; aqui só o
- *   contrato pura entra, sem import de electron). Atributos `context.*` vão
- *   no span `agent.goal`.
- * - Config: ZCODE_AGENT_BIN (override do binário), ZCODE_AGENT_TIMEOUT_MS,
- *   VOICECAST_ZCODE_BUILD_DIR e VOICECAST_RUNTIME_DIR (paths do runtime setup).
+ * - W2b: the goal runs in `req.cwd` on BOTH paths — direct uses the spawn's
+ *   cwd; Windows resolves the path to WSL (winPathToWsl) and passes it via ENV
+ *   (VOICECAST_CWD), with `cd` in the script (never interpolated argv — same as the
+ *   goal). cd failed → exit 86 (distinct from 87, the prerequisite one).
+ * - Queue of 1 goal at a time; timeout with kill; kill-switch VOICECAST_AGENT_BRIDGE=0.
+ * - C3: the goal can be ENRICHED with the last session's bounded context
+ *   (`req.enrich`, injected by the caller — goal-context.ts; only the
+ *   pure contract enters here, no electron import). The `context.*` attributes go
+ *   on the `agent.goal` span.
+ * - Config: ZCODE_AGENT_BIN (binary override), ZCODE_AGENT_TIMEOUT_MS,
+ *   VOICECAST_ZCODE_BUILD_DIR and VOICECAST_RUNTIME_DIR (runtime setup paths).
  */
 import { spawn } from "node:child_process";
 import os from "node:os";
@@ -45,21 +45,21 @@ import {
 import type { EnrichedGoal, GoalEnricher } from "../../shared/agent-context";
 import { winPathToWsl } from "../../shared/paths";
 
-const M_GOALS = counter("voicecast_agent_goals_total", "goals por desfecho");
-const H_GOAL = histogram("voicecast_agent_goal_seconds", "duração do goal");
+const M_GOALS = counter("voicecast_agent_goals_total", "goals by outcome");
+const H_GOAL = histogram("voicecast_agent_goal_seconds", "goal duration");
 
 export interface RunnerConfig {
   enabled: boolean;
-  /** Binário do agente DENTRO do WSL. Default: zcode do runtime (C2b); ZCODE_AGENT_BIN sobrescreve. */
+  /** Agent binary INSIDE WSL. Default: runtime zcode (C2b); ZCODE_AGENT_BIN overrides it. */
   agentBin: string;
-  /** Node 24 do runtime — quando setado, o spawn é `<nodeBin> <agentBin> …` (binário esbuild). */
+  /** Runtime node 24 — when set, the spawn is `<nodeBin> <agentBin> …` (esbuild binary). */
   nodeBin?: string;
-  /** true quando NÃO há override: runGoal executa o runtime setup antes do spawn. */
+  /** true when there is NO override: runGoal runs the runtime setup before the spawn. */
   runtime?: boolean;
-  /** Override do runtime dir (VOICECAST_RUNTIME_DIR) — repassado ao script WSL. */
+  /** Runtime dir override (VOICECAST_RUNTIME_DIR) — passed through to the WSL script. */
   runtimeDir?: string;
   timeoutMs: number;
-  /** true quando o spawn é linux direto; false = Windows via wsl.exe sh -lc. */
+  /** true when the spawn is direct linux; false = Windows via wsl.exe sh -lc. */
   direct: boolean;
 }
 
@@ -69,12 +69,12 @@ export function agentRunnerConfig(env: NodeJS.ProcessEnv = process.env, platform
   const enabled = env.VOICECAST_AGENT_BRIDGE !== "0";
   const direct = platform !== "win32";
   const timeoutMs = Number(env.ZCODE_AGENT_TIMEOUT_MS) || 15 * 60_000;
-  // Override (legado): binário puro, sem runtime setup.
+  // Override (legacy): pure binary, no runtime setup.
   if (env.ZCODE_AGENT_BIN) {
     return { enabled, agentBin: env.ZCODE_AGENT_BIN, timeoutMs, direct, runtime: false };
   }
-  // Runtime C2b: paths do runtime setup. No Windows o spawn é via wsl.exe —
-  // paths WSL ($HOME expandido dentro do WSL), nunca paths Windows.
+  // C2b runtime: runtime setup paths. On Windows the spawn goes through wsl.exe —
+  // WSL paths ($HOME expanded inside WSL), never Windows paths.
   const runtimeDirOverride = env.VOICECAST_RUNTIME_DIR;
   const base = direct
     ? defaultRuntimePaths(env).runtimeDir
@@ -90,20 +90,20 @@ export function agentRunnerConfig(env: NodeJS.ProcessEnv = process.env, platform
   };
 }
 
-/** Prefixo dos scripts WSL (W2b): cd no diretório do goal — path chega por
- * ENV (VOICECAST_CWD, já resolvido p/ WSL pelo caller), nunca argv interpolado.
- * Vazio → pula (mantém o cwd default do wsl.exe); falhou → exit 86 distinto. */
+/** WSL script prefix (W2b): cd into the goal directory — the path arrives via
+ * ENV (VOICECAST_CWD, already resolved to WSL by the caller), never interpolated argv.
+ * Empty → skips (keeps the wsl.exe default cwd); failed → distinct exit 86. */
 const WSL_CD_SH =
-  'if [ -n "$VOICECAST_CWD" ]; then cd "$VOICECAST_CWD" || { echo "voicecast-agent: cwd inacessivel: $VOICECAST_CWD" >&2; exit 86; }; fi; ';
+  'if [ -n "$VOICECAST_CWD" ]; then cd "$VOICECAST_CWD" || { echo "voicecast-agent: cwd inaccessible: $VOICECAST_CWD" >&2; exit 86; }; fi; ';
 
 const WSL_GOAL_SH =
   WSL_CD_SH + 'exec "$VOICECAST_AGENT_BIN" --surface terminal -p "$VOICECAST_GOAL"';
 
 /**
- * Script do modo runtime (Windows): garante binários (copia do build U1 se
- * preciso), roda o self-heal de credentials dentro do WSL (node24 -e) e exec
- * no node24 do runtime. Pré-requisito ausente → exit 87 (distinto). Single
- * line de propósito: argv do wsl.exe não leva newlines.
+ * Runtime mode script (Windows): ensures binaries (copies from the U1 build if
+ * needed), runs the credentials self-heal inside WSL (node24 -e) and execs
+ * the runtime node24. Missing prerequisite → exit 87 (distinct). Single
+ * line on purpose: wsl.exe argv carries no newlines.
  */
 const WSL_RUNTIME_SH =
   WSL_CD_SH +
@@ -111,23 +111,23 @@ const WSL_RUNTIME_SH =
   'BUILD="${VOICECAST_ZCODE_BUILD_DIR:-/tmp/zcode-cli-build}"; ' +
   'if [ ! -x "$RT/node24/bin/node" ] || [ ! -f "$RT/zcode" ]; then ' +
   'if [ ! -f "$BUILD/zcode" ] || [ ! -x "$BUILD/node24/bin/node" ]; then ' +
-  'echo "voicecast-agent: runtime do agente ausente — materialize o build do U1 (ver docs/wp/U1-build-cli.md)" >&2; exit 87; fi; ' +
+  'echo "voicecast-agent: agent runtime missing — materialize the U1 build (see docs/wp/U1-build-cli.md)" >&2; exit 87; fi; ' +
   'mkdir -p "$RT"; cp -a "$BUILD/zcode" "$RT/zcode" || exit 87; chmod +x "$RT/zcode"; ' +
   'rm -rf "$RT/node24"; cp -a "$BUILD/node24" "$RT/node24" || exit 87; fi; ' +
   'if [ ! -f "$RT/provider/zcode-builtin.json" ]; then ' +
   'if [ ! -f "$BUILD/provider/zcode-builtin.json" ]; then ' +
-  'echo "voicecast-agent: runtime do agente ausente (provider config) — materialize o build do U1" >&2; exit 87; fi; ' +
+  'echo "voicecast-agent: agent runtime missing (provider config) — materialize the U1 build" >&2; exit 87; fi; ' +
   'mkdir -p "$RT/provider"; cp -a "$BUILD/provider/zcode-builtin.json" "$RT/provider/zcode-builtin.json" || exit 87; fi; ' +
   '"$RT/node24/bin/node" -e "$VOICECAST_SETUP_JS" "$HOME/.zcode/v2/credentials.json" "$RT/zcode-data" || ' +
-  '{ echo "voicecast-agent: sincronizacao de credentials falhou" >&2; exit 87; }; ' +
+  '{ echo "voicecast-agent: credentials sync failed" >&2; exit 87; }; ' +
   'export ZCODE_DATA_BASE_DIR="$RT/zcode-data" ZCODE_BUILTIN_PROVIDER_CONFIG_FILE="$RT/provider/zcode-builtin.json"; ' +
   '[ -f "$HOME/.zcode/v2/provider_config.json" ] && export ZCODE_PERSONAL_PROVIDER_CONFIG_FILE="$HOME/.zcode/v2/provider_config.json"; ' +
   'exec "$RT/node24/bin/node" "$RT/zcode" --surface terminal -p "$VOICECAST_GOAL"';
 
-/** argv do spawn (sem o goal — ele vai por env). rtEnv = envs do runtime setup
- * (modo direto). W2b: `cwd` do goal — no caminho Windows é resolvido p/ WSL e
- * vai por ENV (VOICECAST_CWD) p/ o `cd` do script; no direto quem aplica é o
- * cwd do spawn (runGoal). */
+/** Spawn argv (without the goal — it goes via env). rtEnv = runtime setup envs
+ * (direct mode). W2b: goal `cwd` — on the Windows path it is resolved to WSL and
+ * goes via ENV (VOICECAST_CWD) for the script's `cd`; on direct, the spawn's
+ * own cwd applies it (runGoal). */
 export function goalSpawnArgs(
   cfg: RunnerConfig,
   goal: string,
@@ -137,18 +137,18 @@ export function goalSpawnArgs(
   const goalArgs = ["--surface", "terminal", "-p", goal];
   if (cfg.direct) {
     if (cfg.nodeBin) {
-      // runtime C2b: esbuild binário exige o node24 do runtime (nunca o node do sistema)
+      // C2b runtime: the esbuild binary requires the runtime node24 (never the system node)
       return { cmd: cfg.nodeBin, args: [cfg.agentBin, ...goalArgs], env: { ...(rtEnv ?? {}) } };
     }
-    // exec direto (override): bin expandido e goal em argv (spawn não usa shell)
+    // direct exec (override): expanded bin and goal in argv (spawn uses no shell)
     const bin = cfg.agentBin.replace(/^\$HOME/, process.env.HOME ?? "~");
     return { cmd: bin, args: goalArgs, env: {} };
   }
-  // W2b: diretório do goal nos DOIS modos Windows — path resolvido p/ WSL
-  // (winPathToWsl) e por ENV, nunca interpolado no argv do wsl.exe.
+  // W2b: goal directory on BOTH Windows modes — path resolved to WSL
+  // (winPathToWsl) and via ENV, never interpolated into the wsl.exe argv.
   const env: NodeJS.ProcessEnv = cwd ? { VOICECAST_CWD: winPathToWsl(cwd) } : {};
   if (cfg.runtime) {
-    // Windows + runtime: script resolve paths WSL ($HOME) e roda o self-heal dentro do WSL
+    // Windows + runtime: script resolves WSL paths ($HOME) and runs the self-heal inside WSL
     env.VOICECAST_GOAL = goal;
     env.VOICECAST_SETUP_JS = SETUP_CREDENTIALS_JS;
     if (cfg.runtimeDir) env.VOICECAST_RUNTIME_DIR = cfg.runtimeDir;
@@ -169,9 +169,9 @@ export interface RunGoalRequest {
   cwd: string;
   timeoutMs?: number;
   /**
-   * C3: enriquecedor opcional do goal (contexto bounded da última sessão —
-   * goal-context.ts produz; o chamador injeta). Falha do enricher NUNCA
-   * quebra o goal (fail-soft, attrs context.* = sem).
+   * C3: optional goal enricher (last session's bounded context —
+   * produced by goal-context.ts; injected by the caller). An enricher failure NEVER
+   * breaks the goal (fail-soft, context.* attrs = without).
    */
   enrich?: GoalEnricher;
 }
@@ -185,15 +185,15 @@ export interface RunGoalResult {
   error?: string;
 }
 
-/** Executa um goal (sem fila — quem orquestra usa GoalQueue). */
+/** Runs a goal (no queue — orchestration uses GoalQueue). */
 export async function runGoal(req: RunGoalRequest, cfg: RunnerConfig = agentRunnerConfig()): Promise<RunGoalResult> {
   if (!cfg.enabled) {
-    return { phase: "failed", exitCode: null, stdout: "", stderrTail: "", durationMs: 0, error: "bridge desligado (VOICECAST_AGENT_BRIDGE=0)" };
+    return { phase: "failed", exitCode: null, stdout: "", stderrTail: "", durationMs: 0, error: "bridge off (VOICECAST_AGENT_BRIDGE=0)" };
   }
   const t0 = Date.now();
   const timeoutMs = req.timeoutMs ?? cfg.timeoutMs;
-  // C3: enriquecimento ANTES do span — os attrs context.* entram no start do
-  // agent.goal. Enricher quebrado não quebra o goal (fail-soft, "sem").
+  // C3: enrichment BEFORE the span — the context.* attrs enter the start of
+  // agent.goal. A broken enricher doesn't break the goal (fail-soft, "sem").
   let goalFinal = req.goal;
   let ctxAttrs: Record<string, string | number> = {};
   if (req.enrich) {
@@ -209,9 +209,9 @@ export async function runGoal(req: RunGoalRequest, cfg: RunnerConfig = agentRunn
     }
   }
   return withSpan("agent.goal", { "goal.id": req.id, ...ctxAttrs }, async () => {
-    // Runtime setup (C2b): materializa/cura o data-dir 1x por processo —
-    // falha de pré-requisito (sem build U1 / sem login) vira goal failed com
-    // erro claro (o counter de setup já foi emitido no ensure).
+    // Runtime setup (C2b): materializes/curates the data-dir once per process —
+    // a prerequisite failure (no U1 build / no login) becomes a failed goal with
+    // a clear error (the setup counter was already emitted at ensure).
     let rt: RuntimeSetupResult | null = null;
     if (cfg.runtime) {
       try {
@@ -267,15 +267,15 @@ export async function runGoal(req: RunGoalRequest, cfg: RunnerConfig = agentRunn
   });
 }
 
-// W2b: fonte única do resumo do goal — shared/agent-goal.ts (a cópia que
-// vivia aqui saiu). Re-export mantido p/ quem importa do runner.
+// W2b: single source of the goal summary — shared/agent-goal.ts (the copy that
+// lived here is gone). Re-export kept for whoever imports from the runner.
 export { goalSummary } from "../../shared/agent-goal";
 
 export class GoalQueue {
   private busy = false;
   private pending: RunGoalRequest[] = [];
   private onState: (state: GoalState) => void;
-  /** C3: enriquecedor do goal (contexto da última sessão) — injetado pelo chamador. */
+  /** C3: goal enricher (last session's context) — injected by the caller. */
   private enrich?: GoalEnricher;
 
   constructor(onState: (state: GoalState) => void = () => {}, enrich?: GoalEnricher) {
@@ -287,10 +287,10 @@ export class GoalQueue {
     return this.pending.length + (this.busy ? 1 : 0);
   }
 
-  /** Enfileira um goal; inválido/disabled devolve erro sem enfileirar. */
+  /** Enqueues a goal; invalid/disabled returns an error without enqueueing. */
   enqueue(req: RunGoalRequest, cfg: RunnerConfig = agentRunnerConfig()): { ok: true } | { ok: false; error: string } {
-    if (!cfg.enabled) return { ok: false, error: "bridge desligado (VOICECAST_AGENT_BRIDGE=0)" };
-    if (!req.goal.trim()) return { ok: false, error: "goal vazio" };
+    if (!cfg.enabled) return { ok: false, error: "bridge off (VOICECAST_AGENT_BRIDGE=0)" };
+    if (!req.goal.trim()) return { ok: false, error: "empty goal" };
     this.pending.push(req);
     void this.drain(cfg);
     return { ok: true };
@@ -317,11 +317,11 @@ export class GoalQueue {
     if (this.pending.length) void this.drain(cfg);
   }
 
-  /** Resumo da fila p/ barra ("2 na fila · rodando 12s"). */
+  /** Queue summary for the bar ("2 queued · running 12s"). */
   statusSummary(): string {
-    if (!this.busy && !this.pending.length) return "sem goals";
+    if (!this.busy && !this.pending.length) return "no goals";
     const parts: string[] = [];
-    if (this.pending.length) parts.push(`${this.pending.length} na fila`);
-    return parts.join(" · ") || "goal em andamento";
+    if (this.pending.length) parts.push(`${this.pending.length} queued`);
+    return parts.join(" · ") || "goal in progress";
   }
 }

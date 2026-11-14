@@ -1,18 +1,18 @@
 /**
- * Scroll-through nativo (AN.6): encaminha a roda do mouse para a janela DE
- * BAIXO do overlay quando ele está em modo desenho. O hit-test do Windows
- * entrega a roda ao overlay (janela normal cobrindo a tela) e o Electron não
- * tem como repassá-la — setIgnoreMouseEvents({forward:true}) só cobre
- * mousemove (e nem isso é confiável nesta máquina, ver RELATORIO-AN.md).
+ * Native scroll-through (AN.6): forwards the mouse wheel to the window
+ * UNDER the overlay when it is in drawing mode. The Windows hit-test
+ * hands the wheel to the overlay (normal window covering the screen) and Electron has
+ * no way to pass it through — setIgnoreMouseEvents({forward:true}) only covers
+ * mousemove (and even that isn't reliable on this machine, see RELATORIO-AN.md).
  *
- * Técnica: tira o overlay do hit-test por um instante (WS_EX_TRANSPARENT no
- * exstyle — em janela layered afeta só hit-test, não pintura), pergunta
- * WindowFromPoint qual janela está no ponto, restaura o exstyle e posta
- * WM_MOUSEWHEEL nela. Tudo síncrono, na mesma chamada — sem flicker.
+ * Technique: removes the overlay from the hit-test for an instant (WS_EX_TRANSPARENT in
+ * the exstyle — on a layered window it affects hit-test only, not painting), asks
+ * WindowFromPoint which window is at the point, restores the exstyle and posts
+ * WM_MOUSEWHEEL to it. All synchronous, in the same call — no flicker.
  *
- * Windows-only + koffi lazy: fora do Windows (ou sem koffi carregável) é
- * no-op fail-soft (janelas elevadas via UIPI também silenciosamente ignoram
- * o PostMessage — aceitável, nada quebra).
+ * Windows-only + lazy koffi: outside Windows (or without a loadable koffi) it's a
+ * fail-soft no-op (elevated windows via UIPI also silently ignore
+ * PostMessage — acceptable, nothing breaks).
  */
 import type { BrowserWindow } from "electron";
 import { logError, logInfo } from "./logging";
@@ -29,11 +29,11 @@ interface User32 {
   getAncestor(hwnd: bigint, flags: number): bigint;
 }
 
-/** Superfície mínima do koffi (sem importar os tipos do pacote — ESM-only). */
+/** Minimal koffi surface (without importing the package types — ESM-only). */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-let user32: User32 | null | undefined; // undefined = não tentado; null = falhou
-let lastLogAt = 0; // throttle do log (a roda dispara rajadas de eventos)
-let outTimer: NodeJS.Timeout | null = null; // overlay fora da tela durante a rajada
+let user32: User32 | null | undefined; // undefined = not attempted; null = failed
+let lastLogAt = 0; // log throttle (the wheel fires event bursts)
+let outTimer: NodeJS.Timeout | null = null; // overlay off-screen during the burst
 
 const GA_ROOT = 2;
 
@@ -42,7 +42,7 @@ function loadUser32(): User32 | null {
   user32 = null;
   if (process.platform !== "win32") return user32;
   try {
-    // require (não import): só existe/é carregável no Windows host
+    // require (not import): only exists/loadable on the Windows host
     const koffi = require("koffi") as {
       load(name: string): { func(sig: string): any };
       struct(name: string, fields: Record<string, string>): unknown;
@@ -58,35 +58,35 @@ function loadUser32(): User32 | null {
       getAncestor: dll.func("intptr __stdcall GetAncestor(intptr hwnd, uint flags)"),
     };
   } catch (e) {
-    logError("native-wheel: koffi/user32 indisponível — scroll-through off:", e);
+    logError("native-wheel: koffi/user32 unavailable — scroll-through off:", e);
   }
   return user32;
 }
 
-/** HWND do overlay (buffer little-endian do Electron) — null fora do win32. */
+/** Overlay HWND (Electron little-endian buffer) — null outside win32. */
 export function hwndFromWindow(w: BrowserWindow): bigint | null {
   if (process.platform !== "win32") return null;
   try {
     return w.getNativeWindowHandle().readBigUInt64LE(0);
   } catch (e) {
-    logError("native-wheel: getNativeWindowHandle falhou:", e);
+    logError("native-wheel: getNativeWindowHandle failed:", e);
     return null;
   }
 }
 
-/** Move o cursor físico (px de tela) — smoke usa p/ simular hover real. */
+/** Moves the physical cursor (screen px) — the smoke test uses it to simulate real hover. */
 export function setCursorPos(x: number, y: number): boolean {
   const u32 = loadUser32();
   if (!u32) return false;
   try {
     return u32.setCursorPos(x, y);
   } catch (e) {
-    logError("native-wheel: setCursorPos falhou:", e);
+    logError("native-wheel: setCursorPos failed:", e);
     return false;
   }
 }
 
-/** Exstyle da janela (diagnóstico: LAYERED/TRANSPARENT por modo). */
+/** Window exstyle (diagnostics: LAYERED/TRANSPARENT per mode). */
 export function windowExStyle(w: BrowserWindow): number | null {
   const u32 = loadUser32();
   if (!u32) return null;
@@ -100,8 +100,8 @@ export function windowExStyle(w: BrowserWindow): number | null {
 }
 
 /**
- * Posta WM_MOUSEWHEEL na janela de baixo do ponto (x, y em px físicos de
- * tela). Retorna false se não achou alvo ou falhou (caller loga debug).
+ * Posts WM_MOUSEWHEEL to the window under the point (x, y in physical screen
+ * px). Returns false if no target was found or it failed (caller logs debug).
  */
 export function forwardWheelNative(
   hwndSelf: bigint,
@@ -115,19 +115,19 @@ export function forwardWheelNative(
   const u32 = loadUser32();
   if (!u32) return false;
   try {
-    // Empurra o overlay para fora da tela por um instante e pergunta
-    // WindowFromPoint quem está no ponto, trazendo-o de volta em seguida —
-    // tudo síncrono, sem tocar em foco/z-order/estilo. (WS_EX_TRANSPARENT não
-    // funciona aqui: a janela do Electron é WS_EX_NOREDIRECTIONBITMAP, não
-    // layered — o skip de hit-test por estilo exige WS_EX_LAYERED; validado no
-    // wheeltest de 2026-09-22: com o toggle de estilo, WindowFromPoint seguia
-    // devolvendo o filho do próprio overlay.)
+    // Pushes the overlay off-screen for an instant and asks
+    // WindowFromPoint who is at the point, bringing it back right after —
+    // all synchronous, without touching focus/z-order/style. (WS_EX_TRANSPARENT doesn't
+    // work here: the Electron window is WS_EX_NOREDIRECTIONBITMAP, not
+    // layered — hit-test skip via style requires WS_EX_LAYERED; validated in the
+    // 2026-09-22 wheeltest: with the style toggle, WindowFromPoint kept
+    // returning the overlay's own child.)
     const SWP = 0x15; // NOSIZE | NOZORDER | NOACTIVATE
     const OFF = -32000;
-    // Move o overlay para fora UMA VEZ POR RAJADA de roda (não por evento):
-    // cada SetWindowPos fullscreen força recomposição do DWM — por evento, o
-    // mouse engasga. Volta 150ms após a última roda (cliques nesse intervalo
-    // vão para o app de baixo — aceitável: quem está rolando não está clicando).
+    // Moves the overlay off-screen ONCE PER WHEEL BURST (not per event):
+    // each fullscreen SetWindowPos forces a DWM recomposition — per event, the
+    // mouse stutters. Comes back 150ms after the last wheel (clicks in that window
+    // go to the app below — acceptable: whoever is scrolling isn't clicking).
     if (!outTimer) u32.setWindowPos(hwndSelf, OFF, OFF, SWP);
     else clearTimeout(outTimer);
     outTimer = setTimeout(() => {
@@ -141,17 +141,17 @@ export function forwardWheelNative(
     try {
       target = u32.windowFromPoint({ x, y });
     } catch {
-      // WindowFromPoint não costuma falhar; nunca deixa o overlay fora
+      // WindowFromPoint rarely fails; never leave the overlay off-screen
     }
-    // segurança anti-loop: pode vir um HWND FILHO do próprio overlay
-    // (Chrome_RenderWidgetHostHWND) — compara pela raiz
+    // anti-loop safety: the target may be a CHILD HWND of the overlay itself
+    // (Chrome_RenderWidgetHostHWND) — compare by root
     const root = target === 0n ? 0n : u32.getAncestor(target, GA_ROOT);
     const selfRoot = u32.getAncestor(hwndSelf, GA_ROOT);
     if (target === 0n || target === hwndSelf || root === selfRoot) {
       const now = Date.now();
       if (now - lastLogAt > 1000) {
         lastLogAt = now;
-        logInfo(`native-wheel: sem alvo em (${x},${y}) target=${target} selfRoot=${selfRoot}`);
+        logInfo(`native-wheel: no target at (${x},${y}) target=${target} selfRoot=${selfRoot}`);
       }
       return false;
     }
@@ -159,11 +159,11 @@ export function forwardWheelNative(
     const now = Date.now();
     if (!ok || now - lastLogAt > 1000) {
       lastLogAt = now;
-      logInfo(`native-wheel: roda (${x},${y}) delta=${wparam >> 16} → alvo=${target} root=${root} post=${ok}`);
+      logInfo(`native-wheel: wheel (${x},${y}) delta=${wparam >> 16} → target=${target} root=${root} post=${ok}`);
     }
     return ok;
   } catch (e) {
-    logError("native-wheel: forwardWheel falhou:", e);
+    logError("native-wheel: forwardWheel failed:", e);
     return false;
   }
 }

@@ -1,27 +1,27 @@
 /**
- * Runtime setup do agente ZCode (C2b): materializa e mantém, em
- * ~/.local/state/voicecast/zcode-runtime/, o CLI buildado do open source
- * (U1) + um data-dir próprio auto-curado (U2) — tornando durável o
- * desbloqueio do goal headless.
+ * ZCode agent runtime setup (C2b): materializes and maintains, in
+ * ~/.local/state/voicecast/zcode-runtime/, the built CLI of the open source
+ * (U1) + its own auto-curated data-dir (U2) — making the headless goal
+ * unlock durable.
  *
- * Causa raiz do bloqueio (BUILD.md, seção U2): a síntese standalone de
- * account providers EXIGE a chave de credencial
- * `account-provider:<providerId>:identity`, que o desktop NÃO grava. Sem ela
- * o provider sai `entitled: false` e o `-p` morre em "Select a model before
- * continuing". O setup copia o credentials.json de ~/.zcode/v2/ (SOMENTE
- * LEITURA) para o data-dir próprio e injeta as identity keys (idempotente;
- * re-copia se o mtime do original mudar = self-heal se o desktop rotacionar).
+ * Root cause of the block (BUILD.md, U2 section): the standalone synthesis of
+ * account providers REQUIRES the credential key
+ * `account-provider:<providerId>:identity`, which the desktop does NOT write. Without it
+ * the provider comes out `entitled: false` and `-p` dies at "Select a model before
+ * continuing". The setup copies credentials.json from ~/.zcode/v2/ (READ
+ * ONLY) into its own data-dir and injects the identity keys (idempotent;
+ * re-copies if the original's mtime changed = self-heal if the desktop rotates it).
  *
- * Envs que o runner recebe daqui:
- * - ZCODE_DATA_BASE_DIR  → <runtimeDir>/zcode-data (credentials em .zcode/v2/)
+ * Envs the runner receives from here:
+ * - ZCODE_DATA_BASE_DIR  → <runtimeDir>/zcode-data (credentials at .zcode/v2/)
  * - ZCODE_BUILTIN_PROVIDER_CONFIG_FILE → <runtimeDir>/provider/zcode-builtin.json
- * - ZCODE_PERSONAL_PROVIDER_CONFIG_FILE → ~/.zcode/v2/provider_config.json (se existir)
+ * - ZCODE_PERSONAL_PROVIDER_CONFIG_FILE → ~/.zcode/v2/provider_config.json (if it exists)
  *
- * Telemetria: counter voicecast_agent_runtime_setup_total{resultado}
- * (ok | stale | sem-build | sem-credencial). NUNCA loga segredos — o módulo
- * não imprime nada; só contagens/paths.
+ * Telemetry: counter voicecast_agent_runtime_setup_total{resultado}
+ * (ok | stale | sem-build | sem-credencial). NEVER logs secrets — the module
+ * prints nothing; only counts/paths.
  *
- * Puro Node (sem electron) — testável em qualquer SO com paths explícitos.
+ * Pure Node (no electron) — testable on any OS with explicit paths.
  */
 import fs from "node:fs";
 import os from "node:os";
@@ -30,22 +30,22 @@ import { counter } from "../telemetry";
 
 const M_SETUP = counter(
   "voicecast_agent_runtime_setup_total",
-  "runtime setup do agente por resultado (ok|stale|sem-build|sem-credencial)",
+  "agent runtime setup by outcome (ok|stale|sem-build|sem-credencial)",
 );
 
-/** Exit code distinto para pré-requisito ausente (sem build U1 / sem credenciais). */
+/** Distinct exit code for a missing prerequisite (no U1 build / no credentials). */
 export const RUNTIME_SETUP_EXIT_MISSING_PREREQ = 87;
 
 export type RuntimeSetupResultado = "ok" | "stale" | "sem-build" | "sem-credencial";
 
 export interface RuntimePaths {
-  /** Build do CLI open source (U1): contém zcode, node24/ e provider/. */
+  /** Open source CLI build (U1): contains zcode, node24/, and provider/. */
   buildDir: string;
-  /** Diretório do runtime materializado (persistente — não usar /tmp). */
+  /** Materialized runtime directory (persistent — don't use /tmp). */
   runtimeDir: string;
-  /** Credentials do desktop (somente leitura). */
+  /** Desktop credentials (read-only). */
   credentialsSrc: string;
-  /** Provider config pessoal do desktop (somente leitura; opcional). */
+  /** Desktop personal provider config (read-only; optional). */
   personalProviderSrc: string;
 }
 
@@ -55,7 +55,7 @@ export interface RuntimeSetupResult {
   agentBin: string;
   providerConfigFile: string;
   dataBaseDir: string;
-  /** Envs prontos para o spawn do goal. */
+  /** Envs ready for the goal spawn. */
   env: Record<string, string>;
 }
 
@@ -69,14 +69,14 @@ export class RuntimeSetupError extends Error {
   }
 }
 
-/** Chave api-key gravada pelo desktop → identity key exigida pela síntese standalone (U2). */
+/** api-key key written by the desktop → identity key required by the standalone synthesis (U2). */
 const API_KEY_KEY = /^account-provider:coding-plan:(account:[^:]+):account:([^:]+):api-key$/;
 
 /**
- * Injeta as identity keys no mapa de credenciais (PURE — muta o objeto).
- * Valor = o UUID que já aparece no NOME da chave api-key (identificador de
- * conta, não segredo de request). Idempotente: só adiciona se ausente.
- * @returns quantas keys foram adicionadas.
+ * Injects the identity keys into the credentials map (PURE — mutates the object).
+ * Value = the UUID that already appears in the api-key key NAME (account
+ * identifier, not a request secret). Idempotent: only adds if absent.
+ * @returns how many keys were added.
  */
 export function injectIdentityKeys(data: Record<string, unknown>): number {
   let added = 0;
@@ -114,7 +114,7 @@ async function exists(p: string): Promise<boolean> {
   return (await statIf(p)) !== null;
 }
 
-/** Copia `src` → `dst` (arquivo) se dst ausente ou src mais novo/size diff. @returns true se re-copiou por cima de dst existente. */
+/** Copies `src` → `dst` (file) if dst is absent or src is newer/size differs. @returns true if re-copied over an existing dst. */
 async function copyIfStale(src: string, dst: string, mode?: number): Promise<boolean> {
   const s = await statIf(src);
   const d = await statIf(dst);
@@ -122,22 +122,22 @@ async function copyIfStale(src: string, dst: string, mode?: number): Promise<boo
     await fs.promises.mkdir(path.dirname(dst), { recursive: true });
     await fs.promises.copyFile(src, dst);
     if (mode !== undefined) await fs.promises.chmod(dst, mode);
-    return false; // provisionamento novo
+    return false; // new provisioning
   }
   if (s && (s.mtimeMs > d.mtimeMs || s.size !== d.size)) {
     await fs.promises.copyFile(src, dst);
     if (mode !== undefined) await fs.promises.chmod(dst, mode);
-    return true; // refresh sobre material existente
+    return true; // refresh over existing material
   }
   return false;
 }
 
 /**
- * Garante o runtime completo (binários + provider + credentials auto-curado).
- * Idempotente e self-heal por mtime. DURÁVEL: se o runtime já está completo,
- * o buildDir não é exigido (só serve para materializar/refresh).
- * Erros: RuntimeSetupError SEM_BUILD (pré-requisito U1 ausente) /
- * SEM_CREDENCIAL (usuário sem login no desktop). Nunca imprime segredos.
+ * Ensures the complete runtime (binaries + provider + auto-curated credentials).
+ * Idempotent and mtime self-heal. DURABLE: if the runtime is already complete,
+ * buildDir is not required (it only serves to materialize/refresh).
+ * Errors: RuntimeSetupError SEM_BUILD (missing U1 prerequisite) /
+ * SEM_CREDENCIAL (user without desktop login). Never prints secrets.
  */
 export async function ensureRuntime(paths: RuntimePaths = defaultRuntimePaths()): Promise<RuntimeSetupResult> {
   const { buildDir, runtimeDir, credentialsSrc, personalProviderSrc } = paths;
@@ -152,16 +152,16 @@ export async function ensureRuntime(paths: RuntimePaths = defaultRuntimePaths())
     M_SETUP?.add(1, { resultado: "sem-build" });
     throw new RuntimeSetupError(
       "SEM_BUILD",
-      `runtime do agente incompleto (${what}); materialize o build do U1 em ${buildDir} ` +
-        `(exit code de pré-requisito ausente: ${RUNTIME_SETUP_EXIT_MISSING_PREREQ}) — ver docs/wp/U1-build-cli.md`,
+      `incomplete agent runtime (${what}); materialize the U1 build at ${buildDir} ` +
+        `(missing-prerequisite exit code: ${RUNTIME_SETUP_EXIT_MISSING_PREREQ}) — see docs/wp/U1-build-cli.md`,
     );
   };
 
   let refreshed = false;
 
-  // 1. binário zcode (esbuild p/ node 24)
+  // 1. zcode binary (esbuild for node 24)
   if (!(await exists(dstZcode))) {
-    if (!(await exists(srcZcode))) semBuild("binário zcode ausente");
+    if (!(await exists(srcZcode))) semBuild("zcode binary missing");
     if (await copyIfStale(srcZcode, dstZcode, 0o755)) refreshed = true;
   } else {
     const s = await statIf(srcZcode);
@@ -173,9 +173,9 @@ export async function ensureRuntime(paths: RuntimePaths = defaultRuntimePaths())
     }
   }
 
-  // 2. node24/ (o binário é esbuild — spawn SEMPRE com este node, nunca o do sistema)
+  // 2. node24/ (the binary is esbuild — spawn ALWAYS with this node, never the system one)
   if (!(await exists(dstNode))) {
-    if (!(await exists(srcNode))) semBuild("runtime node24 ausente");
+    if (!(await exists(srcNode))) semBuild("node24 runtime missing");
     await fs.promises.rm(path.join(runtimeDir, "node24"), { recursive: true, force: true });
     await fs.promises.cp(path.join(buildDir, "node24"), path.join(runtimeDir, "node24"), { recursive: true });
   } else {
@@ -188,9 +188,9 @@ export async function ensureRuntime(paths: RuntimePaths = defaultRuntimePaths())
     }
   }
 
-  // 3. provider config bundled (fallback/early-return do CLI — BUILD.md U1)
+  // 3. bundled provider config (CLI fallback/early-return — BUILD.md U1)
   if (!(await exists(dstProvider))) {
-    if (!(await exists(srcProvider))) semBuild("provider/zcode-builtin.json ausente");
+    if (!(await exists(srcProvider))) semBuild("provider/zcode-builtin.json missing");
     if (await copyIfStale(srcProvider, dstProvider)) refreshed = true;
   } else {
     const s = await statIf(srcProvider);
@@ -201,21 +201,21 @@ export async function ensureRuntime(paths: RuntimePaths = defaultRuntimePaths())
     }
   }
 
-  // 4. data-dir próprio com credentials auto-curado (U2) — ~/.zcode somente leitura
+  // 4. own data-dir with auto-curated credentials (U2) — ~/.zcode read-only
   const dataBaseDir = path.join(runtimeDir, "zcode-data");
   const dstCred = path.join(dataBaseDir, ".zcode", "v2", "credentials.json");
   if (!(await exists(credentialsSrc))) {
     M_SETUP?.add(1, { resultado: "sem-credencial" });
     throw new RuntimeSetupError(
       "SEM_CREDENCIAL",
-      `credentials ausentes em ${credentialsSrc} — faça login no desktop zcode antes de rodar goals`,
+      `credentials missing at ${credentialsSrc} — log in to the zcode desktop before running goals`,
     );
   }
   let credStale = false;
   const dstCredStat = await statIf(dstCred);
   const srcCredStat = (await statIf(credentialsSrc))!;
   if (!dstCredStat || srcCredStat.mtimeMs > dstCredStat.mtimeMs) {
-    // NUNCA logar conteúdo — lê, injeta identity keys e grava com 600.
+    // NEVER log content — reads, injects identity keys, and writes with 600.
     const data = JSON.parse(await fs.promises.readFile(credentialsSrc, "utf8")) as Record<string, unknown>;
     injectIdentityKeys(data);
     await fs.promises.mkdir(path.dirname(dstCred), { recursive: true, mode: 0o700 });
@@ -224,7 +224,7 @@ export async function ensureRuntime(paths: RuntimePaths = defaultRuntimePaths())
     for (const dir of [dataBaseDir, path.join(dataBaseDir, ".zcode"), path.dirname(dstCred)]) {
       await fs.promises.chmod(dir, 0o700).catch(() => {});
     }
-    credStale = dstCredStat !== null; // re-cópia sobre material existente = self-heal
+    credStale = dstCredStat !== null; // re-copy over existing material = self-heal
   }
 
   const resultado: RuntimeSetupResultado = refreshed || credStale ? "stale" : "ok";
@@ -237,11 +237,11 @@ export async function ensureRuntime(paths: RuntimePaths = defaultRuntimePaths())
   return { resultado, nodeBin: dstNode, agentBin: dstZcode, providerConfigFile: dstProvider, dataBaseDir, env };
 }
 
-// --- Cache por processo: self-heal roda 1x por start do bridge ("a cada start") ---
+// --- Per-process cache: self-heal runs once per bridge start ("each start") ---
 
 let cached: Promise<RuntimeSetupResult> | null = null;
 
-/** ensureRuntime com cache por processo (falha não fica em cache — retry no próximo goal). */
+/** ensureRuntime with per-process cache (failure isn't cached — retry on the next goal). */
 export function ensureRuntimeCached(paths: RuntimePaths = defaultRuntimePaths()): Promise<RuntimeSetupResult> {
   if (!cached) {
     cached = ensureRuntime(paths).catch((e) => {
@@ -252,22 +252,22 @@ export function ensureRuntimeCached(paths: RuntimePaths = defaultRuntimePaths())
   return cached;
 }
 
-/** Só para testes: limpa o cache por processo. */
+/** For tests only: clears the per-process cache. */
 export function resetRuntimeCache(): void {
   cached = null;
 }
 
 /**
- * Mesma lógica de sync de credentials, como programa standalone (CommonJS,
- * sem imports) para o SELF-HEAL dentro do WSL no spawn Windows: o script sh
- * roda `node24 -e $VOICECAST_SETUP_JS <credentials-src> <data-base-dir>`.
- * Paridade com injectIdentityKeys garantida por teste (mesma saída).
+ * Same credentials sync logic, as a standalone program (CommonJS,
+ * no imports) for the SELF-HEAL inside WSL on the Windows spawn: the sh script
+ * runs `node24 -e $VOICECAST_SETUP_JS <credentials-src> <data-base-dir>`.
+ * Parity with injectIdentityKeys guaranteed by test (same output).
  */
 export const SETUP_CREDENTIALS_JS = `
 const fs = require("fs"), path = require("path");
 const src = process.argv[1], base = process.argv[2];
-if (!src || !base) { console.error("uso: node -e <script> <credentials-src> <data-base-dir>"); process.exit(64); }
-if (!fs.existsSync(src)) { console.error("voicecast-agent: credentials ausentes: " + src); process.exit(87); }
+if (!src || !base) { console.error("usage: node -e <script> <credentials-src> <data-base-dir>"); process.exit(64); }
+if (!fs.existsSync(src)) { console.error("voicecast-agent: credentials missing: " + src); process.exit(87); }
 const dstDir = path.join(base, ".zcode", "v2");
 const dst = path.join(dstDir, "credentials.json");
 fs.mkdirSync(dstDir, { recursive: true });
@@ -283,5 +283,5 @@ for (const k of Object.keys(data)) {
 }
 fs.writeFileSync(dst, JSON.stringify(data, null, 2) + "\\n", { mode: 0o600 });
 fs.chmodSync(dst, 0o600);
-console.log("voicecast-agent: credentials sincronizados (identity+" + added + ")");
+console.log("voicecast-agent: credentials synced (identity+" + added + ")");
 `.trim();

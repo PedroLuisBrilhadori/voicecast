@@ -1,11 +1,11 @@
 /**
- * Contrato IPC main↔renderer — tipado e versionado.
+ * main↔renderer IPC contract — typed and versioned.
  *
- * Regras:
- * - Canais sempre via constantes deste arquivo (sem string solta nos lados).
- * - Payloads são interfaces puras (serializáveis) — nada de funções/classe.
- * - Toda mudança aqui precisa refletir em src/preload/index.ts e ser testada
- *   em tests/ipc-contract.test.ts.
+ * Rules:
+ * - Channels always via this file's constants (no loose strings on either side).
+ * - Payloads are pure (serializable) interfaces — no functions/classes.
+ * - Every change here must be mirrored in src/preload/index.ts and tested
+ *   in tests/ipc-contract.test.ts.
  */
 import type {
   AnnotationEvent,
@@ -22,16 +22,16 @@ export type { AnnotationEvent, AnnotationTool, EraserMode, Pt, StrokeSnapshot, S
 export const IPC = {
   ping: "app:ping",
   getVersion: "app:get-version",
-  /** Renderer pede o estado inicial (chamado no mount do App). */
+  /** Renderer asks for the initial state (called on App mount). */
   getBootstrap: "app:get-bootstrap",
 
-  // ── fontes de captura (M1) ───────────────────────────────────
+  // ── capture sources (M1) ───────────────────────────────────
   listSources: "capture:list-sources",
 
-  // ── seleção de região (M1) ───────────────────────────────────
+  // ── region selection (M1) ───────────────────────────────────
   selectRegion: "capture:select-region",
 
-  // ── gravação (M1) ────────────────────────────────────────────
+  // ── recording (M1) ────────────────────────────────────────
   startRecording: "capture:start-recording",
   stopRecording: "capture:stop-recording",
   cancelRecording: "capture:cancel-recording",
@@ -39,15 +39,15 @@ export const IPC = {
   pause: "capture:pause",
   getState: "capture:get-state",
 
-  // ── eventos main→renderers (M1) ──────────────────────────────
-  /** Eventos de estado/waveform/preview broadcast para picker e barra. */
+  // ── main→renderers events (M1) ──────────────────────────────
+  /** State/waveform/preview events broadcast to picker and bar. */
   event: "capture:event",
-  /** Recorder → main: nível do mic (0..1) ~10x/s (barra exibe waveform). */
+  /** Recorder → main: mic level (0..1) ~10x/s (bar renders the waveform). */
   micLevel: "capture:mic-level",
-  /** Recorder → main: entrega o blob no fim (canal único por sessão via query). */
-  blob: "recorder:blob", // prefixo — canal real é `recorder:blob:<startedAt>`
+  /** Recorder → main: delivers the blob at the end (unique channel per session via query). */
+  blob: "recorder:blob", // prefix — the real channel is `recorder:blob:<startedAt>`
 
-  // ── biblioteca e pós-produção (M2) ───────────────────────────
+  // ── library and post-production (M2) ───────────────────────────
   listSessions: "library:list",
   getSession: "library:get",
   updateSession: "library:update-meta",
@@ -56,57 +56,57 @@ export const IPC = {
   createClip: "library:create-clip",
   captureFrame: "library:capture-frame",
   buildContext: "library:build-context",
-  /** Editor fase B: clipes existentes no disco + corte combinado de segmentos. */
+  /** Editor phase B: clips existing on disk + combined segment cut. */
   listClips: "library:list-clips",
   exportCut: "library:export-cut",
   copyText: "library:copy",
   openPath: "library:open-path",
   openEditor: "library:open-editor",
-  /** W2a: salva correção de ditado na sessão (transcript+meta) + dataset. */
+  /** W2a: saves the session's dictation correction (transcript+meta) + dataset. */
   saveCorrection: "library:save-correction",
-  /** W2a: abre a janela do dataset do voice (substitui o painel :8700). */
+  /** W2a: opens the voice dataset window (replaces the :8700 panel). */
   openCorpus: "library:open-corpus",
   ditadoToggle: "ditado:toggle",
   asrStatus: "library:asr-status",
-  /** Switch do modelo de transcrição: estado efetivo (settings+env). */
+  /** Transcription model switch: effective state (settings+env). */
   asrHostGet: "asr:host-get",
-  /** Switch do modelo de transcrição: liga/desliga (persiste no settings.json). */
+  /** Transcription model switch: on/off toggle (persists in settings.json). */
   asrHostSet: "asr:host-set",
 
-  // ── dataset de treino do voice (W2a — issue #3) ───────────────
-  /** Lista o histórico do corpus (transcriptions) — busca + filtro rotuladas. */
+  // ── voice training dataset (W2a — issue #3) ───────────────
+  /** Lists the corpus history (transcriptions) — search + labeled filter. */
   listDatasetItems: "dataset:list-items",
-  /** Detalhe completo de um item do corpus (words/validation/áudio). */
+  /** Full detail of a corpus item (words/validation/audio). */
   getDatasetItem: "dataset:get-item",
-  /** Correção direta num item do corpus (bloco validation, tmp+rename). */
+  /** Direct correction on a corpus item (validation block, tmp+rename). */
   saveDatasetCorrection: "dataset:save-correction",
 
-  // ── cockpit de agente (C4 — PLANO-COCKPIT) ────────────────────
-  /** Renderer → main: enfileira um goal no worker do cockpit (entrada digitada). */
+  // ── agent cockpit (C4 — PLANO-COCKPIT) ────────────────
+  /** Renderer → main: enqueues a goal in the cockpit worker (typed input). */
   agentRunGoal: "agent:run-goal",
-  /** Renderer → main: snapshot do estado atual do goal (ou null). */
+  /** Renderer → main: snapshot of the current goal state (or null). */
   agentGetState: "agent:get-state",
 
-  // ── anotações em tela (AN.1/AN.2 — PLANO-ANOTACOES-TELA) ─────
-  /** Overlay → main: evento de anotação (main atribui seq/t, persiste e devolve). */
+  // ── on-screen annotations (AN.1/AN.2 — PLANO-ANOTACOES-TELA) ─────
+  /** Overlay → main: annotation event (main assigns seq/t, persists and returns it). */
   annotationEvent: "annotation:event",
-  /** Main → overlay: comandos (tool, modo pass-through, captura p/ composite). */
+  /** Main → overlay: commands (tool, pass-through mode, capture for composite). */
   annotationCmd: "annotation:cmd",
-  /** Overlay → main: PNG queimado resultante de uma captura (b64). */
+  /** Overlay → main: burned-in PNG resulting from a capture (b64). */
   annotationComposite: "annotation:composite",
-  /** Overlay → main: controle de mouse da janela (paleta hover / ESC / entrar no desenho). */
+  /** Overlay → main: window mouse control (palette hover / ESC / entering draw mode). */
   annotationMouse: "annotation:mouse",
-  /** Overlay → main (sync): strokes/lasers ativos p/ compor o print. */
+  /** Overlay → main (sync): active strokes/lasers to compose the screenshot. */
   annotationContext: "annotation:context",
-  /** Overlay → main: retângulo CSS da paleta (p/ polling de cursor no main). */
+  /** Overlay → main: palette CSS rect (for cursor polling in main). */
   annotationPalette: "annotation:palette",
-  /** Overlay → main: print manual (mesmo caminho do Ctrl+Alt+P). */
+  /** Overlay → main: manual screenshot (same path as Ctrl+Alt+P). */
   annotationPrint: "annotation:print",
-  /** Overlay → main: alterna paleta visível/oculta (botão ↔ Ctrl+Alt+H). */
+  /** Overlay → main: toggles palette visible/hidden (button ↔ Ctrl+Alt+H). */
   annotationPaletteToggle: "annotation:palette-toggle",
-  /** Overlay standalone → main: fecha o painel (descarta o rascunho). */
+  /** Standalone overlay → main: closes the panel (discards the draft). */
   annotationClose: "annotation:close",
-  /** Overlay → main: roda do mouse em modo desenho (main repassa à janela de baixo — AN.6). */
+  /** Overlay → main: mouse wheel in draw mode (main forwards to the window below — AN.6). */
   annotationWheel: "annotation:wheel",
 } as const;
 
@@ -121,15 +121,15 @@ export interface PingResponse {
 export interface Bootstrap {
   version: string;
   platform: "win32" | "linux" | "darwin";
-  /** Atalhos globais registrados pelo main (para exibir na UI). */
+  /** Global shortcuts registered by main (to display in the UI). */
   shortcuts: { recordFullscreen: string; togglePanel: string };
 }
 
-// ── fontes de captura ──────────────────────────────────────────
+// ── capture sources ──────────────────────────────────────────
 
 export type SourceKind = "screen" | "window";
 
-/** Resultado da seleção de região: retângulo em px FÍSICOS do display escolhido. */
+/** Region selection result: rect in PHYSICAL px of the chosen display. */
 export interface RegionSelection {
   rect: Rect;
   displayIndex: number;
@@ -139,13 +139,13 @@ export interface SourceInfo {
   id: string;
   kind: SourceKind;
   name: string;
-  /** dataURL PNG da miniatura. */
+  /** PNG dataURL of the thumbnail. */
   thumb: string;
-  /** Só para janelas: bounds em px físicos (0 quando indisponível). */
+  /** Windows only: bounds in physical px (0 when unavailable). */
   bounds?: { x: number; y: number; width: number; height: number };
 }
 
-// ── gravação ───────────────────────────────────────────────────
+// ── recording ───────────────────────────────────────────────────
 
 export type RecordingMode = "screen" | "window" | "region";
 
@@ -158,11 +158,11 @@ export interface Rect {
 
 export interface StartRecordingRequest {
   mode: RecordingMode;
-  /** screen/window: sourceId do desktopCapturer. */
+  /** screen/window: desktopCapturer's sourceId. */
   sourceId?: string;
-  /** region: retângulo em px FÍSICOS do display de origem. */
+  /** region: rect in PHYSICAL px of the source display. */
   rect?: Rect;
-  /** display de origem da região (para_bounds/coordenadas). */
+  /** source display of the region (for bounds/coordinates). */
   displayIndex?: number;
   withMic: boolean;
 }
@@ -173,48 +173,48 @@ export interface RecordingState {
   startedAt: number | null;
   paused: boolean;
   markers: number[];
-  /** True entre o pedido de start e a captura aberta (barra mostra "preparando…"). */
+  /** True between the start request and the capture opening (bar shows "preparing…"). */
   arming?: boolean;
-  /** Nome da última sessão finalizada (picker abre o editor nela — M2). */
+  /** Name of the last finished session (picker opens the editor on it — M2). */
   lastSession?: { dir: string; name: string };
   error?: string;
 }
 
-// ── eventos broadcast (main → picker/barra) ────────────────────
+// ── broadcast events (main → picker/bar) ────────────────────
 
 export type CaptureEvent =
   | { type: "state"; state: RecordingState }
   | { type: "mic-level"; level: number } // 0..1
-  | { type: "preview"; dataUrl: string } // miniatura periódica durante REC
+  | { type: "preview"; dataUrl: string } // periodic thumbnail during REC
   | { type: "session-done"; dir: string; name: string; mp4: string }
   | { type: "session-error"; message: string }
-  /** Biblioteca mudou (ditado salvo, título editado…) — painel recarrega a lista. */
+  /** Library changed (dictation saved, title edited…) — panel reloads the list. */
   | { type: "sessions-changed" }
   | {
       type: "ditado-state";
       phase: "recording" | "transcribing" | "done";
-      /** desfecho do julgamento Jev (só no phase "done") */
+      /** Jev judgment outcome (only on the "done" phase) */
       rota?: string;
       conf?: number;
       colado?: boolean;
-      /** done: ASR estava off/fora — áudio SALVO na biblioteca, transcrição pendente */
+      /** done: ASR was off/down — audio SAVED to the library, transcription pending */
       pendente?: boolean;
-      /** transcrevendo: modelo do ASR ainda carregando (cold start pós-boot) */
+      /** transcribing: ASR model still loading (cold start after boot) */
       asrLoading?: boolean;
-      /** estimativa do serviço p/ concluir o load (s) */
+      /** service estimate to finish loading (s) */
       expectedLoadS?: number;
     }
-  /** C4: transição do goal do cockpit (worker → bridge → broadcast). */
+  /** C4: cockpit goal transition (worker → bridge → broadcast). */
   | { type: "agent-state"; state: GoalState };
 
-// ── anotações em tela (AN) ─────────────────────────────────────────────────
+// ── on-screen annotations (AN) ─────────────────────────────────────────────────
 
-/** Overlay → main: criação de evento (main atribui seq/t/ids, persiste, devolve). */
+/** Overlay → main: event creation (main assigns seq/t/ids, persists, returns). */
 export type AnnotationEventRequest =
   | { kind: "stroke"; color: string; width: number; points: Pt[] }
   | { kind: "laser"; points: Pt[] }
   | { kind: "erase-stroke"; snapshots: StrokeSnapshot[] }
-  /** ids dos pedaços (added) são atribuídos no main (`<seq>.<i>`) */
+  /** piece ids (added) are assigned in main (`<seq>.<i>`) */
   | { kind: "erase-area"; removed: StrokeSnapshot[]; added: Omit<StrokeSnapshot, "id">[] }
   | { kind: "clear" }
   | { kind: "undo" }
@@ -226,16 +226,16 @@ export type AnnotationCmd =
   | { type: "pass-through"; on: boolean }
   | { type: "palette"; on: boolean }
   | { type: "mode"; standalone: boolean }
-  /** main capturou o frame (dataURL) — overlay compõe strokes/laser e devolve o PNG */
+  /** main captured the frame (dataURL) — overlay composes strokes/laser and returns the PNG */
   | { type: "capture"; id: string; frame: string; label: string }
-  /** evento gravado direto no main (ex.: limpar via Ctrl+Alt+C/X) — o overlay
-   *  replica no fold local (sem isso, canvas e main desincronizam). */
+  /** event recorded directly in main (e.g. clear via Ctrl+Alt+C/X) — the overlay
+   *  replicates it in its local fold (without this, canvas and main desync). */
   | { type: "sync"; ev: AnnotationEvent };
 
 /**
- * Overlay → main: roda do mouse em modo desenho (AN.6). cx/cy são px FÍSICOS
- * dentro do overlay (client × dpr, como os pontos de stroke); o resto é o
- * WheelEvent DOM cru para o main mapear em WM_MOUSEWHEEL (shared/wheel).
+ * Overlay → main: mouse wheel in draw mode (AN.6). cx/cy are PHYSICAL px
+ * inside the overlay (client × dpr, like the stroke points); the rest is the
+ * raw DOM WheelEvent for main to map into WM_MOUSEWHEEL (shared/wheel).
  */
 export interface AnnotationWheelRequest {
   cx: number;
@@ -247,8 +247,8 @@ export interface AnnotationWheelRequest {
   buttons: number;
 }
 
-/** vcInternal completo (cada página interna usa o que precisa — um tipo só,
- *  declarado UMA vez aqui, senão os `declare global` de cada renderer colidem). */
+/** Complete vcInternal (each internal page uses what it needs — a single type,
+ *  declared ONCE here, otherwise each renderer's `declare global` collide). */
 export interface VcInternalBridge {
   micLevel: (level: number) => void;
   sendBlob: (ch: string, payload: { b64: string; ext: string }) => void;
@@ -262,16 +262,16 @@ export interface VcInternalBridge {
   annotationPrint: () => Promise<{ ok: boolean }>;
   annotationPaletteToggle: () => Promise<{ ok: boolean }>;
   annotationClose: () => Promise<{ ok: boolean }>;
-  /** AN.6: roda no modo desenho (fire-and-forget — main injeta WM_MOUSEWHEEL na janela de baixo). */
+  /** AN.6: wheel in draw mode (fire-and-forget — main injects WM_MOUSEWHEEL into the window below). */
   annotationWheel: (req: AnnotationWheelRequest) => void;
 }
 
-/** Superfície exposta ao renderer via contextBridge (window.voicecast). */
+/** Surface exposed to the renderer via contextBridge (window.voicecast). */
 export interface VoicecastBridge {
   ping(req: PingRequest): Promise<PingResponse>;
   getBootstrap(): Promise<Bootstrap>;
   listSources(kind: SourceKind): Promise<SourceInfo[]>;
-  /** Overlays em todos os displays; arrastar+soltar confirma. */
+  /** Overlays on all displays; drag+release confirms. */
   selectRegion(): Promise<RegionSelection | null>;
   startRecording(req: StartRecordingRequest): Promise<{ ok: boolean; error?: string }>;
   stopRecording(): Promise<{ ok: boolean; error?: string }>;
@@ -279,10 +279,10 @@ export interface VoicecastBridge {
   addMarker(): Promise<{ ok: boolean }>;
   pause(paused: boolean): Promise<{ ok: boolean }>;
   getState(): Promise<RecordingState>;
-  /** Assina eventos broadcast (retorna unsubscribe). */
+  /** Subscribes to broadcast events (returns unsubscribe). */
   onEvent(cb: (e: CaptureEvent) => void): () => void;
 
-  // M2 — biblioteca e pós-produção
+  // M2 — library and post-production
   listSessions(query?: string): Promise<SessionSummary[]>;
   getSession(dir: string, name: string): Promise<SessionDetail | null>;
   updateSession(dir: string, name: string, patch: SessionMetaPatch): Promise<OpResult>;
@@ -291,53 +291,53 @@ export interface VoicecastBridge {
   createClip(dir: string, name: string, inS: number, outS: number, label?: string): Promise<{ ok: true; file: string; bytes: number } | { ok: false; error: string }>;
   captureFrame(dir: string, name: string, atS: number): Promise<{ ok: true; file: string } | { ok: false; error: string }>;
   buildContext(dir: string, name: string, range?: { inS: number; outS: number } | null): Promise<{ ok: true; markdown: string } | { ok: false; error: string }>;
-  /** Clipes .mp4 que existem em clips/ (nome, tamanho, mtime — p/ lista do editor). */
+  /** .mp4 clips existing in clips/ (name, size, mtime — for the editor list). */
   listClips(dir: string, name: string): Promise<ClipInfo[]>;
-  /** Corta cada segmento e concatena num mp4 único (clips/<label>-<N>seg.mp4). */
+  /** Cuts each segment and concatenates into a single mp4 (clips/<label>-<N>seg.mp4). */
   exportCut(dir: string, name: string, segments: SessionSegment[], label?: string): Promise<{ ok: true; file: string; bytes: number } | { ok: false; error: string }>;
   copyText(text: string): Promise<OpResult>;
   openPath(winPath: string): Promise<OpResult>;
-  /** Abre o editor da sessão numa janela própria. */
+  /** Opens the session's editor in its own window. */
   openEditor(dir: string, name: string): Promise<OpResult>;
-  /** Salva a correção do ditado da sessão (transcript+meta; dataset via datasetId). */
+  /** Saves the session's dictation correction (transcript+meta; dataset via datasetId). */
   saveCorrection(dir: string, name: string, req: SaveCorrectionRequest): Promise<CorrectionResult>;
-  /** Abre a janela do dataset do voice (lista; id opcional abre o detalhe). */
+  /** Opens the voice dataset window (list; optional id opens the detail). */
   openCorpus(id?: string): Promise<OpResult>;
-  /** Liga/desliga o ditado (usado pela barra do ditado). */
+  /** Toggles the dictation (used by the dictation bar). */
   ditadoToggle(): Promise<{ ok: boolean; error?: string }>;
   asrStatus(): Promise<{ ok: boolean; source?: string }>;
-  /** Estado efetivo do switch do modelo de transcrição (settings+env+host). */
+  /** Effective state of the transcription model switch (settings+env+host). */
   asrHostGet(): Promise<AsrHostStatus>;
-  /** Liga/desliga o modelo de transcrição (persiste; desligar derruba o serviço). */
+  /** Toggles the transcription model (persists; turning off tears down the service). */
   asrHostSet(enabled: boolean): Promise<{ ok: true; status: AsrHostStatus } | { ok: false; error: string }>;
 
-  // W2a — dataset de treino do voice (substitui o painel :8700)
+  // W2a — voice training dataset (replaces the :8700 panel)
   listDatasetItems(query?: string, labeled?: DatasetLabeledFilter): Promise<DatasetItemSummary[]>;
   getDatasetItem(id: string): Promise<DatasetItemDetail | null>;
   saveDatasetCorrection(id: string, req: SaveCorrectionRequest): Promise<CorrectionResult>;
 
-  // C4 — cockpit de agente
-  /** Enfileira um goal no worker do cockpit (retorno imediato; estados via onEvent "agent-state"). */
+  // C4 — agent cockpit
+  /** Enqueues a goal in the cockpit worker (immediate return; states via onEvent "agent-state"). */
   agentRunGoal(goal: string): Promise<{ ok: true; id: string } | { ok: false; error: string }>;
-  /** Estado atual do goal (ou null se nunca houve) — snapshot inicial da barra/painel. */
+  /** Current goal state (or null if there never was one) — initial snapshot for the bar/panel. */
   agentGetState(): Promise<GoalState | null>;
 }
 
-// ── switch do modelo de transcrição (ASR local) ────────────────
+// ── transcription model switch (local ASR) ────────────────
 
-/** Estado do host do ASR — o que o painel mostra no switch. */
+/** ASR host state — what the panel shows on the switch. */
 export interface AsrHostStatus {
-  /** Switch efetivo: false = modelo local não sobe (env ganha do settings). */
+  /** Effective switch: false = local model doesn't start (env overrides settings). */
   enabled: boolean;
-  /** De onde veio o estado efetivo: env (VOICECAST_ASR_HOST=0), settings.json ou default. */
+  /** Where the effective state came from: env (VOICECAST_ASR_HOST=0), settings.json or default. */
   source: "env" | "settings" | "default";
-  /** Endpoint externo configurado (VOICECAST_ASR_URLS/VOICE_ASR_URLS) — o host não é nosso. */
+  /** Configured external endpoint (VOICECAST_ASR_URLS/VOICE_ASR_URLS) — the host isn't ours. */
   external: boolean;
-  /** Nosso processo filho do serviço está de pé agora. */
+  /** Our service child process is up right now. */
   hosted: boolean;
 }
 
-// ── biblioteca / pós-produção (M2) ─────────────────────────────
+// ── library / post-production (M2) ─────────────────────────────
 
 export interface SessionSummary {
   dir: string;
@@ -353,10 +353,10 @@ export interface SessionSummary {
   hasMp4: boolean;
   hasTranscript: boolean;
   transcriptStatus: string | null;
-  /** dataURL do thumbnail (carregado pelo main). */
+  /** Thumbnail dataURL (loaded by main). */
   thumb?: string | null;
   markers: number[];
-  /** Primeiras palavras da transcrição (subtítulo do card). */
+  /** First words of the transcript (card subtitle). */
   preview?: string | null;
 }
 
@@ -381,29 +381,29 @@ export interface SessionDetail {
     markers?: number[];
     transcriptStatus?: string;
     sizeBytes?: number;
-    /** Trechos nomeados do editor (fase B) — clipe e contexto nascem daqui. */
+    /** Named segments from the editor (phase B) — clips and context are born from these. */
     segments?: SessionSegment[];
-    /** W2a: link opcional com o item correspondente no corpus do voice. */
+    /** W2a: optional link to the matching item in the voice corpus. */
     datasetId?: string;
-    /** W2a: última correção gravada (presença = sessão já corrigida). */
+    /** W2a: last recorded correction (presence = session already corrected). */
     correction?: { correctedAt: string; nEdits: number; dataset?: string };
   };
   transcript: TranscriptInfo | null;
-  /** file:// URL da mídia para o player do editor. */
+  /** file:// URL of the media for the editor player. */
   mediaUrl: string | null;
   mediaKind: "video" | "audio" | null;
 }
 
-/** Patch de meta que o renderer pode gravar (tudo sanitizado no main). */
+/** Meta patch the renderer may write (everything sanitized in main). */
 export interface SessionMetaPatch {
   title?: string;
   tags?: string[];
   segments?: SessionSegment[];
 }
 
-/** Clipe .mp4 existente em clips/ (listagem do editor — fase B). */
+/** .mp4 clip existing in clips/ (editor listing — phase B). */
 export interface ClipInfo {
-  /** Caminho Windows completo. */
+  /** Full Windows path. */
   file: string;
   name: string;
   bytes: number;
@@ -412,17 +412,17 @@ export interface ClipInfo {
 
 export type OpResult = { ok: true } | { ok: false; error: string };
 
-// ── correção de ditados + dataset do voice (W2a — issues #3+#5) ──
+// ── dictation correction + voice dataset (W2a — issues #3+#5) ──
 
-/** Marcação palavra a palavra (mesmo shape do painel :8700 / corrections.py). */
+/** Word-by-word edit (same shape as the :8700 panel / corrections.py). */
 export interface CorrectionEdit {
-  /** posição no token stream (index em words). */
+  /** position in the token stream (index into words). */
   index: number;
   originalW: string;
   correctedW: string;
 }
 
-/** Bloco `validation` gravado no JSON do corpus — schema É o corpus (voice). */
+/** `validation` block written into the corpus JSON — the schema IS the corpus (voice). */
 export interface ValidationBlock {
   corrected_text: string;
   ts: string;
@@ -432,16 +432,16 @@ export interface ValidationBlock {
 }
 
 export interface SaveCorrectionRequest {
-  /** Texto final corrigido (autorisado quando words vazio — texto puro). */
+  /** Final corrected text (authoritative when words is empty — pure text). */
   correctedText: string;
-  /** Edições palavra a palavra (vazio = correção só de texto). */
+  /** Word-by-word edits (empty = text-only correction). */
   edits: CorrectionEdit[];
 }
 
-/** Onde a correção foi gravada (counter voicecast_corrections_total{alvo}). */
+/** Where the correction was written (voicecast_corrections_total{alvo} counter). */
 export type CorrectionAlvo = "voicecast" | "dataset" | "ambos";
 
-/** Desfecho da escrita no corpus do voice. */
+/** Outcome of the write into the voice corpus. */
 export type DatasetWriteStatus = "ok" | "ausente" | "erro";
 
 export type CorrectionResult =
@@ -450,24 +450,24 @@ export type CorrectionResult =
 
 export type DatasetLabeledFilter = "any" | "0" | "1";
 
-/** Item do histórico do corpus (lista da tela de correção). */
+/** Corpus history item (correction screen list). */
 export interface DatasetItemSummary {
   id: string;
   ts: string | null;
-  /** Primeiras palavras do texto cru do ASR. */
+  /** First words of the raw ASR text. */
   preview: string;
   durationS: number | null;
   source: string | null;
   language: string | null;
-  /** Já tem bloco validation (correção rotulada). */
+  /** Already has a validation block (labeled correction). */
   validated: boolean;
 }
 
-/** Detalhe completo de um item do corpus (words + validation + áudio). */
+/** Full detail of a corpus item (words + validation + audio). */
 export interface DatasetItemDetail {
   id: string;
   ts: string | null;
-  /** Texto CRU do ASR — nunca é alterado pela correção. */
+  /** RAW ASR text — never changed by the correction. */
   text: string;
   durationS: number | null;
   source: string | null;
@@ -475,6 +475,6 @@ export interface DatasetItemDetail {
   model: string | null;
   words: { w: string; start: number; end: number; p: number }[];
   validation: ValidationBlock | null;
-  /** file:// URL do wav no raw/ (quando existe). */
+  /** file:// URL of the wav in raw/ (when it exists). */
   audioUrl: string | null;
 }

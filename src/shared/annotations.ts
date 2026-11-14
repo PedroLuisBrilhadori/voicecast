@@ -1,31 +1,31 @@
 /**
- * Motor PURO das anotações em tela (PLANO-ANOTACOES-TELA, AN.2) — sem
- * electron, usado pelo main (escrita/replay do log), pelo renderer
- * (redesenho a partir do mesmo fold) e pelos testes.
+ * PURE on-screen annotation engine (PLANO-ANOTACOES-TELA, AN.2) — no
+ * electron, used by main (log writing/replay), by the renderer (redraw from
+ * the same fold) and by tests.
  *
- * Princípios:
- *  - O LOG é a fonte da verdade (`annotations.jsonl`); o estado é fold dele.
- *  - Cada evento geométrico carrega o suficiente para INVERTER-se (undo) —
- *    inclusive a borracha por área, que grava o resultado da divisão
- *    (removed/added) em vez de recomputar geometria no replay.
- *  - Undo/redo também são eventos do log: o replay é determinístico.
- *  - Nova ação geométrica limpa o redo (semântica de editor); o log mantém
- *    tudo — o replay reproduz exatamente o que o usuário fez.
- *  - Coordenadas em px FÍSICOS (DPI 1.53 — lição F0); `ms` relativo ao
- *    início do stroke (timestamps de captura), `t` relativo à sessão.
+ * Principles:
+ *  - The LOG is the source of truth (`annotations.jsonl`); state is its fold.
+ *  - Each geometric event carries enough to INVERT itself (undo) —
+ *    including the area eraser, which records the split result
+ *    (removed/added) instead of recomputing geometry on replay.
+ *  - Undo/redo are log events too: replay is deterministic.
+ *  - A new geometric action clears the redo (editor semantics); the log
+ *    keeps everything — replay reproduces exactly what the user did.
+ *  - Coordinates in PHYSICAL px (DPI 1.53 — lesson F0); `ms` relative to the
+ *    stroke start (capture timestamps), `t` relative to the session.
  */
 
 export type AnnotationTool = "laser" | "brush" | "eraser";
 export type EraserMode = "stroke" | "area";
 
-/** Ponto de um traço/laser: px físicos + ms relativo ao primeiro ponto. */
+/** Point of a stroke/laser: physical px + ms relative to the first point. */
 export interface Pt {
   x: number;
   y: number;
   ms: number;
 }
 
-/** Um traço ativo (ou o pedaço que sobrou de uma divisão). id: "18" | "18.0"… */
+/** An active stroke (or the piece left over from a split). id: "18" | "18.0"… */
 export interface StrokeSnapshot {
   id: string;
   color: string;
@@ -35,32 +35,32 @@ export interface StrokeSnapshot {
 
 export type AnnotationEvent =
   | { t: number; seq: number; type: "stroke"; id: string; color: string; width: number; points: Pt[] }
-  /** Laser: caminho persistido no log (atenção), visual efêmero no renderer. */
+  /** Laser: path persisted in the log (attention), ephemeral visual in the renderer. */
   | { t: number; seq: number; type: "laser"; points: Pt[] }
-  /** Borracha modo traço: remove strokes inteiros (restauráveis). */
+  /** Stroke-mode eraser: removes whole strokes (restorable). */
   | { t: number; seq: number; type: "erase"; mode: "stroke"; snapshots: StrokeSnapshot[] }
-  /** Borracha modo normal: resultado da divisão gravado (removed saiu, added ficou). */
+  /** Normal-mode eraser: split result recorded (removed went away, added stayed). */
   | { t: number; seq: number; type: "erase"; mode: "area"; removed: StrokeSnapshot[]; added: StrokeSnapshot[] }
   | { t: number; seq: number; type: "clear"; snapshots: StrokeSnapshot[] }
   | { t: number; seq: number; type: "undo" }
   | { t: number; seq: number; type: "redo" }
-  /** Print queimado gerado pelo sistema (marker/auto-print/manual). */
+  /** System-generated burned-in screenshot (marker/auto-print/manual). */
   | { t: number; seq: number; type: "print"; kind: "marker" | "auto" | "manual"; file: string; strokes: string[] };
 
-// ── fold do log → estado ──────────────────────────────────────────────────
+// ── log fold → state ──────────────────────────────────────────────────
 
-/** Operação aplicada (invertível) — derivada dos eventos geométricos. */
+/** Applied (invertible) operation — derived from the geometric events. */
 type Op =
   | { kind: "add"; strokes: StrokeSnapshot[] }
   | { kind: "remove"; snapshots: StrokeSnapshot[] }
   | { kind: "replace"; removed: StrokeSnapshot[]; added: StrokeSnapshot[] };
 
 export interface AnnotationState {
-  /** Traços ativos ordenados por id (inserção). */
+  /** Active strokes ordered by id (insertion). */
   strokes: StrokeSnapshot[];
-  /** Ops aplicadas (não desfeitas). */
+  /** Applied ops (not undone). */
   past: Op[];
-  /** Ops desfeitas (refazíveis). */
+  /** Undone ops (redoable). */
   future: Op[];
 }
 
@@ -91,7 +91,7 @@ function invertOp(op: Op): Op {
   }
 }
 
-/** Aplica UM evento ao estado (mutação local — fold chama em ordem). */
+/** Applies ONE event to the state (local mutation — fold calls it in order). */
 export function applyEvent(s: AnnotationState, e: AnnotationEvent): AnnotationState {
   let op: Op | null = null;
   switch (e.type) {
@@ -100,7 +100,7 @@ export function applyEvent(s: AnnotationState, e: AnnotationEvent): AnnotationSt
       break;
     case "laser":
     case "print":
-      break; // fora do estado geométrico (log/contexto apenas)
+      break; // outside the geometric state (log/context only)
     case "erase":
       op =
         e.mode === "stroke"
@@ -128,20 +128,20 @@ export function applyEvent(s: AnnotationState, e: AnnotationEvent): AnnotationSt
   if (!op) return s;
   applyOp(s, op);
   s.past.push(op);
-  s.future = []; // nova ação geométrica invalida o redo (semântica de editor)
+  s.future = []; // new geometric action invalidates redo (editor semantics)
   return s;
 }
 
-/** Estado em qualquer ponto do log — replay determinístico. */
+/** State at any point of the log — deterministic replay. */
 export function foldEvents(events: AnnotationEvent[]): AnnotationState {
   const s = emptyState();
   for (const e of events) applyEvent(s, e);
   return s;
 }
 
-// ── geometria (usada pelo renderer ao CRIAR eventos; testada aqui) ─────────
+// ── geometry (used by the renderer when CREATING events; tested here) ─────────
 
-/** Decimação: descarta pontos a < minPx do último mantido (fim sempre mantido). */
+/** Decimation: drops points closer than minPx to the last kept one (end always kept). */
 export function simplifyPoints(points: Pt[], minPx = 3): Pt[] {
   if (points.length <= 2) return points;
   const out: Pt[] = [points[0]!];
@@ -154,7 +154,7 @@ export function simplifyPoints(points: Pt[], minPx = 3): Pt[] {
   return out;
 }
 
-/** Distância ponto→segmento (hit-test da borracha). */
+/** Point→segment distance (eraser hit-test). */
 export function distToSegment(p: Pt, a: Pt, b: Pt): number {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
@@ -165,9 +165,9 @@ export function distToSegment(p: Pt, a: Pt, b: Pt): number {
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
-/** Borracha modo traço: strokes inteiros tocados pelo caminho (within radius).
- * Hit-test contra SEGMENTOS (strokes são decimados — o meio de um traço longo
- * não tem ponto próprio). */
+/** Stroke-mode eraser: whole strokes touched by the path (within radius).
+ * Hit-test against SEGMENTS (strokes are decimated — the middle of a long
+ * stroke has no point of its own). */
 export function hitStrokes(
   strokes: StrokeSnapshot[],
   path: Pt[],
@@ -187,7 +187,7 @@ export function hitStrokes(
   });
 }
 
-/** Ponto do stroke pega o caminho da borracha? (contra pontos E segmentos) */
+/** Does the stroke point hit the eraser path? (against points AND segments) */
 function nearPath(p: Pt, path: Pt[], radius: number): boolean {
   if (path.length === 1) return Math.hypot(p.x - path[0]!.x, p.y - path[0]!.y) <= radius;
   if (path.some((q) => Math.hypot(p.x - q.x, p.y - q.y) <= radius)) return true;
@@ -198,11 +198,11 @@ function nearPath(p: Pt, path: Pt[], radius: number): boolean {
 }
 
 /**
- * Borracha modo normal: remove trechos do stroke dentro do raio do caminho e
- * devolve os pedaços que sobraram ({removed, added}) prontos para o evento
- * erase-area. Pedaços com < 2 pontos são descartados junto.
- * Strokes desenhados rápido (pontos esparsos) são cobertos: além dos pontos
- * originais, cada segmento é amostrado no meio p/ detectar cruzamento.
+ * Normal-mode eraser: removes stroke pieces within the path radius and
+ * returns the leftover pieces ({removed, added}) ready for the erase-area
+ * event. Pieces with < 2 points are dropped along the way.
+ * Quickly drawn strokes (sparse points) are covered: beyond the original
+ * points, each segment is sampled at its middle to detect crossing.
  */
 export function splitStrokesByPath(
   strokes: StrokeSnapshot[],
@@ -214,14 +214,14 @@ export function splitStrokesByPath(
   const added: StrokeSnapshot[] = [];
   for (const st of strokes) {
     const pts = st.points;
-    // 1) marcação: pontos originais tocados + amostras interiores de segmentos
+    // 1) marking: touched original points + interior segment samples
     const marked = pts.map((p) => nearPath(p, path, radius));
     for (let i = 0; i + 1 < pts.length; i++) {
       if (marked[i] || marked[i + 1]) continue;
       const a = pts[i]!;
       const b = pts[i + 1]!;
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, ms: (a.ms + b.ms) / 2 };
-      // segmento longo: amostra o meio (e quartos, se for muito longo)
+      // long segment: samples the middle (and quarters, if very long)
       const samples = Math.max(1, Math.floor(Math.hypot(b.x - a.x, b.y - a.y) / radius));
       let hitMid = false;
       for (let k = 1; k <= samples; k++) {
@@ -232,17 +232,17 @@ export function splitStrokesByPath(
           break;
         }
       }
-      // cruzou o segmento sem tocar endpoints: corta NO MEIO do segmento —
-      // os pedaços ficam com os pontos originais; o corte descarta o trecho.
+      // crossed the segment without touching endpoints: cuts at the MIDDLE of
+      // the segment — pieces keep the original points; the cut discards the piece.
       if (hitMid) {
-        // insere um corte: trata o ponto final do segmento como marcado
-        // (aproximação ≤ metade do segmento; undo restaura os originais)
+        // inserts a cut: treats the segment's end point as marked
+        // (approximation ≤ half the segment; undo restores the originals)
         marked[i + 1] = true;
       }
     }
     if (!marked.some(Boolean)) continue;
 
-    // 2) divide em runs de pontos não marcados (>= 2 pontos)
+    // 2) splits into runs of unmarked points (>= 2 points)
     const runs: Pt[][] = [];
     let cur: Pt[] = [];
     pts.forEach((p, i) => {

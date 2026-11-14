@@ -1,45 +1,46 @@
 /**
- * Contexto BOUNDED da última sessão no goal (C3/PLANO-COCKPIT) — PURO, sem
- * electron/fs, testável. Quem chama (src/main/agent/goal-context.ts) carrega
- * a sessão e monta o markdown pelo `buildContext` (reuso obrigatório); aqui
- * vive só a DECISÃO de incluir e o TRUNCAMENTO.
+ * BOUNDED context of the last session in the goal (C3/PLANO-COCKPIT) — PURE,
+ * no electron/fs, testable. The caller (src/main/agent/goal-context.ts) loads
+ * the session and builds the markdown via `buildContext` (reuse mandatory);
+ * only the inclusion DECISION and the TRUNCATION live here.
  *
- * Política de inclusão (decisão do piloto C3, documentada no briefing):
- * - Jev presente: inclui se a sessão terminou há menos de `maxAgeMin`
- *   (default 30, env `VOICECAST_GOAL_CONTEXT_MAX_AGE_MIN`) E
- *   `meta.jev.relevancia >= 2` (mesma política do hook C7).
- * - Jev ausente (fail-soft do julgamento — sem key/erro/off): política
- *   CONSERVADORA — só inclui se a sessão for RECENTÍSSIMA (< 5 min) E tiver
- *   transcript. Sem sinal de relevância, a recência extrema + existência de
- *   fala são os únicos proxies de que o goal se refere àquela sessão.
- * - Idade = `startedAt + durationS` (fim da sessão, como no hook C7). Idade
- *   negativa (skew de relógio no mount do Windows) é aceita (vira 0);
- *   `startedAt` ausente/inválida → exclui (não dá para provar recência).
- * - Sessão sem transcript nunca quebra: com Jev ok entra sem a seção de fala
- *   (o markdown do buildContext cita título/paths/julgamento).
+ * Inclusion policy (C3 pilot decision, documented in the briefing):
+ * - Jev present: include if the session ended less than `maxAgeMin` ago
+ *   (default 30, env `VOICECAST_GOAL_CONTEXT_MAX_AGE_MIN`) AND
+ *   `meta.jev.relevancia >= 2` (same policy as hook C7).
+ * - Jev absent (fail-soft of the judgment — no key/error/off): CONSERVATIVE
+ *   policy — only includes if the session is VERY RECENT (< 5 min) AND has a
+ *   transcript. Without a relevance signal, extreme recency + existence of
+ *   speech are the only proxies that the goal refers to that session.
+ * - Age = `startedAt + durationS` (end of session, as in hook C7). Negative
+ *   age (clock skew on the Windows mount) is accepted (becomes 0);
+ *   missing/invalid `startedAt` → exclude (recency cannot be proven).
+ * - A session without a transcript never breaks: with Jev ok it gets in
+ *   without the speech section (buildContext's markdown cites title/paths/
+ *   judgment).
  *
- * Truncamento OBRIGATÓRIO (nunca mandar transcript completo): orçamento de
- * ~2k tokens (≈ 8k chars a 4 chars/token), cortado na fronteira de
- * palavra/linha (a fronteira mais tardia dentro da janela; sem fronteira
- * razoável, corte duro no limite) com marcador explícito.
+ * MANDATORY truncation (never send the full transcript): budget of ~2k
+ * tokens (≈ 8k chars at 4 chars/token), cut at a word/line boundary (the
+ * latest boundary inside the window; with no reasonable boundary, hard cut
+ * at the limit) with an explicit marker.
  */
 
 export const SESSION_CONTEXT_MAX_TOKENS = 2000;
-/** Aproximação chars→tokens p/ PT/EN misto (o briefing pede "~2k tokens"). */
+/** chars→tokens approximation for mixed PT/EN (the briefing asks for "~2k tokens"). */
 export const CHARS_PER_TOKEN = 4;
-/** Janela "recentíssima" da política conservadora sem Jev (minutos). */
+/** "Very recent" window of the conservative policy without Jev (minutes). */
 export const SESSION_CONTEXT_FRESH_MIN = 5;
-/** Relevância Jev mínima p/ incluir (mesma política do hook C7). */
+/** Minimum Jev relevance to include (same policy as hook C7). */
 export const SESSION_CONTEXT_MIN_RELEVANCIA = 2;
-/** Default da janela de idade quando nem opts nem env definem (minutos). */
+/** Default age window when neither opts nor env define it (minutes). */
 export const SESSION_CONTEXT_DEFAULT_MAX_AGE_MIN = 30;
 
-export const SESSION_CONTEXT_BEGIN = "--- CONTEXTO DA ÚLTIMA SESSÃO (auto) ---";
-export const SESSION_CONTEXT_END = "--- FIM DO CONTEXTO ---";
+export const SESSION_CONTEXT_BEGIN = "--- LAST SESSION CONTEXT (auto) ---";
+export const SESSION_CONTEXT_END = "--- END OF CONTEXT ---";
 
-const TRUNCATED_MARK = "… (contexto truncado)";
+const TRUNCATED_MARK = "… (context truncated)";
 
-/** Fatia estrutural do detail (getSessionDetail) que a decisão precisa. */
+/** Structural slice of the detail (getSessionDetail) the decision needs. */
 export interface BoundedContextDetail {
   meta?: {
     startedAt?: string | null;
@@ -50,27 +51,27 @@ export interface BoundedContextDetail {
 }
 
 export interface BoundSessionContextOpts {
-  /** Markdown do buildContext da sessão — sem ele não há o que incluir. */
+  /** Session markdown from buildContext — without it there is nothing to include. */
   markdown?: string;
-  /** now em ms (default Date.now()) — injeção p/ testes determinísticos. */
+  /** now in ms (default Date.now()) — injection for deterministic tests. */
   now?: number;
-  /** Janela de idade em min (default env VOICECAST_GOAL_CONTEXT_MAX_AGE_MIN ou 30). */
+  /** Age window in min (default env VOICECAST_GOAL_CONTEXT_MAX_AGE_MIN or 30). */
   maxAgeMin?: number;
-  /** Janela "recentíssima" sem Jev (default 5). */
+  /** "Very recent" window without Jev (default 5). */
   freshMaxAgeMin?: number;
-  /** Orçamento em tokens (default 2000 ≈ 8k chars). */
+  /** Token budget (default 2000 ≈ 8k chars). */
   maxTokens?: number;
 }
 
-/** Resultado do enriquecimento do goal (contrato runner ⇄ enricher). */
+/** Goal enrichment result (runner ⇄ enricher contract). */
 export interface EnrichedGoal {
   goal: string;
   included: boolean;
-  /** Tamanho do contexto bounded incluído (0 quando sem). */
+  /** Size of the included bounded context (0 when none). */
   contextChars: number;
 }
 
-/** Enriquecedor injetável no runGoal/GoalQueue — produzido por goal-context.ts. */
+/** Enricher injectable into runGoal/GoalQueue — produced by goal-context.ts. */
 export type GoalEnricher = (goal: string) => Promise<EnrichedGoal>;
 
 function envMaxAgeMin(): number {
@@ -79,9 +80,9 @@ function envMaxAgeMin(): number {
 }
 
 /**
- * Idade da sessão em minutos, contada do FIM (startedAt + durationS, mesma
- * política do hook C7). Skew de relógio (idade negativa) vira 0; null quando
- * startedAt é ausente/inválida.
+ * Session age in minutes, counted from the END (startedAt + durationS, same
+ * policy as hook C7). Clock skew (negative age) becomes 0; null when
+ * startedAt is missing/invalid.
  */
 export function sessionAgeMin(
   detail: BoundedContextDetail | null | undefined,
@@ -94,9 +95,9 @@ export function sessionAgeMin(
 }
 
 /**
- * Trunca no orçamento de tokens (~tokens×4 chars) na fronteira de
- * palavra/linha (a mais tardia dentro da janela; abaixo da metade da janela,
- * corte duro no limite). Texto dentro do orçamento volta intacto.
+ * Truncates to the token budget (~tokens×4 chars) at a word/line boundary
+ * (the latest one within the window; below half the window, hard cut at the
+ * limit). Text within the budget comes back intact.
  */
 export function truncateToTokenBudget(
   text: string,
@@ -110,15 +111,16 @@ export function truncateToTokenBudget(
   return text.slice(0, at).trimEnd() + "\n" + TRUNCATED_MARK;
 }
 
-/** Bloco delimitado que viaja concatenado ao goal. */
+/** Delimited block that travels concatenated to the goal. */
 export function wrapSessionContextBlock(bounded: string): string {
   return `${SESSION_CONTEXT_BEGIN}\n${bounded}\n${SESSION_CONTEXT_END}`;
 }
 
 /**
- * Decide INCLUIR (política acima) e devolve o markdown BOUNDED (truncado no
- * orçamento) — ou null quando a sessão não entra. Sem transcript não quebra;
- * sem markdown montado não há o que incluir (o caller usa buildContext).
+ * Decides whether to INCLUDE (policy above) and returns the BOUNDED markdown
+ * (truncated to budget) — or null when the session doesn't make it. Without
+ * a transcript it doesn't break; without built markdown there is nothing to
+ * include (the caller uses buildContext).
  */
 export function boundSessionContext(
   detail: BoundedContextDetail | null | undefined,

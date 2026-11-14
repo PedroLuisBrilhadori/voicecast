@@ -13,13 +13,13 @@ const CH = params.get("ch") ?? "";
 const DPR = Number(params.get("dpr") ?? "1");
 const IDX = Number(params.get("idx") ?? "0");
 
-/** Overlay de seleção de região (um por display — todos abrem juntos):
- *  ARRASTAR e SOLTAR confirma (mouse-first), Esc/✕ cancela. O primeiro
- *  resultado fecha todos os overlays. Resultado em px FÍSICOS + displayIndex. */
+/** Region selection overlay (one per display — all open together):
+ *  DRAG and RELEASE confirms (mouse-first), Esc/✕ cancels. The first
+ *  result closes all overlays. Result in PHYSICAL px + displayIndex. */
 export function OverlayApp() {
   const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const rectRef = useRef<Rect | null>(null);
-  const [hint, setHint] = useState("Arraste no monitor desejado · soltar confirma · Esc ou ✕ cancela");
+  const [hint, setHint] = useState("Drag on the desired monitor · release confirms · Esc or ✕ cancels");
 
   const cancel = () => {
     window.vcInternal.sendRegion(CH, null);
@@ -75,9 +75,9 @@ export function OverlayApp() {
         setDrag({ ...drag, x1: e.clientX, y1: e.clientY });
       }}
       onMouseUp={() => {
-        // mouse-first: soltar com retângulo válido CONFIRMA (sem Enter)
+        // mouse-first: releasing with a valid rectangle CONFIRMS (no Enter)
         if (cssRect && cssRect.width >= 8 && cssRect.height >= 8) confirmRect();
-        else if (cssRect) setHint("arraste uma área maior — ou Esc/✕ para cancelar");
+        else if (cssRect) setHint("drag a larger area — or Esc/✕ to cancel");
       }}
       onDoubleClick={confirmRect}
     >
@@ -148,7 +148,7 @@ export function OverlayApp() {
             cursor: "pointer",
           }}
         >
-          tela inteira
+          full screen
         </button>
         <button
           onClick={cancel}
@@ -162,7 +162,7 @@ export function OverlayApp() {
             cursor: "pointer",
           }}
         >
-          ✕ cancelar
+          ✕ cancel
         </button>
       </div>
     </div>

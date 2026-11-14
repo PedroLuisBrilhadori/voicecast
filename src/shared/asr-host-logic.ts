@@ -1,49 +1,50 @@
 /**
- * Lógica PURA do host do ASR (decisões e backoff) — sem electron/node imports,
- * testável no vitest. O lado com efeitos vive em src/main/asr-host.ts.
+ * PURE logic of the ASR host (decisions and backoff) — no electron/node
+ * imports, testable in vitest. The side with effects lives in
+ * src/main/asr-host.ts.
  */
 
 export interface HostSnapshot {
-  /** /health respondeu (porta aberta — mesmo em status loading)? */
+  /** did /health respond (port open — even with loading status)? */
   probeOk: boolean;
-  /** nosso processo filho do serviço está vivo? */
+  /** is our service child process alive? */
   childRunning: boolean;
 }
 
 export type HostAction = "adopt" | "spawn" | "wait";
 
-/** Decide a ação do supervisor diante do estado atual. */
+/** Decides the supervisor action given the current state. */
 export function hostAction(s: HostSnapshot): HostAction {
   if (s.childRunning) return "wait";
   return s.probeOk ? "adopt" : "spawn";
 }
 
 /**
- * Backoff de respawn por número de quedas: 1ª tentativa imediata, depois
- * 5s → 10s → 20s → 40s → 60s (teto).
+ * Respawn backoff by crash count: first attempt immediate, then
+ * 5s → 10s → 20s → 40s → 60s (cap).
  */
 export function backoffDelayMs(crashes: number): number {
   if (crashes <= 0) return 0;
   return Math.min(5_000 * 2 ** (crashes - 1), 60_000);
 }
 
-/** O backoff zera depois de 60s de saúde estável. */
+/** Backoff resets after 60s of stable health. */
 export function backoffShouldReset(stableMs: number): boolean {
   return stableMs >= 60_000;
 }
 
-// ── switch do modelo de transcrição (settings.json + env) ──────
+// ── transcription model switch (settings.json + env) ──────
 
 export interface AsrSwitchSnapshot {
-  /** env VOICECAST_ASR_HOST=0 (kill-switch de máquina — ganha de tudo). */
+  /** env VOICECAST_ASR_HOST=0 (machine-level kill-switch — overrides everything). */
   envOff: boolean;
-  /** settings.json `asrHost` — undefined = nunca tocado (default ligado). */
+  /** settings.json `asrHost` — undefined = never touched (default on). */
   settingsOn: boolean | undefined;
 }
 
 export type AsrSwitchSource = "env" | "settings" | "default";
 
-/** Estado efetivo do switch: env desliga sempre; settings desliga por escolha do usuário. */
+/** Effective switch state: env always disables; settings disables by user choice. */
 export function asrSwitch(s: AsrSwitchSnapshot): { enabled: boolean; source: AsrSwitchSource } {
   if (s.envOff) return { enabled: false, source: "env" };
   if (s.settingsOn === false) return { enabled: false, source: "settings" };

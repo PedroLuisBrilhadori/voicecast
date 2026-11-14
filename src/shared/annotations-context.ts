@@ -1,26 +1,26 @@
 /**
- * Resumo das marcações de uma sessão para o buildContext (AN.4 do
- * PLANO-ANOTACOES-TELA) — PURO, sem electron: recebe o conteúdo do
- * `annotations.jsonl` e os PNGs existentes em `frames/` e devolve as linhas
- * da seção "Anotações (N):". `library.ts` só consome.
+ * Summary of a session's annotations for buildContext (AN.4 of
+ * PLANO-ANOTACOES-TELA) — PURE, no electron: receives the contents of
+ * `annotations.jsonl` and the existing PNGs in `frames/` and returns the lines
+ * of the "Annotations (N):" section. `library.ts` only consumes it.
  *
- * Contrato:
- *  - Tempos do jsonl são relativos ao `startedAt` real da sessão → formatados
- *    com fmtTs (m:ss), como as outras seções do contexto.
- *  - Print queimado "correspondente": o evento `print` carrega o arquivo
- *    (`frames/<nome>.png`) e os ids dos strokes queimados; o path só entra na
- *    linha se o PNG existir em `frames/` (readdir do caller — tolerante a não
- *    achar, a linha sai sem path).
- *  - O fold do motor puro (`foldEvents`) decide o que sobreviveu: stroke que
- *    não está no estado final sai marcado "(apagado)" (apagado/limpado/desfeito).
- *  - Jsonl vazio/sem eventos → null (seção não aparece — mesmo comportamento
- *    da seção Trechos).
+ * Contract:
+ *  - jsonl times are relative to the session's real `startedAt` → formatted
+ *    with fmtTs (m:ss), like the other context sections.
+ *  - "Corresponding" burned-in screenshot: the `print` event carries the file
+ *    (`frames/<name>.png`) and the ids of the burned strokes; the path only
+ *    makes it into the line if the PNG exists in `frames/` (caller's readdir —
+ *    tolerant to misses, the line comes out without a path).
+ *  - The pure engine's fold (`foldEvents`) decides what survived: a stroke
+ *    not in the final state comes out marked "(erased)" (erased/cleared/undone).
+ *  - Empty jsonl/no events → null (the section doesn't appear — same behavior
+ *    as the Segments section).
  */
 import { foldEvents, type AnnotationEvent } from "./annotations";
 import { wslPathQuoted } from "./paths";
 
-/** Tempo relativo m:ss — mesmo formato das outras seções do buildContext.
- * Arredonda o TOTAL antes de quebrar (W2b): 59.7 vira "1:00", não "0:60". */
+/** Relative m:ss time — same format as the other buildContext sections.
+ * Rounds the TOTAL before splitting (W2b): 59.7 becomes "1:00", not "0:60". */
 export function fmtTs(s: number): string {
   const total = Math.round(s);
   const m = Math.floor(total / 60);
@@ -28,49 +28,49 @@ export function fmtTs(s: number): string {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-/** Uma marcação citada na seção. */
+/** A mark cited in the section. */
 export interface AnnotationMark {
-  /** t relativo à sessão (s), como gravado no jsonl. */
+  /** t relative to the session (s), as recorded in the jsonl. */
   t: number;
-  /** Rótulo pt-BR do tipo (laser, pincel, borracha…, print (marker)…). */
+  /** Display label of the type (laser, brush, eraser…, print (marker)…). */
   kind: string;
-  /** PNG queimado correspondente (basename presente em frames/), se houver. */
+  /** Corresponding burned-in PNG (basename present in frames/), if any. */
   print?: string;
-  /** Stroke que não sobreviveu ao estado final do log (apagado/desfeito). */
+  /** Stroke that didn't survive the log's final state (erased/undone). */
   gone?: boolean;
 }
 
 export interface AnnotationSummary {
   marks: AnnotationMark[];
-  /** Strokes ativos no estado final (fold do log completo). */
+  /** Active strokes in the final state (fold of the full log). */
   activeStrokes: number;
-  /** Linhas corrompidas/ilegíveis puladas (contexto é best-effort). */
+  /** Corrupted/unreadable lines skipped (context is best-effort). */
   skipped: number;
 }
 
-/** Seção pronta para o buildContext. */
+/** Section ready for buildContext. */
 export interface AnnotationSection extends AnnotationSummary {
-  /** nº de marcações citadas (= marcações incluídas no contexto). */
+  /** number of cited marks (= marks included in the context). */
   count: number;
-  /** Linhas de markdown (header + uma por marcação). */
+  /** Markdown lines (header + one per mark). */
   lines: string[];
 }
 
-/** Rótulo de exibição por tipo de evento (vocabulário do plano AN). */
+/** Display label per event type (AN plan vocabulary). */
 function kindLabel(e: AnnotationEvent): string {
   switch (e.type) {
     case "stroke":
-      return "pincel";
+      return "brush";
     case "laser":
       return "laser";
     case "erase":
-      return e.mode === "stroke" ? "borracha (traço)" : "borracha (área)";
+      return e.mode === "stroke" ? "eraser (stroke)" : "eraser (area)";
     case "clear":
-      return "limpar";
+      return "clear";
     case "undo":
-      return "desfazer";
+      return "undo";
     case "redo":
-      return "refazer";
+      return "redo";
     case "print":
       return `print (${e.kind})`;
   }
@@ -78,7 +78,7 @@ function kindLabel(e: AnnotationEvent): string {
 
 const basename = (f: string): string => f.split(/[\\/]/).pop() ?? f;
 
-/** Jsonl → eventos (linhas vazias/corrompidas puladas, contadas em skipped). */
+/** Jsonl → events (empty/corrupted lines skipped, counted in skipped). */
 function parseEvents(jsonl: string): { events: AnnotationEvent[]; skipped: number } {
   const events: AnnotationEvent[] = [];
   let skipped = 0;
@@ -95,8 +95,8 @@ function parseEvents(jsonl: string): { events: AnnotationEvent[]; skipped: numbe
 }
 
 /**
- * Agrega o jsonl da sessão em marcações citáveis. Retorna null quando não há
- * evento nenhum (seção some do contexto).
+ * Aggregates the session's jsonl into citable marks. Returns null when there
+ * are no events at all (the section disappears from the context).
  */
 export function summarizeAnnotationEvents(
   jsonl: string,
@@ -106,8 +106,8 @@ export function summarizeAnnotationEvents(
   if (!events.length) return null;
 
   const existing = new Set(frameFiles);
-  // stroke id → print queimado que o inclui (primeiro por ordem do log cujo
-  // PNG existe — marker/auto queimam os strokes ativos no instante)
+  // stroke id → burned-in screenshot that includes it (first in log order
+  // whose PNG exists — marker/auto burn the strokes active at that instant)
   const printByStroke = new Map<string, string>();
   for (const e of events) {
     if (e.type !== "print") continue;
@@ -134,9 +134,9 @@ export function summarizeAnnotationEvents(
 }
 
 /**
- * Seção completa: linhas prontas para o `lines.push(...)` do buildContext.
- * Null quando não há marcações (caller não emite nada — nem a seção nem o
- * counter).
+ * Full section: lines ready for buildContext's `lines.push(...)`.
+ * Null when there are no marks (the caller emits nothing — neither the
+ * section nor the counter).
  */
 export function annotationSection(
   jsonl: string,
@@ -146,9 +146,9 @@ export function annotationSection(
   const s = summarizeAnnotationEvents(jsonl, frameFiles);
   if (!s || !s.marks.length) return null;
   const dir = framesDir.replace(/[\\/]+$/, "");
-  const lines: string[] = [`Anotações (${s.marks.length}):`];
+  const lines: string[] = [`Annotations (${s.marks.length}):`];
   s.marks.forEach((m, i) => {
-    lines.push(`${i + 1}. ${fmtTs(m.t)} ${m.kind}${m.gone ? " (apagado)" : ""}`);
+    lines.push(`${i + 1}. ${fmtTs(m.t)} ${m.kind}${m.gone ? " (erased)" : ""}`);
     if (m.print) lines.push(`   Print: ${wslPathQuoted(`${dir}/${m.print}`)}`);
   });
   return { ...s, count: s.marks.length, lines };

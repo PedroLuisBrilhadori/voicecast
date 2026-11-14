@@ -1,28 +1,28 @@
-# Plano — Anotações em tela durante REC + print no modo transcrição
+# Plan — On-screen annotations during REC + screenshot in transcription mode
 
-Data: 2026-09-22 · Status: **proposto** (decisões em aberto no fim)
-Trilha nova (AN) — paralela às Etapas Jev (E1–E5 do
-[PLANO-JEV-CU.md](./PLANO-JEV-CU.md)); consome a infra delas no buildContext/MCP.
+Date: 2026-09-22 · Status: **proposed** (open decisions at the end)
+New track (AN) — parallel to the Jev Stages (E1–E5 of
+[PLANO-JEV-CU.md](./PLANO-JEV-CU.md)); consumes their infrastructure in buildContext/MCP.
 
-## Objetivo
+## Objective
 
-Enquanto grava (ou dita), o usuário **aponta e marca a tela** — laser, pincel,
-borracha, desfazer/refazer — e as marcações viram **contexto consumível pelo
-agente**: vetorial com timestamps + prints queimados nos momentos marcados. No
-modo transcrição (ditado/sessão transcrevendo), um print da tela anexa à sessão
-— e, como no modo somente-transcrição **não há vídeo da tela**, anotar ali
-dispara **print queimado automático** (registro visual do que foi marcado).
+While recording (or dictating), the user **points at and marks the screen** — laser, brush,
+eraser, undo/redo — and the marks become **context consumable by the
+agent**: vectors with timestamps + burned-in screenshots at the marked moments. In
+transcription mode (dictation/session transcribing), a screenshot of the screen attaches to the session
+— and, since in transcription-only mode **there is no screen video**, annotating there
+triggers an **automatic burned-in screenshot** (visual record of what was marked).
 
-## Decisões de design (recomendações)
+## Design decisions (recommendations)
 
-**D1 — Vetorial desde o dia 1.** Marcação = evento em `annotations.jsonl` da
-sessão, em **px físicos** (lição DPI 1.53 do F0) e **t relativo ao startedAt**
-(consistente com `meta.markers` em segundos). Tudo deriva do log: replay do
-estado, undo/redo, render de PNG queimado, resumo para o agente.
+**D1 — Vectorial from day 1.** A mark = an event in the session's `annotations.jsonl`,
+in **physical px** (DPI 1.53 lesson from F0) and **t relative to startedAt**
+(consistent with `meta.markers` in seconds). Everything derives from the log: replay of
+the state, undo/redo, burned PNG render, summary for the agent.
 
 ```jsonl
 {"t":132.4,"seq":18,"type":"stroke","tool":"brush","color":"#ff4444","width":4,"points":[[x,y,ms],…]}
-{"t":133.9,"seq":19,"type":"laser","points":[[x,y,ms],…]}   // rastro visual efêmero, CAMINHO persistido (decisão do mantenedor)
+{"t":133.9,"seq":19,"type":"laser","points":[[x,y,ms],…]}   // ephemeral visual trail, PATH persisted (maintainer's decision)
 {"t":140.1,"seq":20,"type":"erase","mode":"stroke","target":17}
 {"t":141.0,"seq":21,"type":"erase","mode":"area","points":[[x,y],…],"radius":12}
 {"t":150.0,"seq":22,"type":"clear"}
@@ -31,144 +31,145 @@ estado, undo/redo, render de PNG queimado, resumo para o agente.
 {"t":160.0,"type":"marker","id":3,"frame":"frames/marker-3.png","strokes":[15,17,18]}
 ```
 
-**D2 — WYSIWYG: as marcações SAEM no vídeo gravado.** A camada de anotação é
-uma janela overlay na tela (evolução do overlay de região já provado no F0);
-como o capture grava a tela, o que o usuário vê é o que o vídeo tem. Cursor do
-sistema NÃO sai no capture do desktopCapturer — o **laser é O jeito de apontar
-no vídeo**. Alternativa (vídeo limpo + marcação só para o usuário) exige
-queimar em pós via log vetorial — fica como evolução, não v1 (ver aberto nº 1).
+**D2 — WYSIWYG: the marks END UP in the recorded video.** The annotation layer is
+an overlay window on the screen (evolution of the region overlay already proven in F0);
+since the capture records the screen, what the user sees is what the video has. The system
+cursor does NOT come out in the desktopCapturer capture — the **laser is THE way to point
+at the video**. The alternative (clean video + marking only for the user) would require
+burning in post from the vector log — it stays as a future evolution, not v1 (see open item #1).
 
-**D3 — Laser: visual efêmero, histórico persistido** (decisão do mantenedor,
-2026-09-22). O rastro some da tela (~600ms de fade), mas o **caminho fica no
-`annotations.jsonl` como qualquer ferramenta** — o contexto sabe QUE a
-atenção foi apontada e ONDE: `{"type":"laser","points":[…]}`. Cada "passada"
-de laser = 1 evento com o caminho simplificado (decimação de pontos para não
-inflar o log). No print queimado do marker, o laser entra se estiver ativo no
-instante.
+**D3 — Laser: ephemeral visual, persisted history** (maintainer's decision,
+2026-09-22). The trail disappears from the screen (~600ms fade), but the **path stays in
+`annotations.jsonl` like any other tool** — the context knows THAT
+attention was pointed and WHERE: `{"type":"laser","points":[…]}`. Each laser "pass"
+= 1 event with the simplified path (point decimation so the log doesn't
+bloat). In the marker's burned screenshot, the laser goes in if it was active at that instant.
 
-**D4 — Overlay desenha OU deixa passar; nunca os dois.** Dois modos:
-**desenho** (overlay captura o mouse e desenha) e **pass-through**
-(`setIgnoreMouseEvents(true, {forward:true})` — usuário interage com o app
-demonstrado). Alternância por atalho/paleta; Esc volta a pass-through. Sem
-isso o usuário não consegue operar o app que está demonstrando.
+**D4 — Overlay either draws OR lets through; never both.** Two modes:
+**draw** (overlay captures the mouse and draws) and **pass-through**
+(`setIgnoreMouseEvents(true, {forward:true})` — the user interacts with the app
+being demonstrated). Toggled by shortcut/palette; Esc returns to pass-through. Without
+this the user can't operate the app they are demonstrating.
 
-**D5 — Histórico = replay do log.** Desfazer `Ctrl+Z`, refazer `Ctrl+Shift+Z`
-(ou `Ctrl+Y`); ilimitado na sessão; os eventos `undo`/`redo` também são
-gravados (o log é a fonte da verdade, o stack é estado derivado).
+**D5 — History = replay of the log.** Undo `Ctrl+Z`, redo `Ctrl+Shift+Z`
+(or `Ctrl+Y`); unlimited within the session; the `undo`/`redo` events are
+also recorded (the log is the source of truth, the stack is derived state).
 
-**D6 — Marker vira âncora de contexto.** `Ctrl+M` (já existe) passa a:
-capturar o frame naquele instante + **queimar os strokes ativos** (e laser, se
-on) → `frames/marker-N.png` + evento `marker` no jsonl. Hoje marker é só
-timestamp; com isso ele vira o "olhe aqui" do agente (GLM lê PNG nativamente).
+**D6 — Marker becomes a context anchor.** `Ctrl+M` (already exists) now:
+captures the frame at that instant + **burns in the active strokes** (and laser, if
+on) → `frames/marker-N.png` + `marker` event in the jsonl. Today the marker is just a
+timestamp; with this it becomes the agent's "look here" (GLM reads PNG natively).
 
-**D7 — Anotar em modo somente-transcrição ⇒ print queimado automático**
-(decisão do mantenedor, 2026-09-22). O overlay de anotação também fica
-disponível durante o **ditado (F9)** — mic-only, sem vídeo. Como ali não há
-vídeo que registre a tela, cada **rajada de anotação** dispara um print
-automático: terminou um traço/laser e passou ~2s sem novos eventos → captura
-o frame + queima os strokes acumulados → `frames/print-<t>s.png` na sessão do
-ditado (o mesmo formato do print manual; evento `print` no jsonl com os
-strokes incluídos). Flush pendente no stop do ditado. Sem anotação no ditado,
-nenhum print — o automático só existe quando o usuário marcou algo.
+**D7 — Annotating in transcription-only mode ⇒ automatic burned-in screenshot**
+(maintainer's decision, 2026-09-22). The annotation overlay is also
+available during **dictation (F9)** — mic-only, no video. Since there is no
+video there recording the screen, each **annotation burst** fires an automatic
+screenshot: a stroke/laser finished and ~2s passed with no new events → capture
+the frame + burn in the accumulated strokes → `frames/print-<t>s.png` in the
+dictation session (same format as the manual screenshot; `print` event in the jsonl with the
+strokes included). Pending flush on dictation stop. Without annotation in the dictation,
+no screenshot — the automatic one only exists when the user marked something.
 
-## Ferramentas v1
+## v1 tools
 
-| Ferramenta | Comportamento |
+| Tool | Behavior |
 |---|---|
-| **Laser** (G) | Ponteiro com rastro que some (~600ms) para apontar no vídeo; caminho persistido no log como evento próprio (contexto de atenção) |
-| **Pincel** (B) | Freehand; 4 cores (vermelho, amarelo, verde, ciano) × 3 espessuras; stroke vetorial |
-| **Borracha — modo traço** (E) | Remove o stroke inteiro tocado (hit-test no log) |
-| **Borracha — modo normal** (E·duplo) | Apaga por proximidade: divide/remove segmentos dentro do raio |
-| **Limpar** (C) | Apaga tudo (evento `clear` — desfazível) |
-| **Desfazer/Refazer** | `Ctrl+Z` / `Ctrl+Shift+Z` + botões na paleta |
+| **Laser** (G) | Pointer with a trail that fades (~600ms) to point at the video; path persisted in the log as its own event (attention context) |
+| **Brush** (B) | Freehand; 4 colors (red, yellow, green, cyan) × 3 thicknesses; vector stroke |
+| **Eraser — stroke mode** (E) | Removes the entire touched stroke (hit-test on the log) |
+| **Eraser — normal mode** (E·double) | Erases by proximity: splits/removes segments within the radius |
+| **Clear** (C) | Erases everything (`clear` event — undoable) |
+| **Undo/Redo** | `Ctrl+Z` / `Ctrl+Shift+Z` + buttons on the palette |
 
-Paleta compacta durante REC (irmã da barra REC, canto):
-tools, cores, espessura, undo/redo, indicador do modo (desenho/pass-through).
-**REVISÃO do mantenedor (2026-09-23): a paleta NÃO abre mais junto com o
-REC/ditado** — fica oculta por default e aparece sob demanda no
-`Ctrl+Alt+H` (a overlay segue viva em pass-through: prints D6/D7, Ctrl+Alt+P
-e hotkeys continuam funcionando sem a paleta). O painel standalone
-(Ctrl+Alt+H fora de sessão) continua abrindo com a paleta visível.
-Atalhos globais durante REC: `Ctrl+Alt+G/B/E/C` ferramentas, `Ctrl+Alt+Espaço`
-alterna desenho↔pass-through (proposta — ver aberto nº 2). Laser mudou de
-`Ctrl+Alt+L` para `Ctrl+Alt+G` (mantenedor, 2026-09-22: cluster inteiro na
-metade esquerda — mão direita fora do teclado).
+Compact palette during REC (sister of the REC bar, corner):
+tools, colors, thickness, undo/redo, mode indicator (draw/pass-through).
+**MAINTAINER'S REVIEW (2026-09-23): the palette no longer opens together with
+REC/dictation** — it is hidden by default and appears on demand via
+`Ctrl+Alt+H` (the overlay stays alive in pass-through: D6/D7 screenshots, Ctrl+Alt+P
+and hotkeys keep working without the palette). The standalone panel
+(Ctrl+Alt+H outside a session) keeps opening with the palette visible.
+Global shortcuts during REC: `Ctrl+Alt+G/B/E/C` tools, `Ctrl+Alt+Space`
+toggles draw↔pass-through (proposal — see open item #2). Laser moved from
+`Ctrl+Alt+L` to `Ctrl+Alt+G` (maintainer, 2026-09-22: whole cluster in the
+left half — right hand off the keyboard).
 
-## Print no modo transcrição (AN.5)
+## Screenshot in transcription mode (AN.5)
 
-Durante **ditado (F9) em recording/transcribing** ou **sessão em REC**:
+During **dictation (F9) in recording/transcribing** or a **session in REC**:
 
-- **Manual** — `Ctrl+Alt+P` → `desktopCapturer.getSources` full-res no main →
-  `frames/print-<t>s.png` na sessão corrente (a do ditado ou a da gravação) →
-  listado no buildContext. Sem sessão ativa: ignora com log. (Mesmo mecanismo
-  do marker, sem strokes.)
-- **Automático no ditado** (D7) — anotação usada durante o modo
-  somente-transcrição → print queimado da rajada (debounce ~2s) + flush no
-  stop; um registro visual por momento marcado, não por traço.
+- **Manual** — `Ctrl+Alt+P` → `desktopCapturer.getSources` full-res in the main process →
+  `frames/print-<t>s.png` in the current session (the dictation's or the recording's) →
+  listed in buildContext. No active session: ignored with a log. (Same mechanism
+  as the marker, without strokes.)
+- **Automatic in dictation** (D7) — annotation used during
+  transcription-only mode → burned screenshot of the burst (debounce ~2s) + flush on
+  stop; one visual record per marked moment, not per stroke.
 
-No REC de tela o automático NÃO dispara (o vídeo WYSIWYG já registra as
-marcações; print lá continua por marker ou manual).
+In screen REC the automatic one does NOT fire (the WYSIWYG video already records the
+marks; screenshot there stays via marker or manual).
 
-## Contexto para agentes (AN.4)
+## Context for agents (AN.4)
 
-`buildContext` passa a incluir:
+`buildContext` comes to include:
 
 ```
 Marcações: 6 (laser 01:40 · pincel 02:13 · borracha 02:20 · laser 04:30 · pincel 04:51 · clear 05:02) — vetoriais com timestamps em annotations.jsonl
 Prints c/ marcação: frames/marker-2.png · frames/marker-3.png
 ```
 
-O MCP da Etapa 3 (E3) expõe `annotations {dir,name}` junto de
-`session_get`. Evoluções: clipe automático ±3s em cada marker; resumo
-semântico das marcações via Jev (score de relevância por trecho).
+(The literal buildContext lines above are emitted by the app in Portuguese: "Marks: 6 (laser … · brush … · eraser … · clear …) — vectorial with timestamps in annotations.jsonl" / "Screenshots w/ marks: …")
 
-## Sub-marcos
+The Stage 3 MCP (E3) exposes `annotations {dir,name}` alongside
+`session_get`. Evolutions: automatic ±3s clip per marker; semantic
+summary of the marks via Jev (relevance score per segment).
 
-- **AN.1 — Overlay de anotação + paleta** (janela, modos desenho/pass-through,
-  atalhos; laser e pincel funcionando em tela, ainda sem REC). Aceite:
-  desenhar/apontar sobre qualquer app, alternar pass-through, Esc limpa modo.
-- **AN.2 — Eventos + histórico**: strokes/eraser/clear/undo/redo em
-  `annotations.jsonl` (px físicos, t relativo); borracha nos 2 modos.
-  Aceite: replay determinístico do estado a partir do log (teste unitário).
-- **AN.3 — Marker queimado**: Ctrl+M → frame + strokes → `frames/marker-N.png`
-  (composite canvas no renderer da overlay). Aceite: print com as marcações
-  visíveis listado no buildContext.
-- **AN.4 — Contexto**: linhas no buildContext + campo no MCP (com E3).
-- **AN.5 — Print na transcrição**: `Ctrl+Alt+P` durante ditado/REC →
-  `frames/print-*.png`; **auto-print queimado** quando anota em modo
-  somente-transcrição (D7). Aceite: print aparece no contexto da sessão do
-  ditado; anotar no ditado sem print manual produz ao menos 1 print queimado.
-- **AN.6 — Scroll-through**: no modo desenho a roda do mouse é repassada à
-  janela de baixo (koffi/user32: `WM_MOUSEWHEEL` na `WindowFromPoint` do
-  ponto, overlay desviado via `SetWindowPos` off-screen no instante da
-  consulta). Aceite: página real rola com o laser ativo; Ctrl+roda mantém
-  zoom; pass-through inalterado.
+## Sub-milestones
 
-Sequência: AN.1 → AN.2 → AN.3 → (AN.4 com E3) → AN.5 → AN.6. AN.1/AN.2 são a
-base de tudo; AN.5 é independente e barato (pode andar junto com AN.3).
+- **AN.1 — Annotation overlay + palette** (window, draw/pass-through modes,
+  shortcuts; laser and brush working on screen, no REC yet). Acceptance:
+  draw/point over any app, toggle pass-through, Esc clears the mode.
+- **AN.2 — Events + history**: strokes/eraser/clear/undo/redo in
+  `annotations.jsonl` (physical px, relative t); eraser in both modes.
+  Acceptance: deterministic replay of the state from the log (unit test).
+- **AN.3 — Burned marker**: Ctrl+M → frame + strokes → `frames/marker-N.png`
+  (canvas composite in the overlay renderer). Acceptance: screenshot with the
+  marks visible listed in buildContext.
+- **AN.4 — Context**: lines in buildContext + field in the MCP (with E3).
+- **AN.5 — Screenshot in transcription**: `Ctrl+Alt+P` during dictation/REC →
+  `frames/print-*.png`; **auto burned screenshot** when annotating in
+  transcription-only mode (D7). Acceptance: screenshot appears in the dictation
+  session's context; annotating in dictation without a manual screenshot produces at least 1 burned screenshot.
+- **AN.6 — Scroll-through**: in draw mode the mouse wheel is forwarded to the
+  window below (koffi/user32: `WM_MOUSEWHEEL` on the `WindowFromPoint` of the
+  point, overlay shifted off-screen via `SetWindowPos` at the instant of the
+  query). Acceptance: a real page scrolls with the laser active; Ctrl+wheel keeps
+  zoom; pass-through unchanged.
 
-## Riscos e contramedidas
+Sequence: AN.1 → AN.2 → AN.3 → (AN.4 with E3) → AN.5 → AN.6. AN.1/AN.2 are the
+base of everything; AN.5 is independent and cheap (can move together with AN.3).
 
-- **DPI 1.53**: tudo em px físicos desde o dia 1 (overlay de região já provou
-  a matemática CSS×física).
-- **Performance durante REC**: overlay é canvas 2D leve (RAM ~50–80MB a mais,
-  contra 566MB pico atual); medir no AN.1.
-- **Overlay no vídeo quando NÃO deveria** (usuário esquece o modo desenho):
-  indicador claro na paleta + Esc volta a pass-through.
-- **Multi-display**: v1 no display gravado (o mesmo da sessão); evolution.
-- **Roubo de foco**: overlay nunca toma foco salvo em modo desenho ativo;
-  atalhos globais, não locais.
+## Risks and countermeasures
 
-## Decisões FECHADAS pelo mantenedor (2026-09-22, confirmadas em questionário)
+- **DPI 1.53**: everything in physical px from day 1 (the region overlay already
+  proved the CSS×physical math).
+- **Performance during REC**: the overlay is a light 2D canvas (RAM ~50–80MB more,
+  vs 566MB current peak); measure in AN.1.
+- **Overlay in the video when it shouldn't be** (user forgets draw mode):
+  clear indicator on the palette + Esc returns to pass-through.
+- **Multi-display**: v1 on the recorded display (the same as the session); evolution.
+- **Focus stealing**: the overlay never takes focus except in active draw mode;
+  global shortcuts, not local ones.
 
-1. **Marcações no vídeo: WYSIWYG** — saem no vídeo (D2 como escrito). Cursor do
-   sistema não sai no capture; laser é o apontador. Queima em pós fica como
-   evolução futura via log vetorial.
-2. **Atalhos: os propostos** — `Ctrl+Alt+G/B/E/C` ferramentas (laser mudou de
-   L para G em 2026-09-22, mão esquerda),
-   `Ctrl+Alt+Espaço` desenho↔pass-through, `Ctrl+Alt+P` print,
-   `Ctrl+Z`/`Ctrl+Shift+Z` histórico.
-3. **Paleta fixa** — 4 cores (vermelho, amarelo, verde, ciano) × 3 espessuras;
-   customização fica para v2.
-4. **Print: ditado E sessão em REC** — `Ctrl+Alt+P` anexa à sessão corrente em
-   ambos os modos.
+## Decisions CLOSED by the maintainer (2026-09-22, confirmed in a questionnaire)
+
+1. **Marks in the video: WYSIWYG** — they end up in the video (D2 as written). The system
+   cursor doesn't come out in the capture; the laser is the pointer. Burning in post stays as
+   a future evolution via the vector log.
+2. **Shortcuts: the proposed ones** — `Ctrl+Alt+G/B/E/C` tools (laser moved from
+   L to G on 2026-09-22, left hand),
+   `Ctrl+Alt+Space` draw↔pass-through, `Ctrl+Alt+P` screenshot,
+   `Ctrl+Z`/`Ctrl+Shift+Z` history.
+3. **Fixed palette** — 4 colors (red, yellow, green, cyan) × 3 thicknesses;
+   customization stays for v2.
+4. **Screenshot: dictation AND session in REC** — `Ctrl+Alt+P` attaches to the current session in
+   both modes.

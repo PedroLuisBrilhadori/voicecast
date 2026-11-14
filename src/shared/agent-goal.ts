@@ -1,7 +1,7 @@
 /**
- * Lógica pura do ciclo de goal do cockpit (C2/PLANO-COCKPIT) — sem electron,
- * testável. O runner (main/agent/runner.ts) usa este estado para emitir
- * atualizações à barra e persistir o desfecho.
+ * Pure cockpit goal-cycle logic (C2/PLANO-COCKPIT) — no electron, testable.
+ * The runner (main/agent/runner.ts) uses this state to emit updates to the
+ * bar and persist the outcome.
  */
 
 export type GoalPhase =
@@ -12,7 +12,7 @@ export type GoalPhase =
   | "timeout"
   | "cancelled";
 
-/** Fase terminal? */
+/** Terminal phase? */
 export function isGoalFinal(phase: GoalPhase): boolean {
   return phase === "completed" || phase === "failed" || phase === "timeout" || phase === "cancelled";
 }
@@ -24,7 +24,7 @@ export interface GoalState {
   phase: GoalPhase;
   startedAt: number | null;
   endedAt: number | null;
-  /** Último texto do agente (para a barra/overlay mostrarem). */
+  /** Last agent text (for the bar/overlay to display). */
   lastOutput: string | null;
   error: string | null;
 }
@@ -39,7 +39,7 @@ export function createGoalState(id: string, goal: string, cwd: string): GoalStat
   return { id, goal, cwd, phase: "queued", startedAt: null, endedAt: null, lastOutput: null, error: null };
 }
 
-/** Transição única e válida — evento fora de fase é ignorado (fail-soft). */
+/** Single valid transition — out-of-phase events are ignored (fail-soft). */
 export function transitionGoal(state: GoalState, ev: GoalEvent): GoalState {
   switch (ev.type) {
     case "start":
@@ -57,20 +57,20 @@ export function transitionGoal(state: GoalState, ev: GoalEvent): GoalState {
   }
 }
 
-/** Desfecho legível para a barra (e para meta.json.agentGoals). */
+/** Readable outcome for the bar (and for meta.json.agentGoals). */
 export function goalSummary(state: GoalState): string {
   switch (state.phase) {
     case "queued":
-      return "goal na fila";
+      return "goal queued";
     case "running":
-      return `rodando · ${Math.round((Date.now() - (state.startedAt ?? Date.now())) / 1000)}s`;
+      return `running · ${Math.round((Date.now() - (state.startedAt ?? Date.now())) / 1000)}s`;
     case "completed":
-      return "goal concluído";
+      return "goal completed";
     case "timeout":
-      return "goal excedeu o tempo";
+      return "goal timed out";
     case "cancelled":
-      return "goal cancelado";
+      return "goal cancelled";
     case "failed":
-      return `goal falhou: ${state.error ?? "erro desconhecido"}`;
+      return `goal failed: ${state.error ?? "unknown error"}`;
   }
 }

@@ -1,30 +1,30 @@
 /**
- * Worker do cockpit (C4) — entry do utilityProcess que hospeda a fila de
- * goals do runner (C2/C3: runGoal/GoalQueue — ESSA lógica mora AQUI, sem
- * duplicação). Crash do worker não derruba gravação/ditado (decisão #4 do
- * PLANO-COCKPIT: bridge em utilityProcess).
+ * Cockpit worker (C4) — entry of the utilityProcess hosting the runner's
+ * goal queue (C2/C3: runGoal/GoalQueue — THAT logic lives HERE, no
+ * duplication). A worker crash doesn't take down recording/dictation (PLANO-COCKPIT
+ * decision #4: bridge in a utilityProcess).
  *
- * Protocolo pela porta (src/shared/agent-worker-protocol.ts):
- * - recebe {type:"enqueue", req} / {type:"status"} / {type:"enrich-result"};
- * - responde {type:"goal-state", state} a cada transição da fila;
- * - retransmite a telemetria do runner via {type:"telemetry", ...}.
+ * Port protocol (src/shared/agent-worker-protocol.ts):
+ * - receives {type:"enqueue", req} / {type:"status"} / {type:"enrich-result"};
+ * - answers {type:"goal-state", state} on every queue transition;
+ * - relays runner telemetry via {type:"telemetry", ...}.
  *
- * Telemetria (decisão C4): no utilityProcess o `require("electron")` só
- * expõe {net, systemPreferences} (medido empiricamente no Electron 44) —
- * não há init do SDK OTel aqui (NUNCA duplicar init em dois processos). O
- * core lazy local recebe um meter-ponte (setProcessMeter) que retransmite
- * counter/histogram ao main, que os reemite com os MESMOS nomes (um único
- * SDK/exporter — W1). Spans (withSpan do agent.goal) NÃO atravessam a porta:
- * ficam ausentes no worker (aceito e documentado no briefing C4).
+ * Telemetry (C4 decision): in the utilityProcess `require("electron")` only
+ * exposes {net, systemPreferences} (measured empirically on Electron 44) —
+ * there is no OTel SDK init here (NEVER duplicate init across two processes). The
+ * local lazy core receives a bridge meter (setProcessMeter) that relays
+ * counter/histogram to main, which re-emits them with the SAME names (a single
+ * SDK/exporter — W1). Spans (withSpan of agent.goal) do NOT cross the port:
+ * they are absent in the worker (accepted and documented in briefing C4).
  *
- * Enricher (C3): função não serializa — o worker usa um delegante que pede
- * o enriquecimento ao main ({type:"enrich-request"}); o main roda o
- * goalContextEnricher() de produção (goal-context.ts → biblioteca → electron,
- * indisponível no utilityProcess). Timeout/erro devolve o goal original
- * (fail-soft, mesma semântica do C3: contexto é melhoria, nunca dependência).
+ * Enricher (C3): functions don't serialize — the worker uses a delegate that asks
+ * main for the enrichment ({type:"enrich-request"}); main runs the production
+ * goalContextEnricher() (goal-context.ts → library → electron,
+ * unavailable in the utilityProcess). Timeout/error returns the original goal
+ * (fail-soft, same C3 semantics: context is an improvement, never a dependency).
  *
- * Testes: tests/agent-worker.test.ts roda este loop com porta MOCK (o mesmo
- * desenho do telemetry-worker do W1).
+ * Tests: tests/agent-worker.test.ts runs this loop with a MOCK port (the same
+ * design as the W1 telemetry-worker).
  */
 import { GoalQueue, type RunnerConfig } from "./runner";
 import { setProcessMeter } from "../telemetry";
@@ -43,7 +43,7 @@ function safePost(port: AgentWorkerPort, m: AgentWorkerOutbound): void {
   } catch {}
 }
 
-/** Meter-ponte: cada emit vira mensagem {type:"telemetry"} ao main. */
+/** Bridge meter: each emit becomes a {type:"telemetry"} message to main. */
 function portMeter(port: AgentWorkerPort): MeterLike {
   return {
     createCounter: (name, o) => ({
@@ -58,9 +58,9 @@ function portMeter(port: AgentWorkerPort): MeterLike {
 }
 
 /**
- * Delegante do enriquecimento C3: pede ao main pela porta e aguarda o
- * enrich-result correspondente (correlação por rid). Sem resposta em
- * timeoutMs → resolve o goal ORIGINAL (fail-soft do C3, nunca trava a fila).
+ * C3 enrichment delegate: asks main over the port and awaits the
+ * matching enrich-result (correlation by rid). No response within
+ * timeoutMs → resolves the ORIGINAL goal (C3 fail-soft, never blocks the queue).
  */
 export function portEnricher(port: AgentWorkerPort, timeoutMs = 30_000): GoalEnricher {
   const pending = new Map<string, (r: EnrichedGoal) => void>();
@@ -91,22 +91,22 @@ export function portEnricher(port: AgentWorkerPort, timeoutMs = 30_000): GoalEnr
 }
 
 export interface AgentWorkerDeps {
-  /** Config do runner (default: agentRunnerConfig() do env do utilityProcess). */
+  /** Runner config (default: agentRunnerConfig() from the utilityProcess env). */
   cfg?: RunnerConfig;
-  /** Enriquecedor (default: delega ao main pela porta — C3 em produção). */
+  /** Enricher (default: delegates to main over the port — C3 in production). */
   enrich?: GoalEnricher;
-  /** Timeout do enrich delegado (default 30s) — sem resposta = goal sem contexto. */
+  /** Delegated enrich timeout (default 30s) — no response = goal without context. */
   enrichTimeoutMs?: number;
 }
 
 /**
- * Loop do worker: aplica as mensagens do main ao GoalQueue local. Cada
- * transição de estado vira {type:"goal-state"} pela porta (a barra consome
- * via broadcast do main). Recusas de enqueue (goal vazio / bridge off) viram
- * um estado sintético failed — o usuário vê o POR QUÊ na barra.
+ * Worker loop: applies main's messages to the local GoalQueue. Each
+ * state transition becomes {type:"goal-state"} over the port (the bar consumes
+ * it via main broadcast). Enqueue refusals (empty goal / bridge off) become
+ * a synthetic failed state — the user sees the WHY in the bar.
  */
 export function runAgentWorker(port: AgentWorkerPort, deps: AgentWorkerDeps = {}): void {
-  // telemetria do runner/runtime-setup/context sai pela porta (SDK continua no main)
+  // runner/runtime-setup/context telemetry goes out over the port (SDK stays on main)
   setProcessMeter(portMeter(port));
   let lastState: GoalState | null = null;
   const onState = (s: GoalState): void => {
@@ -141,13 +141,13 @@ export function runAgentWorker(port: AgentWorkerPort, deps: AgentWorkerDeps = {}
         });
         return;
       case "enrich-result":
-        return; // consumido pelo listener do portEnricher
+        return; // consumed by the portEnricher listener
     }
   });
 }
 
-// Entrada real: `utilityProcess.fork(dist/main/agent/worker.js)` cai aqui
-// (bridge.ts resolve o path como sibling compilado deste arquivo). Importado
-// no main/testes, process.parentPort é undefined → não liga nada.
+// Real entry: `utilityProcess.fork(dist/main/agent/worker.js)` lands here
+// (bridge.ts resolves the path as a compiled sibling of this file). Imported
+// from main/tests, process.parentPort is undefined → wires nothing.
 const pp = (process as unknown as { parentPort?: AgentWorkerPort }).parentPort;
 if (pp) runAgentWorker(pp);

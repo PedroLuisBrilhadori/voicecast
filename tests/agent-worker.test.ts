@@ -1,12 +1,12 @@
 /**
- * C4 — worker do cockpit (utilityProcess MOCK: porta fake no formato do
- * process.parentPort do Electron). Valida o PROTOCOLO de mensagens sem
- * electron: enqueue → sequência de goal-state pela porta, status, delegação
- * do enrich C3 (enrich-request/enrich-result), fail-soft sem resposta e a
- * telemetria do runner retransmitida ao main (mesmos nomes — sem duplicar
- * init do SDK no utilityProcess).
+ * C4 — cockpit worker (MOCK utilityProcess: fake port in Electron's
+ * process.parentPort format). Validates the message PROTOCOL without
+ * electron: enqueue → goal-state sequence over the port, status, C3 enrich
+ * delegation (enrich-request/enrich-result), fail-soft without response and
+ * runner telemetry relayed to main (same names — no duplicate SDK init in
+ * the utilityProcess).
  *
- * O agente real é o fixture fake-agent.sh (mesmo padrão dos testes do C2/C3).
+ * The real agent is the fake-agent.sh fixture (same pattern as the C2/C3 tests).
  */
 import { beforeAll, describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
@@ -22,7 +22,7 @@ import type { RunnerConfig } from "../src/main/agent/runner";
 
 type Port = ReturnType<typeof fakePort>;
 
-/** Porta MOCK no formato do process.parentPort do Electron (e.data). */
+/** MOCK port in Electron's process.parentPort format (e.data). */
 function fakePort() {
   const outbox: AgentWorkerOutbound[] = [];
   const listeners: ((e: { data: AgentWorkerInbound }) => void)[] = [];
@@ -43,7 +43,7 @@ function fakePort() {
 async function until(cond: () => boolean, ms = 4_000): Promise<void> {
   const t0 = Date.now();
   while (!cond()) {
-    if (Date.now() - t0 > ms) throw new Error("timeout esperando condição do worker");
+    if (Date.now() - t0 > ms) throw new Error("timeout waiting for worker condition");
     await new Promise((r) => setTimeout(r, 5));
   }
 }
@@ -51,12 +51,12 @@ async function until(cond: () => boolean, ms = 4_000): Promise<void> {
 const goalStates = (port: Port): GoalState[] =>
   port.outbox.filter((m): m is Extract<AgentWorkerOutbound, { type: "goal-state" }> => m.type === "goal-state").map((m) => m.state);
 
-/** Enriquecedor direto (sem round-trip) p/ testes que não exercem a delegação C3. */
+/** Direct enricher (no round-trip) for tests that don't exercise C3 delegation. */
 const enrichDireto = async (goal: string) => ({ goal, included: false, contextChars: 0 });
 
-// ---------------------------------------------------------------- testes
+// ---------------------------------------------------------------- tests
 
-describe("agent-worker (protocolo pela porta MOCK)", () => {
+describe("agent-worker (protocol over the MOCK port)", () => {
   let cfg: RunnerConfig;
 
   beforeAll(() => {
@@ -65,7 +65,7 @@ describe("agent-worker (protocolo pela porta MOCK)", () => {
     cfg = { enabled: true, agentBin: bin, timeoutMs: 10_000, direct: true };
   });
 
-  it("enqueue → estados queued→running→completed pela porta, com saída do agente", async () => {
+  it("enqueue → queued→running→completed states over the port, with agent output", async () => {
     const port = fakePort();
     runAgentWorker(port, { cfg, enrich: enrichDireto });
     port.send({ type: "enqueue", req: { id: "w1", goal: "goal do worker", cwd: os.tmpdir() } });
@@ -83,10 +83,10 @@ describe("agent-worker (protocolo pela porta MOCK)", () => {
     expect(done.lastOutput).toContain("ok do agente");
     expect(done.error).toBeNull();
 
-    // telemetria do runner retransmitida pela porta (mesmos nomes, sem SDK no
-    // worker). O core lazy cacheia o instrumento no PRIMEIRO emit — em
-    // produção ele nasce com o meter do ÚNICO worker do processo; aqui, com a
-    // porta do primeiro teste do arquivo (mesma semântica de binding).
+    // runner telemetry relayed over the port (same names, no SDK in the
+    // worker). The lazy core caches the instrument on the FIRST emit — in
+    // production it's born with the meter of the process's ONLY worker; here,
+    // with the port of the file's first test (same binding semantics).
     expect(
       port.outbox.some(
         (m) => m.type === "telemetry" && m.kind === "counter" && m.name === "voicecast_agent_goals_total" && m.attrs?.desfecho === "completed",
@@ -97,7 +97,7 @@ describe("agent-worker (protocolo pela porta MOCK)", () => {
     ).toBe(true);
   });
 
-  it("status devolve último estado + resumo da fila", async () => {
+  it("status returns last state + queue summary", async () => {
     const port = fakePort();
     runAgentWorker(port, { cfg, enrich: enrichDireto });
     port.send({ type: "enqueue", req: { id: "w2", goal: "g", cwd: os.tmpdir() } });
@@ -109,19 +109,19 @@ describe("agent-worker (protocolo pela porta MOCK)", () => {
     expect(st?.state?.phase).toBe("completed");
     expect(st?.state?.id).toBe("w2");
     expect(st?.size).toBe(0);
-    expect(st?.summary).toBe("sem goals");
+    expect(st?.summary).toBe("no goals");
   });
 
-  it("enrich C3 delegado ao main: enrich-request → enrich-result → contexto chega ao agente", async () => {
+  it("C3 enrich delegated to main: enrich-request → enrich-result → context reaches the agent", async () => {
     const port = fakePort();
-    runAgentWorker(port, { cfg }); // default: delega o enrich pela porta (produção)
+    runAgentWorker(port, { cfg }); // default: delegates enrich over the port (production)
     process.env.FAKE_ECHO_ARGS = "1";
     port.send({ type: "enqueue", req: { id: "w3", goal: "goal c/ contexto", cwd: os.tmpdir() } });
 
     await until(() => port.outbox.some((m) => m.type === "enrich-request"));
     const req = port.outbox.find((m): m is Extract<AgentWorkerOutbound, { type: "enrich-request" }> => m.type === "enrich-request");
-    expect(req?.goal).toBe("goal c/ contexto"); // o goal ORIGINAL vai ao main (não o enriquecido)
-    // o main responde com o goal enriquecido (goalContextEnricher roda lá)
+    expect(req?.goal).toBe("goal c/ contexto"); // the ORIGINAL goal goes to main (not the enriched one)
+    // main responds with the enriched goal (goalContextEnricher runs there)
     port.send({
       type: "enrich-result",
       rid: req!.rid,
@@ -140,14 +140,14 @@ describe("agent-worker (protocolo pela porta MOCK)", () => {
     delete process.env.FAKE_ECHO_ARGS;
   });
 
-  it("enrich sem resposta = fail-soft do C3: goal roda sem contexto, fila não trava", async () => {
+  it("enrich without response = C3 fail-soft: goal runs without context, queue doesn't jam", async () => {
     const port = fakePort();
     runAgentWorker(port, { cfg, enrichTimeoutMs: 100 });
     process.env.FAKE_ECHO_ARGS = "1";
     port.send({ type: "enqueue", req: { id: "w4", goal: "goal sem resposta", cwd: os.tmpdir() } });
 
     await until(() => port.outbox.some((m) => m.type === "enrich-request"));
-    // NÃO responde — timeout do delegante resolve o goal original
+    // does NOT respond — delegator timeout resolves the original goal
     await until(() => goalStates(port).some((s) => s.phase === "completed"));
     const done = goalStates(port)[goalStates(port).length - 1];
     expect(done.lastOutput).toContain("ok do agente");
@@ -155,7 +155,7 @@ describe("agent-worker (protocolo pela porta MOCK)", () => {
     delete process.env.FAKE_ECHO_ARGS;
   });
 
-  it("recusa (goal vazio) vira estado sintético failed — a barra mostra o porquê", async () => {
+  it("rejection (empty goal) becomes a synthetic failed state — the bar shows why", async () => {
     const port = fakePort();
     runAgentWorker(port, { cfg, enrich: enrichDireto });
     port.send({ type: "enqueue", req: { id: "w5", goal: "   ", cwd: os.tmpdir() } });
@@ -163,10 +163,10 @@ describe("agent-worker (protocolo pela porta MOCK)", () => {
     await until(() => goalStates(port).some((s) => s.phase === "failed"));
     const failed = goalStates(port).find((s) => s.phase === "failed");
     expect(failed?.id).toBe("w5");
-    expect(failed?.error).toBe("goal vazio");
+    expect(failed?.error).toBe("empty goal");
   });
 
-  it("bridge off no worker: failed sintético com o erro do kill-switch", async () => {
+  it("bridge off in the worker: synthetic failed with the kill-switch error", async () => {
     const port = fakePort();
     runAgentWorker(port, { cfg: { ...cfg, enabled: false }, enrich: enrichDireto });
     port.send({ type: "enqueue", req: { id: "w6", goal: "g", cwd: os.tmpdir() } });
@@ -175,7 +175,7 @@ describe("agent-worker (protocolo pela porta MOCK)", () => {
     expect(goalStates(port)[0].error).toContain("VOICECAST_AGENT_BRIDGE");
   });
 
-  it("fila serializa: dois goals enfileirados produzem dois desfechos completos", async () => {
+  it("queue serializes: two enqueued goals produce two complete outcomes", async () => {
     const port = fakePort();
     runAgentWorker(port, { cfg, enrich: enrichDireto });
     port.send({ type: "enqueue", req: { id: "q1", goal: "primeiro", cwd: os.tmpdir() } });

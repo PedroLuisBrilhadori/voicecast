@@ -1,6 +1,6 @@
 /**
- * Gestão de janelas do voicecast: picker, overlay de região, barra REC e o
- * renderer oculto de captura (MediaRecorder roda lá, padrão validado na F0).
+ * voicecast window management: picker, region overlay, REC bar, and the
+ * hidden capture renderer (MediaRecorder runs there, pattern validated in F0).
  */
 import { BrowserWindow, screen, ipcMain } from "electron";
 import path from "node:path";
@@ -20,7 +20,7 @@ const webPrefs = {
 
 export { dist, preload, webPrefs };
 
-/** Manda console/crash do renderer para o log do main. */
+/** Forwards renderer console/crash to the main log. */
 export function wireLogging(w: BrowserWindow, tag: string): void {
   const { logInfo, logError } = require("./logging") as typeof import("./logging");
   w.webContents.on("console-message", (_e, level, message, line, sourceId) => {
@@ -53,10 +53,10 @@ export function createPicker(): BrowserWindow {
 }
 
 /**
- * Seleção de região em TODOS os displays de uma vez (padrão snipping tool):
- * um overlay fullscreen por monitor; o usuário ARRASTA no monitor que quiser
- * e SOLTAR confirma (mouse-first — Enter não participa). Esc/✕ cancela tudo.
- * Resolves {rect em px FÍSICOS, displayIndex} ou null = cancelado.
+ * Region selection across ALL displays at once (snipping tool pattern):
+ * one fullscreen overlay per monitor; the user DRAGS on whichever monitor
+ * and RELEASE confirms (mouse-first — Enter takes no part). Esc/✕ cancels everything.
+ * Resolves {rect in PHYSICAL px, displayIndex} or null = canceled.
  */
 export function selectRegionOnDisplays(): Promise<{ rect: Rect; displayIndex: number } | null> {
   const displays = screen.getAllDisplays();
@@ -79,7 +79,7 @@ export function selectRegionOnDisplays(): Promise<{ rect: Rect; displayIndex: nu
 
     const ch = `region:result:${Date.now()}`;
     ipcMain.once(ch, (_e, payload: { rect: Rect; displayIndex: number } | null) => done(payload));
-    const timer = setTimeout(() => done(null), 120_000); // 2min sem ação → cancela
+    const timer = setTimeout(() => done(null), 120_000); // 2min without action → cancels
 
     displays.forEach((d, idx) => {
       const overlay = new BrowserWindow({
@@ -107,17 +107,17 @@ export function selectRegionOnDisplays(): Promise<{ rect: Rect; displayIndex: nu
   });
 }
 
-// ── posição da bar persistida entre sessões ────────────────────
+// ── bar position persisted across sessions ────────────────────
 
 const barBoundsFile = (): string => {
   try {
     return path.join(appDataDir(), "bar-position.json");
   } catch {
-    return ""; // app não pronto (testes) — sem persistência
+    return ""; // app not ready (tests) — no persistence
   }
 };
 
-/** Última posição salva da bar (ou null). Valida que ainda está visível em alguma tela. */
+/** Last saved bar position (or null). Validates it's still visible on some screen. */
 export function loadSavedBarBounds(): Rect | null {
   const f = barBoundsFile();
   if (!f) return null;
@@ -142,10 +142,10 @@ function saveBarBounds(w: BrowserWindow): void {
   } catch {}
 }
 
-/** Barra compacta frameless sempre-no-topo durante a gravação.
- *  opts.ditado: botões viram toggle do ditado; caller decide show() vs showInactive().
- *  Restaura a última posição arrastada pelo usuário (bar-position.json); sem
- *  posição salva nasce no default do SO. */
+/** Frameless always-on-top compact bar during recording.
+ *  opts.ditado: buttons become the dictation toggle; caller decides show() vs showInactive().
+ *  Restores the last position dragged by the user (bar-position.json); without
+ *  a saved position it starts at the OS default. */
 export function createBar(
   modeLabel: string,
   opts: { ditado?: boolean } = {},
@@ -160,7 +160,7 @@ export function createBar(
     resizable: false,
     skipTaskbar: true,
     alwaysOnTop: true,
-    focusable: !opts.ditado, // ditado: janela NÃO focável (não rouba nem mantém foco)
+    focusable: !opts.ditado, // ditado: window NOT focusable (neither steals nor keeps focus)
     hasShadow: true,
     backgroundColor: "#0c0c10",
     webPreferences: webPrefs,
@@ -177,19 +177,19 @@ export function createBar(
   };
   w.on("moved", persist);
   w.on("close", persist);
-  // ditado: NUNCA show() — no KWin/XWayland a barra mapeada com show() toma o
-  // foco do teclado (apesar de focusable:false) e o Ctrl+V do paste cai nela
-  // em vez do campo do usuário. showInactive mapeia sem ativar.
+  // ditado: NEVER show() — on KWin/XWayland the bar mapped with show() takes
+  // keyboard focus (despite focusable:false) and the paste Ctrl+V lands on it
+  // instead of the user's field. showInactive maps without activating.
   if (opts.ditado) w.showInactive();
   else w.show();
   return w;
 }
 
 /**
- * Editor de sessão (M2): player + transcrição + clipes + contexto.
- * corpus !== undefined abre a janela no modo dataset do voice (W2a — tela de
- * correção que substitui o painel :8700): corpus="" é a lista, corpus=<id>
- * abre o detalhe do item direto.
+ * Session editor (M2): player + transcript + clips + context.
+ * corpus !== undefined opens the window in the voice dataset mode (W2a — the
+ * correction screen that replaces the :8700 panel): corpus="" is the list, corpus=<id>
+ * opens the item detail directly.
  */
 export function createEditor(dir: string, name: string, corpus?: string): BrowserWindow {
   const w = new BrowserWindow({
@@ -205,14 +205,14 @@ export function createEditor(dir: string, name: string, corpus?: string): Browse
     query: corpus !== undefined ? { corpus } : { dir, name },
   });
   wireLogging(w, "editor");
-  // show() sem focus() nasce atrás da janela ativa — a tela do dataset ficava
-  // invisível (o usuário via só a janela que já estava na frente)
+  // show() without focus() starts behind the active window — the dataset screen used
+  // to stay invisible (the user only saw the window already in front)
   w.show();
   w.focus();
   return w;
 }
 
-/** Renderer oculto do ditado (mic-only, mesma página do recorder, modo=ditado). */
+/** Hidden dictation renderer (mic-only, same page as the recorder, mode=ditado). */
 export function createDitado(blobChannel: string): BrowserWindow {
   const w = new BrowserWindow({
     show: false,
@@ -223,7 +223,7 @@ export function createDitado(blobChannel: string): BrowserWindow {
   return w;
 }
 
-/** Renderer oculto que roda o getUserMedia(desktop)+MediaRecorder. */
+/** Hidden renderer that runs getUserMedia(desktop)+MediaRecorder. */
 export function createRecorder(blobChannel: string): BrowserWindow {
   const w = new BrowserWindow({
     show: false,

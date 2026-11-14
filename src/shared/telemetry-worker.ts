@@ -1,16 +1,16 @@
 /**
- * Worker de telemetria OTel (W1) — TODO o SDK vive AQUI, nunca no main.
+ * OTel telemetry worker (W1) — the WHOLE SDK lives HERE, never in main.
  *
- * Por quê: o import do SDK trava o event loop por ~9s (RELATORIO-TELEMETRIA,
- * causa 2 do delay do REC). Neste worker o import/init bloqueia só este
- * thread; o main segue livre e manda os emits como mensagens
- * (src/shared/telemetry-protocol.ts). O core lazy é o MESMO
- * (telemetry-core.ts) — os instruments nascem com os mesmos nomes/descrições
- * que chegam nas mensagens, então os nomes Prometheus não mudam.
+ * Why: the SDK import stalls the event loop for ~9s (RELATORIO-TELEMETRIA,
+ * REC delay cause 2). In this worker the import/init blocks only this
+ * thread; main stays free and sends the emits as messages
+ * (src/shared/telemetry-protocol.ts). The lazy core is the SAME
+ * (telemetry-core.ts) — instruments are born with the same names/descriptions
+ * that arrive in the messages, so the Prometheus names don't change.
  *
- * Arquivo puro de Node (sem electron — logging.ts puxaria o `app`): o que o
- * main precisa saber (lifecycle/erros) vem por mensagens; diag
- * VOICECAST_OTEL_DEBUG fala no stderr deste worker.
+ * Pure Node file (no electron — logging.ts would pull in `app`): whatever
+ * main needs to know (lifecycle/errors) comes via messages; VOICECAST_OTEL_DEBUG
+ * diag talks on this worker's stderr.
  *
  * Env: OTEL_ENABLED (default 1) · OTEL_EXPORTER_OTLP_ENDPOINT (default :4318)
  * · VOICECAST_OTEL_DEBUG=1
@@ -22,14 +22,14 @@ import type {
   TelemetryWorkerOutbound,
 } from "./telemetry-protocol";
 
-/** Fatia do Tracer OTel usada pelo worker (estrutural — fake encaixa). */
+/** Slice of the OTel Tracer the worker uses (structural — a fake fits). */
 export interface SpanLike {
   recordException(e: unknown): void;
   end(endTime?: number): void;
 }
 
 export interface TracerLike {
-  /** startTime/endTime em epoch-ms (TimeInput do OTel aceita Date.now()). */
+  /** startTime/endTime in epoch-ms (OTel's TimeInput accepts Date.now()). */
   startSpan(
     name: string,
     opts: { startTime?: number; attributes?: Attributes },
@@ -37,7 +37,7 @@ export interface TracerLike {
   ): SpanLike;
 }
 
-/** SDK já iniciado no worker — o que o main nunca enxerga direto. */
+/** SDK already started in the worker — what main never sees directly. */
 export interface TelemetrySdkHandle {
   endpoint: string;
   meter: MeterLike;
@@ -51,22 +51,22 @@ export type TelemetryWorkerPort = {
 };
 
 export interface TelemetryWorkerDeps {
-  /** Injetável para testes (default: SDK OTel de verdade). Nunca deve lançar — erro vira message. */
+  /** Injectable for tests (default: the real OTel SDK). Must never throw — errors become messages. */
   initSdk?: () => Promise<TelemetrySdkHandle>;
 }
 
 const BOOT_COUNTER = "voicecast_telemetry_worker_started_total";
 
 /**
- * Init REAL do SDK (ex-init do telemetry.ts do main, movido 1:1 — mesma
- * config de exporter/reader, mesmos envs). Dinâmico: o import pesado só
- * acontece no `init`, dentro deste thread.
+ * REAL SDK init (former init of main's telemetry.ts, moved 1:1 — same
+ * exporter/reader config, same envs). Dynamic: the heavy import only happens
+ * in `init`, inside this thread.
  */
 async function initRealSdk(): Promise<TelemetrySdkHandle> {
   const api = await import("@opentelemetry/api");
   if (process.env.VOICECAST_OTEL_DEBUG === "1") {
-    // diag do OTel é silencioso por default — sem isso erros de export
-    // (ex.: metric reader) desaparecem sem vestígios
+    // OTel's diag is silent by default — without this export errors
+    // (e.g. metric reader) vanish without a trace
     api.diag.setLogger(new api.DiagConsoleLogger(), api.DiagLogLevel.DEBUG);
   }
   const { NodeSDK } = await import("@opentelemetry/sdk-node");
@@ -79,7 +79,7 @@ async function initRealSdk(): Promise<TelemetrySdkHandle> {
   const sdk = new NodeSDK({
     serviceName: "voicecast",
     traceExporter: new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
-    // plural (singular 'metricReader' é deprecado no sdk-node 0.222+)
+    // plural (singular 'metricReader' is deprecated in sdk-node 0.222+)
     metricReaders: [
       new PeriodicExportingMetricReader({
         exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics` }),
@@ -110,9 +110,9 @@ async function initRealSdk(): Promise<TelemetrySdkHandle> {
 }
 
 /**
- * Loop do worker: aplica as mensagens do main no SDK local. Emits chegam com
- * name/description e são aplicados no core lazy daqui — emit antes do ready é
- * descartado (mesma semântica de antes do init no desenho antigo).
+ * Worker loop: applies main's messages to the local SDK. Emits arrive with
+ * name/description and are applied to this side's lazy core — emit before
+ * ready is discarded (same semantics as before-init in the old design).
  */
 export function runTelemetryWorker(port: TelemetryWorkerPort, deps?: TelemetryWorkerDeps): void {
   const core = createTelemetryCore();
@@ -138,9 +138,9 @@ export function runTelemetryWorker(port: TelemetryWorkerPort, deps?: TelemetryWo
       return;
     }
     core.setMeter(handle.meter);
-    // Telemetria sobre a telemetria (DoD do W1): prova que o caminho novo
-    // (worker → SDK → OTLP) está vivo — exportada no flush do shutdown.
-    core.counter(BOOT_COUNTER, "boots do worker de telemetria OTel (caminho W1 ativo)").add(1);
+    // Telemetry about telemetry (W1's DoD): proves the new path
+    // (worker → SDK → OTLP) is alive — exported on shutdown flush.
+    core.counter(BOOT_COUNTER, "OTel telemetry worker boots (W1 path active)").add(1);
     post({ type: "ready", endpoint: handle.endpoint });
   };
 
@@ -156,7 +156,7 @@ export function runTelemetryWorker(port: TelemetryWorkerPort, deps?: TelemetryWo
         core.histogram(m.name, m.description).record(m.n, m.attrs);
         return;
       case "span-start": {
-        if (!handle?.tracer) return; // degradado: span descartado (como antes do init)
+        if (!handle?.tracer) return; // degraded: span discarded (as before init)
         const parent = m.parent !== undefined ? spans.get(m.parent) : undefined;
         const span = handle.tracer.startSpan(m.name, {
           startTime: m.startMs,
@@ -182,7 +182,7 @@ export function runTelemetryWorker(port: TelemetryWorkerPort, deps?: TelemetryWo
           return;
         }
         void h
-          .shutdown() // flush do reader (senão app.exit perde o ciclo corrente)
+          .shutdown() // reader flush (otherwise app.exit loses the current cycle)
           .catch(() => {})
           .finally(() => post({ type: "shutdown-done" }));
         return;
@@ -191,8 +191,8 @@ export function runTelemetryWorker(port: TelemetryWorkerPort, deps?: TelemetryWo
   });
 }
 
-// Entrada real: `new Worker(dist/shared/telemetry-worker.js)` cai aqui.
-// Importado no main thread (testes), parentPort é null → não liga nada.
+// Real entry: `new Worker(dist/shared/telemetry-worker.js)` lands here.
+// Imported in the main thread (tests), parentPort is null → wires up nothing.
 if (!isMainThread && parentPort) {
   runTelemetryWorker(parentPort as MessagePort);
 }

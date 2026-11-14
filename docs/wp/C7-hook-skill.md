@@ -1,110 +1,110 @@
-# C7 — Hook UserPromptSubmit + skill voicecast no ZCode · pronto (gate humano)
+# C7 — UserPromptSubmit hook + voicecast skill in ZCode · done (human gate)
 
-## Objetivo
-Quando o mantenedor trabalha DENTRO do ZCode, o contexto da última sessão
-voicecast chega sozinho: hook `UserPromptSubmit` injeta digest bounded
-(relevância Jev ≥2) e uma skill ensina o agente a consumir os artefatos.
+## Objective
+When the maintainer works INSIDE ZCode, the last voicecast session's
+context arrives on its own: the `UserPromptSubmit` hook injects a bounded
+digest (Jev relevance ≥2) and a skill teaches the agent to consume the artifacts.
 
-## Contexto obrigatório (ler antes)
+## Required context (read first)
 - `/home/pedro/programing/projetos/voicecast/docs/PLANO-COCKPIT.md` (item C7)
-- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocolo)
-- `/home/pedro/programing/projetos/zcode.json` (workspace) — como hooks da casa
-  são registrados (sigam o padrão dos hooks existentes; TODO novo hook entra
-  neste arquivo com `enabled: false` até o gate humano)
+- `/home/pedro/programing/projetos/voicecast/docs/DELEGACAO.md` (protocol)
+- `/home/pedro/programing/projetos/zcode.json` (workspace) — how house hooks
+  are registered (follow the pattern of the existing hooks; EVERY new hook enters
+  this file with `enabled: false` until the human gate)
 - `/home/pedro/programing/projetos/voicecast/src/main/library.ts` — `buildContext`
-  (o digest é uma versão BOUNDED dele: ~500 tokens)
-- Sessões voicecast no disco (via WSL): layout em `AGENTS.md` do voicecast;
-  raiz `%LOCALAPPDATA%\voicecast\sessions` = `/mnt/c/Users/pedro/AppData/Local/voicecast/sessions`
+  (the digest is a BOUNDED version of it: ~500 tokens)
+- voicecast sessions on disk (via WSL): layout in voicecast's `AGENTS.md`;
+  root `%LOCALAPPDATA%\voicecast\sessions` = `/mnt/c/Users/pedro/AppData/Local/voicecast/sessions`
 
-## Escopo
-**Fazer:**
-1. Script `scripts/lib/voicecast-context-digest.mjs` NO WORKSPACE RAIZ
-   (padrão dos hooks da casa: node puro, sem deps): lê a última sessão
-   (< N min, default 30, env `VOICECAST_DIGEST_MAX_AGE_MIN`), monta digest
-   bounded (título, duração, transcrição se Jev relevância ≥2, paths WSL dos
-   artefatos), imprime no stdout como bloco markdown. Sem sessão recente:
-   sai em silêncio (exit 0, sem output).
-2. Registro do hook `UserPromptSubmit` em `/home/pedro/programing/projetos/zcode.json`
-   com `"enabled": false` (o mantenedor liga no gate).
-3. Skill `.zcode/skills/voicecast/SKILL.md` no workspace: quando/how pedir
-   contexto voicecast, contrato dos artefatos (prints PNG ≤30MB, clipes MP4,
-   transcript com timestamps — regra F0).
-4. Telemetria (DoD): JSONL de uso no padrão dos guardrails
-   (`~/.local/state/voicecast-digest.log` — uma linha por injeção).
+## Scope
+**Do:**
+1. Script `scripts/lib/voicecast-context-digest.mjs` IN THE WORKSPACE ROOT
+   (house hooks pattern: pure node, no deps): reads the last session
+   (< N min, default 30, env `VOICECAST_DIGEST_MAX_AGE_MIN`), assembles a
+   bounded digest (title, duration, transcript if Jev relevance ≥2, WSL paths of
+   artifacts), prints to stdout as a markdown block. No recent session:
+   exits silently (exit 0, no output).
+2. Registration of the `UserPromptSubmit` hook in `/home/pedro/programing/projetos/zcode.json`
+   with `"enabled": false` (the maintainer turns it on at the gate).
+3. `.zcode/skills/voicecast/SKILL.md` skill in the workspace: when/how to ask for
+   voicecast context, artifact contract (PNG screenshots ≤30MB, MP4 clips,
+   transcript with timestamps — F0 rule).
+4. Telemetry (DoD): usage JSONL in the guardrails pattern
+   (`~/.local/state/voicecast-digest.log` — one line per injection).
 
-**Não tocar:** repo voicecast src/ (só docs se precisar), nenhum outro hook,
-qualquer `enabled: true`.
+**Don't touch:** voicecast repo src/ (only docs if needed), any other hook,
+any `enabled: true`.
 
-## Aceite verificável
-- `node scripts/lib/voicecast-context-digest.mjs` com sessão fake em
-  diretório temporário (env `VOICECAST_SESSIONS_ROOT` p/ testes) imprime o
-  digest esperado; sem sessão, silêncio; idade > N, silêncio.
-- Testes `node --test scripts/*.test.mjs` da raiz continuam verdes + teste
-  novo do digest (fixtures em scripts/lib/__tests__/).
-- Skill existe e referencia paths corretos.
+## Verifiable acceptance
+- `node scripts/lib/voicecast-context-digest.mjs` with a fake session in a
+  temporary directory (env `VOICECAST_SESSIONS_ROOT` for tests) prints the
+  expected digest; without a session, silence; age > N, silence.
+- Root `node --test scripts/*.test.mjs` tests stay green + new
+  digest test (fixtures in scripts/lib/__tests__/).
+- Skill exists and references correct paths.
 
-## Riscos e gotchas
-- zcode.json é config do harness do mantenedor — MUDANÇA MÍNIMA (só o bloco
-  novo, enabled false). Qualquer dúvida de formato: copiar o padrão de um
-  hook existente no mesmo arquivo.
-- Nunca logar conteúdo do transcript no JSONL de telemetria (só metadados).
+## Risks and gotchas
+- zcode.json is the maintainer's harness config — MINIMAL CHANGE (only the new
+  block, enabled false). Any format doubt: copy the pattern of an existing
+  hook in the same file.
+- Never log transcript content in the telemetry JSONL (metadata only).
 
-## Entrega
-Commits convencionais NOS DOIS repos (raiz: hook+skill; voicecast: nada ou
-docs). Sem push. Preencher Resultado.
+## Delivery
+Conventional commits in BOTH repos (root: hook+skill; voicecast: nothing or
+docs). No push. Fill in the Result.
 
-## Resultado (preenche o piloto)
+## Result (filled in by the pilot)
 
-**Entregue em 2026-09-27** (piloto C7). Commits no workspace raiz, sem push:
+**Delivered on 2026-09-27** (C7 pilot). Commits in the workspace root, no push:
 
-- `feat(c7): hook UserPromptSubmit do digest voicecast (desligado até o gate)` —
-  `scripts/lib/voicecast-context-digest.mjs` (node puro, funções puras
-  exportadas) + bloco `UserPromptSubmit` no `zcode.json` com `"enabled": false`
-  (mudança mínima: +16 linhas, 0 remoções).
-- `feat(c7): skill voicecast p/ consumir artefatos das sessões` —
-  `.zcode/skills/voicecast/SKILL.md` (paths WSL, contrato F0 dos artefatos,
-  uso manual do digest, telemetria/kill-switch).
-- `test(c7): testes do digest voicecast + fixtures` —
-  `scripts/lib/__tests__/voicecast-context-digest.test.mjs` (14 testes) +
-  `scripts/lib/__tests__/fixtures/voicecast-session/` (meta.json e
-  transcript.json fake, sem segredo).
+- `feat(c7): hook UserPromptSubmit do digest voicecast (desligado até o gate)` [commit subject kept verbatim] —
+  `scripts/lib/voicecast-context-digest.mjs` (pure node, pure functions
+  exported) + `UserPromptSubmit` block in `zcode.json` with `"enabled": false`
+  (minimal change: +16 lines, 0 removals).
+- `feat(c7): skill voicecast p/ consumir artefatos das sessões` [commit subject kept verbatim] —
+  `.zcode/skills/voicecast/SKILL.md` (WSL paths, F0 artifact contract,
+  manual digest usage, telemetry/kill-switch).
+- `test(c7): testes do digest voicecast + fixtures` [commit subject kept verbatim] —
+  `scripts/lib/__tests__/voicecast-context-digest.test.mjs` (14 tests) +
+  `scripts/lib/__tests__/fixtures/voicecast-session/` (fake meta.json and
+  transcript.json, no secrets).
 
-Evidências (aceite verificável):
-- `node --test scripts/*.test.mjs` (raiz): 25/25 verdes — regressão intacta.
+Evidence (verifiable acceptance):
+- `node --test scripts/*.test.mjs` (root): 25/25 green — regression intact.
 - `node --test scripts/lib/__tests__/voicecast-context-digest.test.mjs`: 14/14.
-- Smoke manual: sessão fake em tmp (`VOICECAST_SESSIONS_ROOT`) → stdout é
-  `{"additionalContext": "<digest markdown>"}` com título/duração/fala/
-  julgamento/paths; sem sessão, sessão velha (> janela), raiz inexistente e
-  kill-switch `VOICECAST_DIGEST=0` → silêncio, exit 0.
-- Payload stdin simulado (formato real do hook): prompt NÃO vaza no digest
-  nem na telemetria.
-- Telemetria JSONL em `~/.local/state/voicecast-digest.log` (padrão dos
-  guardrails, `XDG_STATE_HOME` respeitado): uma linha por rodada com e
-  `inject`/`skip`/`error` — SÓ metadados (day, name, ageMin, durationS,
-  relevancia, contagens de artefatos, digestChars, ms).
+- Manual smoke: fake session in tmp (`VOICECAST_SESSIONS_ROOT`) → stdout is
+  `{"additionalContext": "<digest markdown>"}` with title/duration/speech/
+  judgment/paths; no session, old session (> window), missing root and
+  kill-switch `VOICECAST_DIGEST=0` → silence, exit 0.
+- Simulated stdin payload (real hook format): the prompt does NOT leak into the digest
+  or the telemetry.
+- JSONL telemetry in `~/.local/state/voicecast-digest.log` (guardrails
+  pattern, `XDG_STATE_HOME` respected): one line per round with
+  `inject`/`skip`/`error` — metadata ONLY (day, name, ageMin, durationS,
+  relevancia, artifact counts, digestChars, ms).
 
-Decisões de implementação (para o gate do mantenedor):
-- Saída do hook é `{"additionalContext": …}` e não markdown cru: o runner do
-  ZCode só injeta contexto a partir de stdout JSON (stdout não-JSON é
-  ignorado; JSON fora do schema marca o hook como falho — docs
-  diagnosing-hooks). Sem output ⇒ injeta nada, sem erro.
-- Fala no digest só com `meta.jev.relevancia >= 2`; sem julgamento → digest
-  só de metadados (leitura estrita do briefing + fail-soft do Jev).
-- Bounded: fala ≤ 1000 chars, ≤ 8 prints e ≤ 4 clipes listados (contagem
-  total em "(+N mais)").
-- Recência = `startedAt + durationS` (fallback mtime do meta.json) dentro de
-  `VOICECAST_DIGEST_MAX_AGE_MIN` (default 30); skew de relógio (idade
-  negativa no mount do Windows) é aceito.
-- Env extras: `VOICECAST_DIGEST_NOW` (now fixo, testes determinísticos) e
-  kill-switch `VOICECAST_DIGEST=0` (padrão da casa).
+Implementation decisions (for the maintainer's gate):
+- The hook's output is `{"additionalContext": …}` and not raw markdown: ZCode's
+  runner only injects context from JSON stdout (non-JSON stdout is
+  ignored; JSON outside the schema marks the hook as failed —
+  diagnosing-hooks docs). No output ⇒ injects nothing, no error.
+- Speech in the digest only with `meta.jev.relevancia >= 2`; no judgment → metadata-only
+  digest (strict briefing reading + Jev fail-soft).
+- Bounded: speech ≤ 1000 chars, ≤ 8 screenshots and ≤ 4 clips listed (total count in
+  "(+N mais)" ["(+N more)" — literal marker emitted by the script]).
+- Recency = `startedAt + durationS` (fallback meta.json mtime) within
+  `VOICECAST_DIGEST_MAX_AGE_MIN` (default 30); clock skew (negative
+  age on the Windows mount) is accepted.
+- Extra envs: `VOICECAST_DIGEST_NOW` (fixed now, deterministic tests) and
+  kill-switch `VOICECAST_DIGEST=0` (house pattern).
 
-Pendências (torre de controle):
-- **Gate humano**: ligar `"enabled": true` no bloco UserPromptSubmit do
-  `zcode.json` e validar com sessão real no Windows (`pnpm dev:win`).
-- `pnpm test:worktrees` da raiz não pega o teste novo (glob só
-  `scripts/*.test.mjs` + `scripts/lib/__tests__/*.test.ts`) — ampliar glob
-  num commit de infra (ficou fora do escopo mínimo deste WP).
-- Não há sessões reais ainda em `/mnt/c/Users/pedro/AppData/Local/voicecast/sessions`
-  nesta máquina — a validação de verdade acontece no gate.
+Pending items (control tower):
+- **Human gate**: turn on `"enabled": true` in the UserPromptSubmit block of
+  `zcode.json` and validate with a real session on Windows (`pnpm dev:win`).
+- Root `pnpm test:worktrees` doesn't pick up the new test (glob only
+  `scripts/*.test.mjs` + `scripts/lib/__tests__/*.test.ts`) — widen the glob
+  in an infra commit (left out of this WP's minimal scope).
+- No real sessions yet in `/mnt/c/Users/pedro/AppData/Local/voicecast/sessions`
+  on this machine — the real validation happens at the gate.
 
-Achados: nenhum bug vizinho relevante.
+Findings: no relevant neighboring bugs.

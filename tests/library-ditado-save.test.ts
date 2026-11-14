@@ -1,8 +1,8 @@
 /**
- * Ditado salvo SEM transcrição (ASR off/fora do ar) — o áudio nunca é
- * descartado: vira sessão "pending" e o transcribeAndStore recupera depois
- * pelo áudio (audio.webm), sem depender de mp4. Electron mockado
- * (`app.getPath` → tmpdir) e módulo asr mockado; o resto é fs real.
+ * Dictation saved WITHOUT transcription (ASR off/down) — the audio is never
+ * discarded: it becomes a "pending" session and transcribeAndStore recovers it
+ * later from the audio (audio.webm), without depending on the mp4. Electron
+ * mocked (`app.getPath` → tmpdir) and asr module mocked; the rest is real fs.
  */
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
@@ -19,8 +19,8 @@ vi.mock("electron", async () => {
   };
 });
 
-// asr mockado: health ok e transcrição que devolve texto fixo (o fallback de
-// áudio do transcribeAndStore é o que está em teste, não o cliente HTTP)
+// asr mocked: health ok and a transcription that returns fixed text (the
+// audio fallback of transcribeAndStore is what's under test, not the HTTP client)
 vi.mock("../src/main/asr", async () => {
   let healthOk = true;
   return {
@@ -39,8 +39,8 @@ vi.mock("../src/main/asr", async () => {
   };
 });
 
-// jev mockado: o julgamento é fail-soft e alheio ao que se testa aqui (com
-// TYPESAFE_API_KEY no ambiente ele faria chamada real)
+// jev mocked: the judgment is fail-soft and unrelated to what's tested here (with
+// TYPESAFE_API_KEY in the environment it would make a real call)
 vi.mock("../src/main/jev", () => ({ judgeSession: async () => null }));
 
 const { saveDictationSession, transcribeAndStore } = await import("../src/main/library");
@@ -69,7 +69,7 @@ afterAll(() => {
 });
 
 describe("saveDictationSession", () => {
-  it("com transcript: salva tudo e marca done (caminho de sempre)", () => {
+  it("with transcript: saves everything and marks done (the usual path)", () => {
     const { dir, name } = saveDictationSession(STARTED_AT, "webm", "YXVkaW8=", fakeTranscript());
     const d = sessionDirs(dir, name);
     expect(fs.existsSync(d.audio)).toBe(true);
@@ -79,20 +79,20 @@ describe("saveDictationSession", () => {
     expect(meta.mode).toBe("ditado");
   });
 
-  it("sem transcript (ASR off): áudio SALVO, sem arquivo de transcrição, pending", () => {
+  it("no transcript (ASR off): audio SAVED, no transcript file, pending", () => {
     const { dir, name } = saveDictationSession(STARTED_AT, "webm", "YXVkaW8=", null);
     const d = sessionDirs(dir, name);
-    expect(fs.existsSync(d.audio)).toBe(true); // a fala não pode sumir
+    expect(fs.existsSync(d.audio)).toBe(true); // the speech must not vanish
     expect(fs.existsSync(d.transcript)).toBe(false);
     const meta = JSON.parse(fs.readFileSync(d.meta, "utf8"));
     expect(meta.transcriptStatus).toBe("pending");
     expect(meta.status).toBe("finalizada");
-    expect(meta.title).toBe("Ditado (sem transcrição)");
+    expect(meta.title).toBe("Dictation (no transcript)");
   });
 });
 
-describe("transcribeAndStore em sessão de ditado (áudio, sem mp4)", () => {
-  it("retranscreve pelo audio.webm e marca done", async () => {
+describe("transcribeAndStore on a dictation session (audio, no mp4)", () => {
+  it("retranscribes from audio.webm and marks done", async () => {
     const { dir, name } = saveDictationSession(STARTED_AT, "webm", "YXVkaW8=", null);
     const ok = await transcribeAndStore(dir, name);
     expect(ok).toBe(true);
@@ -103,7 +103,7 @@ describe("transcribeAndStore em sessão de ditado (áudio, sem mp4)", () => {
     expect(t.text).toContain("fake de audio.webm");
   });
 
-  it("ASR fora do ar: marca sem-asr, sessão e áudio intactos", async () => {
+  it("ASR down: marks sem-asr, session and audio intact", async () => {
     const asr = (await import("../src/main/asr")) as unknown as {
       __setHealthOk: (v: boolean) => void;
     };

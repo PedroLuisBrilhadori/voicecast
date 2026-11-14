@@ -1,201 +1,200 @@
-# Relatório AN.1/AN.2 — Anotações em tela + auto-print/marker queimado
+# Report AN.1/AN.2 — On-screen annotations + auto-print/burned marker
 
-Data: 2026-09-22 · Plano: [PLANO-ANOTACOES-TELA.md](./PLANO-ANOTACOES-TELA.md)
-Validez: engine + persistência + prints validados no Windows real (`--anotest`
-e `--autotest`); UX interativa (desenhar com o mouse) pendente de pass humana.
+Date: 2026-09-22 · Plan: [PLANO-ANOTACOES-TELA.md](./PLANO-ANOTACOES-TELA.md)
+Validity: engine + persistence + screenshots validated on real Windows (`--anotest`
+and `--autotest`); interactive UX (drawing with the mouse) pending a human pass.
 
-## Resumo
+## Summary
 
-| Item | Veredito |
+| Item | Verdict |
 |---|---|
-| Motor puro (`src/shared/annotations.ts`): fold do log, undo/redo, borracha traço/área, decimação, hit-test por segmento | ✅ 16 testes |
-| Engine main (`src/main/annotations.ts`): overlay fullscreen, hotkeys Ctrl+Alt+*, jsonl, seq/t, auto-print debounce 2s (D7), marker queimado (D6), print manual (AN.5), buffer do ditado | ✅ |
-| Renderer (`AnnotationApp`): canvas, laser com fade, paleta (tools/cores/espessuras/undo-redo), modo desenho↔pass-through, composite frame+marcações | ✅ carrega e compõe |
-| **Auto-print D7 validado no Windows**: rajada sintética (stroke+laser) → `frames/print-5_1s.png` com traço E laser queimados (verificação visual por visão) | ✅ |
-| **Marker D6 validado no Windows**: `--autotest` → `frames/marker-1.png` + evento print kind=marker no jsonl da sessão real | ✅ |
-| Persistência ditado: log (3 eventos) + print em buffer salvos no detach p/ o dir da sessão | ✅ |
-| Suíte completa | ✅ 39 testes + build |
+| Pure engine (`src/shared/annotations.ts`): log fold, undo/redo, stroke/area eraser, decimation, per-segment hit-test | ✅ 16 tests |
+| Main engine (`src/main/annotations.ts`): fullscreen overlay, Ctrl+Alt+* hotkeys, jsonl, seq/t, 2s auto-print debounce (D7), burned marker (D6), manual screenshot (AN.5), dictation buffer | ✅ |
+| Renderer (`AnnotationApp`): canvas, laser with fade, palette (tools/colors/thicknesses/undo-redo), draw↔pass-through mode, frame+marks composite | ✅ loads and composes |
+| **Auto-print D7 validated on Windows**: synthetic burst (stroke+laser) → `frames/print-5_1s.png` with stroke AND laser burned in (visual check by vision) | ✅ |
+| **Marker D6 validated on Windows**: `--autotest` → `frames/marker-1.png` + print event kind=marker in the real session's jsonl | ✅ |
+| Dictation persistence: log (3 events) + buffered screenshot saved on detach to the session dir | ✅ |
+| Full suite | ✅ 39 tests + build |
 
-## Arquivos
+## Files
 
-Novos: `src/shared/annotations.ts` (motor puro), `src/main/annotations.ts`
-(engine), `src/renderer/annotation.html` + `annotation-main.tsx` +
+New: `src/shared/annotations.ts` (pure engine), `src/main/annotations.ts`
+(main engine), `src/renderer/annotation.html` + `annotation-main.tsx` +
 `AnnotationApp.tsx` (overlay), `tests/annotations.test.ts`.
-Mudados: `ipc.ts` (canais anotação + `VcInternalBridge` canônico — os
-`declare global` por renderer colidiam), `preload/index.ts`, `windows.ts`
-(exporta dist/preload/wireLogging), `capture.ts` (attach no start, detach no
-finalize/cancel/erro-remux, marker queimado), `ditado.ts` (attach/detach com
-dir da sessão salva), `index.ts` (registerAnnotationIpc + `--anotest`),
-`vite.config.ts` (input annotation), AGENTS.md.
+Changed: `ipc.ts` (annotation channels + canonical `VcInternalBridge` — the
+per-renderer `declare global` collided), `preload/index.ts`, `windows.ts`
+(exports dist/preload/wireLogging), `capture.ts` (attach on start, detach on
+finalize/cancel/remux-error, burned marker), `ditado.ts` (attach/detach with
+the saved session dir), `index.ts` (registerAnnotationIpc + `--anotest`),
+`vite.config.ts` (annotation input), AGENTS.md.
 
-## Decisões de implementação
+## Implementation decisions
 
-- Sessão e ditado compartilham o padrão buffer→flush: o dir só existe no fim,
-  então jsonl/prints acumulam em memória e persistem no detach (cancel
-  descarta).
-- `Ctrl+Z`/`Ctrl+Shift+Z` NÃO são globais (roubaria o undo do app embaixo):
-  valem com a overlay em modo desenho (focusable) e pelos botões da paleta.
+- Session and dictation share the buffer→flush pattern: the dir only exists at the end,
+  so jsonl/screenshots accumulate in memory and persist on detach (cancel
+  discards).
+- `Ctrl+Z`/`Ctrl+Shift+Z` are NOT global (it would steal the undo of the app underneath):
+  they apply with the overlay in draw mode (focusable) and via the palette buttons.
 - Pass-through = `setIgnoreMouseEvents(true, {forward:true})` +
-  `setFocusable(false)`; hover da paleta religa o mouse da janela
-  temporariamente; `Esc` volta a pass-through.
-- Composite é ping-pong main↔overlay (frame dataURL → canvas + strokes +
-  lasers recentes → PNG b64); timeout 4s; lasers queimados se acabaram de
-  acontecer (<1,5s).
-- Hit-test da borracha contra SEGMENTOS (strokes são decimados — teste pegou
-  o bug do meio do traço antes de ir pro Windows).
+  `setFocusable(false)`; palette hover temporarily re-enables the window's
+  mouse; `Esc` returns to pass-through.
+- Composite is a main↔overlay ping-pong (frame dataURL → canvas + strokes +
+  recent lasers → PNG b64); 4s timeout; lasers burned in if they just happened
+  (<1.5s).
+- Eraser hit-test against SEGMENTS (strokes are decimated — the test caught
+  the mid-stroke bug before it went to Windows).
 
-## Como validar (Windows)
+## How to validate (Windows)
 
 ```powershell
 & $env:LOCALAPPDATA\voicecast\src\node_modules\electron\dist\electron.exe `
-  $env:LOCALAPPDATA\voicecast\src --anotest     # jsonl + auto-print queimado
-# REC com marker: --autotest (grava 8s, marca, queima frames/marker-1.png)
-# UI interativa: --anoui (overlay aberta 90s p/ dirigir mouse/teclado reais)
+  $env:LOCALAPPDATA\voicecast\src --anotest     # jsonl + auto burned screenshot
+# REC with marker: --autotest (records 8s, marks, burns frames/marker-1.png)
+# Interactive UI: --anoui (overlay open 90s to drive real mouse/keyboard)
 ```
 
-## Validação de UI REAL dirigida por agente (2026-09-22) ✅
+## REAL agent-driven UI validation (2026-09-22) ✅
 
-A passada de UX que faltava foi executada sem humano: mouse sintético
-(SetCursorPos + mouse_event via interop WSL→Windows) sobre a overlay real,
-com screenshots por passo lidos visualmente + log do main como evidência.
+The missing UX pass was executed without a human: synthetic mouse
+(SetCursorPos + mouse_event via WSL→Windows interop) over the real overlay,
+with per-step screenshots read visually + main log as evidence.
 
-| Passo | Resultado |
+| Step | Result |
 |---|---|
-| Hotkey `Ctrl+Alt+B` (input sintético) | ✅ entrou em modo desenho (`modo desenho` no log) |
-| **Clique na paleta "Pincel"** (pass-through → hover → click) | ✅ `annotationMouse from:draw` → modo desenho + cmd tool brush |
-| Drag na tela (pincel) | ✅ pointerdown/move/up no canvas → **traço vermelho visível no screenshot** + stroke no jsonl |
-| `Ctrl+Alt+L` + drag (laser) | ✅ rastro efêmero + caminho no log |
-| `Ctrl+Alt+E` + drag (borracha) | ✅ funciona; hit-test por raio era limítrofe → **folga de 25% adicionada** |
-| Status da paleta | ✅ "desenhando · Esc solta o mouse" ↔ "pass-through · Ctrl+Alt+Espaço desenha" |
-| `Esc` | ✅ volta a pass-through (`modo pass-through` no log) |
+| Hotkey `Ctrl+Alt+B` (synthetic input) | ✅ entered draw mode (`modo desenho` ["draw mode"] in the log) |
+| **Click on the "Pincel" ["Brush"] palette button** (pass-through → hover → click) | ✅ `annotationMouse from:draw` → draw mode + cmd tool brush |
+| Drag on screen (brush) | ✅ pointerdown/move/up on canvas → **red stroke visible in the screenshot** + stroke in the jsonl |
+| `Ctrl+Alt+L` + drag (laser) | ✅ ephemeral trail + path in the log |
+| `Ctrl+Alt+E` + drag (eraser) | ✅ works; radius hit-test was borderline → **25% slack added** |
+| Palette status | ✅ "desenhando · Esc solta o mouse" ["drawing · Esc releases the mouse"] ↔ "pass-through · Ctrl+Alt+Espaço desenha" ["Ctrl+Alt+Space draws"] |
+| `Esc` | ✅ returns to pass-through (`modo pass-through` ["pass-through mode"] in the log) |
 
-**Bugs achados e corrigidos pela validação de UI:**
+**Bugs found and fixed by the UI validation:**
 
-1. **Botões da paleta não ativavam o desenho** — mudavam só estado local do
-   renderer; o main (dono de `setIgnoreMouseEvents`/`focusable`) não era
-   avisado. Corrigido: paleta → `annotationMouse {from:"draw"}` → `cmdTool`.
-2. **Hover da paleta em pass-through nunca chegava** — `forward:true`
-   (forwarded mousemove) não entrega eventos de hover de forma confiável
-   nesta máquina. Corrigido com o padrão determinístico: **main faz polling
-   do cursor** (100ms) e habilita o mouse da janela quando o cursor está
-   sobre o retângulo da paleta (reportado pelo renderer). Log
-   `poll cursor → mouse da janela ON` confirma a transição.
-3. **Paleta cortada pela barra de tarefas** — `bottom:18` → `bottom:48`.
+1. **Palette buttons didn't activate drawing** — they changed only the
+   renderer's local state; the main process (owner of
+   `setIgnoreMouseEvents`/`focusable`) wasn't notified. Fixed: palette →
+   `annotationMouse {from:"draw"}` → `cmdTool`.
+2. **Palette hover in pass-through never arrived** — `forward:true`
+   (forwarded mousemove) doesn't deliver hover events reliably on this
+   machine. Fixed with the deterministic pattern: **the main process polls the
+   cursor** (100ms) and enables the window's mouse when the cursor is over
+   the palette rectangle (reported by the renderer). Log
+   `poll cursor → mouse da janela ON` ["window mouse ON"] confirms the transition.
+3. **Palette cut off by the taskbar** — `bottom:18` → `bottom:48`.
 
-Método (para reproduzir): ganchos `--anoui` (overlay 90s) + driver PowerShell
-(`SetCursorPos`+`mouse_event`), screenshots por passo (CopyFromScreen) lidos
-como imagem, `annotations.jsonl` e main.log como evidência estruturada.
-Limitação honesta: "sensação de uso" (suavidade do traço, ergonomia dos
-atalhos em uso real) só o mantenedor avalia — o resto está validado.
+Method (to reproduce): `--anoui` hooks (90s overlay) + PowerShell driver
+(`SetCursorPos`+`mouse_event`), per-step screenshots (CopyFromScreen) read
+as images, `annotations.jsonl` and main.log as structured evidence.
+Honest limitation: "feel of use" (stroke smoothness, shortcut ergonomics in
+real use) only the maintainer can assess — everything else is validated.
 
-### Veredito Jev sobre a evidência (jev-1.13.0, 772ms)
+### Jev verdict on the evidence (jev-1.13.0, 772ms)
 
 - `verdicto_ux` (score 0–4): **3.05** (conf 0.96) — "funciona de ponta a
-  ponta; ajustes menores ou cosméticos pendentes"
-- `bloqueante` (noul): **0.17** — nada que exija correção antes do uso normal
+  ponta; ajustes menores ou cosméticos pendentes" ["works end to end; minor or cosmetic adjustments pending"] (Jev's verdict text, kept verbatim)
+- `bloqueante` (noul): **0.17** — nothing requiring a fix before normal use
 
-## Pendências
+## Pending items
 
-- ~~Pass humana de UX~~ **validação funcional por agente concluída** (seção
-  acima); sensação subjetiva de uso continua com o mantenedor.
-- **AN.4**: linhas de anotação no `buildContext` + exposição no MCP (com E3).
-- Laser queimado no print só quando recente (<1,5s) — calibrar se necessário.
-- Paleta sempre-visível durante REC (WYSIWYG D2) — a paleta NÃO entra nos
-  prints queimados (só frame+marcações), mas ENTRA no vídeo gravado (é janela
-  na tela). Se incomodar no vídeo: esconder a paleta fora do hover (evolução).
+- ~~Human UX pass~~ **functional validation by agent completed** (section
+  above); subjective feel of use stays with the maintainer.
+- **AN.4**: annotation lines in `buildContext` + MCP exposure (with E3).
+- Laser burned in the screenshot only when recent (<1.5s) — calibrate if needed.
+- Always-visible palette during REC (WYSIWYG D2) — the palette does NOT go into
+  burned screenshots (only frame+marks), but DOES go into the recorded video (it's a
+  window on screen). If it bothers in the video: hide the palette outside hover (evolution).
 
-## Demandas do vídeo 2026-09-22 0933 + follow-up do mantenedor (implementado)
+## Demands from the 2026-09-22 0933 video + maintainer follow-up (implemented)
 
-A sessão `2026-09-22/0933-7329b0fb` (transcrita após o ASR hosted — ver
-RELATORIO-ASR-HOST.md) registrou 3 demandas; o mantenedor pediu 2 extras no
-mesmo dia. Tudo implementado e validado (fix 3 com E2E por log; 1, 2 e extras
-com build+suíte verdes e pass de uso a cargo do mantenedor):
+The session `2026-09-22/0933-7329b0fb` (transcribed after the hosted ASR — see
+RELATORIO-ASR-HOST.md) registered 3 demands; the maintainer asked for 2 extras on the
+same day. Everything implemented and validated (fix 3 with log-based E2E; 1, 2 and extras
+with green build+suite and the usage pass owned by the maintainer):
 
-1. **"Quando eu clico no laser, meu mouse some"** — o renderer escondia o
-   cursor (`cursor:none`) no modo desenho com laser. Agora nenhuma ferramenta
-   esconde o mouse (crosshair em todas).
-2. **"Movimentar a janela de pintura como o indicativo de gravação"** — a
-   paleta ganhou grip `⠿` + drag por pointer events (clamp na tela). Como a
-   overlay é fullscreen, `-webkit-app-region` não serve (moveria a janela);
-   em pass-through o drag travou o mouse da janela ON via
-   `annotation:mouse from:"drag"` (poll do cursor congelado durante o arrasto)
-   e os bounds são re-reportados a cada movimento.
-3. **"Ao parar o vídeo ou a transcrição, a janela de pintura não sai"** —
-   vazamento REAL confirmado no log de 09:33: o `catch` do `toggleDitado`
-   (falha de ASR) não fazia detach — a overlay ficava presa. Fix: detach no
-   catch. No vídeo, blindagem extra: stop sem blob do recorder em 20s →
-   descarte + cleanup (senão `finalizeSession` nunca roda e o detach tampouco).
-   E2E: `--ditado-test` com `VOICECAST_ASR_URLS` morto → erro e `detach` 3ms
-   depois (13:26:50.381 → .384).
-4. **Ocultar a paleta (pedido do mantenedor)** — botão `⏷ ocultar` na paleta e
-   hotkey `Ctrl+Alt+H` (toggle pelo engine, estado único no main). Oculta,
-   reporta bounds `null` (hover do poll não liga o mouse) e o desenho segue
-   funcionando pelas hotkeys. Volta no próximo attach.
-5. **Print embutido na paleta (pedido do mantenedor)** — botão `📷 Print`
-   chama o mesmo caminho do `Ctrl+Alt+P` (frame sem marcações → `frames/`,
-   contagem `manual`).
+1. **"Quando eu clico no laser, meu mouse some"** ["When I click the laser, my mouse disappears" — verbatim demand from the session transcript] — the renderer hid the
+   cursor (`cursor:none`) in draw mode with laser. Now no tool hides the mouse (crosshair on all).
+2. **"Movimentar a janela de pintura como o indicativo de gravação"** ["Move the painting window like the recording indicator" — verbatim demand from the session transcript] — the
+   palette got a `⠿` grip + drag via pointer events (clamped to the screen). Since the
+   overlay is fullscreen, `-webkit-app-region` doesn't fit (it would move the window);
+   in pass-through the drag held the window mouse ON via
+   `annotation:mouse from:"drag"` (cursor poll frozen during the drag)
+   and the bounds are re-reported on every move.
+3. **"Ao parar o vídeo ou a transcrição, a janela de pintura não sai"** ["When stopping the video or the transcription, the painting window doesn't go away" — verbatim demand from the session transcript] —
+   REAL leak confirmed in the 09:33 log: the `catch` of `toggleDitado`
+   (ASR failure) didn't detach — the overlay stayed stuck. Fix: detach in the
+   catch. For video, extra hardening: stop without a recorder blob within 20s →
+   discard + cleanup (otherwise `finalizeSession` never runs and neither does the detach).
+   E2E: `--ditado-test` with a dead `VOICECAST_ASR_URLS` → error and `detach` 3ms
+   later (13:26:50.381 → .384).
+4. **Hide the palette (maintainer's request)** — `⏷ ocultar` ["hide"] button on the palette and
+   hotkey `Ctrl+Alt+H` (toggle by the engine, single state in the main process). When hidden,
+   it reports `null` bounds (hover poll doesn't turn the mouse on) and drawing keeps
+   working via hotkeys. Comes back on the next attach.
+5. **Screenshot embedded in the palette (maintainer's request)** — `📷 Print` button calls the same path as `Ctrl+Alt+P` (frame without marks → `frames/`,
+   `manual` count).
 
-Validação de uso (drag, ocultar/mostrar, print, laser com mouse visível):
-pass de ~2 min do mantenedor — input sintético foi descartado nesse round
-(máquina em uso).
+Usage validation (drag, hide/show, screenshot, laser with visible mouse):
+~2 min pass by the maintainer — synthetic input was dropped in that round
+(machine in use).
 
-## Painel standalone (2026-09-22, pedido do mantenedor)
+## Standalone panel (2026-09-22, maintainer's request)
 
-"Seria legal poder abrir o painel antes de iniciar uma gravação, e o atalho
-de ocultar/exibir funcionar fora de transcrição/gravação":
+"It would be nice to be able to open the panel before starting a recording, and the
+hide/show shortcut to work outside transcription/recording":
 
-- **Ctrl+Alt+H virou global do app** (registro no `whenReady`, fora da lista
-  de hotkeys por-sessão): sem overlay → abre o **painel standalone**; com
-  overlay → oculta/mostra a paleta (como já fazia em sessão).
-- Painel standalone = anotação como rascunho, sem sessão. Botão `✕ fechar`
-  na paleta fecha e descarta. `Ctrl+Alt+H` de novo oculta/mostra; o painel
-  também serve para preparar o desenho ANTES de gravar.
-- **Adoção**: `beginSession` (capture.ts e ditado.ts) — se o painel
-  standalone está aberto quando REC/ditado começa, a sessão o adota: overlay
-  não é recriada, eventos/seq preservados, traços pré-REC entram no
-  `annotations.jsonl` (t continua contando da abertura do painel, sem
-  negativos). Hotkeys não são re-registradas (guarda `hotkeysOn`).
-- Detalhe de TS: `open()` não pode referenciar `this.overlay` depois do
-  early-return (narrowing para `null` ignora a mutação de `createOverlay()`)
-  — send do cmd de modo isolado em `sendMode()`.
+- **Ctrl+Alt+H became a global app shortcut** (registered in `whenReady`, outside the
+  per-session hotkey list): without overlay → opens the **standalone panel**; with
+  overlay → hides/shows the palette (as it already did in a session).
+- Standalone panel = annotation as a draft, no session. `✕ fechar` ["close"] button
+  on the palette closes and discards. `Ctrl+Alt+H` again hides/shows; the panel
+  also serves to prepare drawing BEFORE recording.
+- **Adoption**: `beginSession` (capture.ts and ditado.ts) — if the standalone
+  panel is open when REC/dictation starts, the session adopts it: the overlay
+  isn't recreated, events/seq preserved, pre-REC strokes go into
+  `annotations.jsonl` (t keeps counting from the panel opening, no
+  negatives). Hotkeys are not re-registered (`hotkeysOn` guard).
+- TS detail: `open()` can't reference `this.overlay` after the
+  early-return (narrowing to `null` ignores the `createOverlay()` mutation)
+  — mode cmd send isolated in `sendMode()`.
 
-## AN.6 — Scroll-through (roda do mouse no modo desenho) + laser Ctrl+Alt+G (2026-09-22)
+## AN.6 — Scroll-through (mouse wheel in draw mode) + laser Ctrl+Alt+G (2026-09-22)
 
-Pedidos do mantenedor: no modo desenho (laser/pincel/borracha) a roda do mouse
-morria no overlay (a página embaixo não rolava) e, ao rolar, a tela "parecia
-congelar". E o laser `Ctrl+Alt+L` fica na metade direita do teclado.
+Maintainer's requests: in draw mode (laser/brush/eraser) the mouse wheel
+died in the overlay (the page underneath didn't scroll) and, when scrolling, the screen "seemed
+to freeze". Also, the laser `Ctrl+Alt+L` sits in the right half of the keyboard.
 
-**Causa raiz (duas, descobertas no wheeltest)**:
+**Root cause (two, discovered in the wheeltest)**:
 
-1. Em modo desenho o overlay é uma janela OS normal cobrindo a tela — o
-   hit-test do Windows entrega a roda a ele e ninguém tratava
-   (`forward:true` do Electron só cobre mousemove). Fix: renderer escuta
-   `wheel` → IPC `annotation:wheel` → main injeta `WM_MOUSEWHEEL` via
-   **koffi/user32** na janela DE BAIXO do ponto.
-2. O repost inicial caía **no próprio overlay**: `WindowFromPoint` devolvia o
-   HWND **filho** do overlay (Chrome_RenderWidgetHostHWND), e o toggle de
-   `WS_EX_TRANSPARENT` não o exclui do hit-test — janela Electron é
-   `WS_EX_NOREDIRECTIONBITMAP`, **não layered** (skip por estilo exige
-   `WS_EX_LAYERED`). Cada roda voltava ao overlay → rajada de eventos =
-   "congelamento". Fix definitivo: `SetWindowPos` empurra o overlay para fora
-   da tela por um instante (sem tocar em foco/z/estilo), `WindowFromPoint`
-   acha a janela real, e volta — tudo síncrono; **uma vez por RAJADA de roda** (volta 150ms após a última — mover por evento forçava recomposição do DWM dezenas de vezes/s e engasgava o mouse; confirmado pelo mantenedor). Segurança
-   anti-loop: compara `GetAncestor(GA_ROOT)` do alvo com a raiz do overlay.
-   `Ctrl+roda`/`Shift+roda` seguem (MK_* no wParam); janela elevada (UIPI)
-   ignora o post silenciosamente (fail-soft).
+1. In draw mode the overlay is a normal OS window covering the screen — the
+   Windows hit-test delivers the wheel to it and nobody handled it
+   (Electron's `forward:true` only covers mousemove). Fix: renderer listens
+   to `wheel` → IPC `annotation:wheel` → main injects `WM_MOUSEWHEEL` via
+   **koffi/user32** into the window UNDER the point.
+2. The initial repost landed **on the overlay itself**: `WindowFromPoint` returned the overlay's
+   **child** HWND (Chrome_RenderWidgetHostHWND), and toggling
+   `WS_EX_TRANSPARENT` doesn't exclude it from the hit-test — an Electron window is
+   `WS_EX_NOREDIRECTIONBITMAP`, **not layered** (style-based skipping requires
+   `WS_EX_LAYERED`). Every wheel came back to the overlay → burst of events =
+   "freezing". Definitive fix: `SetWindowPos` pushes the overlay off-screen
+   for an instant (without touching focus/z/style), `WindowFromPoint` finds the
+   real window, and it comes back — all synchronous; **once per WHEEL burst** (returns 150ms after the last one — moving per event forced DWM recomposition dozens of times/s and choked the mouse; confirmed by the maintainer). Anti-loop
+   safety: compares the target's `GetAncestor(GA_ROOT)` with the overlay's root.
+   `Ctrl+wheel`/`Shift+wheel` still work (MK_* in wParam); an elevated window (UIPI)
+   silently ignores the post (fail-soft).
 
-**Atalho**: laser `Ctrl+Alt+L` → **`Ctrl+Alt+G`** (decisão do mantenedor:
-cluster todo na metade esquerda — mão direita fora do teclado). Demais
-atalhos inalterados (B/E/C/X/Espaço/P/H já são da esquerda).
+**Shortcut**: laser `Ctrl+Alt+L` → **`Ctrl+Alt+G`** (maintainer's decision:
+whole cluster in the left half — right hand off the keyboard). Other
+shortcuts unchanged (B/E/C/X/Space/P/H are already on the left).
 
-**Arquivos**: `src/shared/wheel.ts` (motor puro: delta/wParam/lParam, 9
-testes), `src/main/native-wheel.ts` (koffi lazy, fail-soft fora do Windows),
-canal `annotation:wheel` (ipc + preload), listener no `AnnotationApp`
-(fora do React onWheel — passive), smoke `--wheeltest` (invisível).
+**Files**: `src/shared/wheel.ts` (pure engine: delta/wParam/lParam, 9
+tests), `src/main/native-wheel.ts` (lazy koffi, fail-soft off Windows),
+`annotation:wheel` channel (ipc + preload), listener in `AnnotationApp`
+(outside React onWheel — passive), `--wheeltest` smoke (invisible).
 
-**Validação**: ci local (typecheck + 55 testes + build); cadeia IPC→user32
-exercitada no host (post=true, alvo confirmado por log). **Pass humano
-pendente**: rolar uma página real com o laser ativo. Rodadas de teste que
-congelaram/deram `TypeError 7 vs 4 args` no host foram builds intermediários
-misturados pelo robocopy durante boot — resolvido com restart; se voltar,
-sempre reiniciar o app APÓS o `dev:win` (scripts/ensure-app-win.ps1).
+**Validation**: local ci (typecheck + 55 tests + build); IPC→user32 chain
+exercised on the host (post=true, target confirmed by log). **Human pass
+pending**: scroll a real page with the laser active. Test rounds that
+froze/gave `TypeError 7 vs 4 args` on the host were intermediate builds
+mixed by robocopy during boot — solved with a restart; if it comes back,
+always restart the app AFTER `dev:win` (scripts/ensure-app-win.ps1).

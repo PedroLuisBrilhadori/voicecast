@@ -1,18 +1,18 @@
 /**
- * Registro LAZY de instrumentos de métrica — puro (sem electron/SDK OTel).
+ * LAZY metric instrument registry — pure (no electron/OTel SDK).
  *
- * Os counters/histogramas do app são declarados no module-load, mas o init do
- * SDK é tardio (initTelemetry roda 3s pós-ready p/ não travar o probe do
- * daemon F9). Wrappers que capturavam o instrumento na declaração ficavam
- * `null` para sempre (bug histórico: nenhuma métrica chegava ao Grafana).
- * Aqui o instrumento é resolvido no PRIMEIRO add/record e cacheado por nome —
- * declarações duplicadas do mesmo nome (capture.ts/library.ts) caem no mesmo
- * instrumento. Emit antes do init é descartado (sem retroalimentação).
+ * The app's counters/histograms are declared at module-load, but SDK init is
+ * late (initTelemetry runs 3s post-ready so it doesn't stall the F9 daemon
+ * probe). Wrappers that captured the instrument at declaration time stayed
+ * `null` forever (historical bug: no metric ever reached Grafana). Here the
+ * instrument is resolved on the FIRST add/record and cached by name —
+ * duplicate declarations of the same name (capture.ts/library.ts) land on
+ * the same instrument. Emit before init is discarded (no feedback).
  */
 
 export type Attributes = Record<string, string | number | boolean>;
 
-/** Fatia do Meter OTel usada pelo core (estrutural — o Meter real encaixa). */
+/** Slice of the OTel Meter the core uses (structural — the real Meter fits). */
 export interface MeterLike {
   createCounter(
     name: string,
@@ -35,7 +35,7 @@ export interface VCHistogram {
 export interface TelemetryCore {
   counter(name: string, description: string): VCCounter;
   histogram(name: string, description: string): VCHistogram;
-  /** Liga o meter real pós-init (ou desliga com null). */
+  /** Attaches the real meter post-init (or detaches with null). */
   setMeter(m: MeterLike | null): void;
 }
 

@@ -20,28 +20,28 @@ import {
 } from "../src/shared/ipc";
 
 /**
- * O contrato é a superfície entre main/preload/renderer. Se alguém renomear
- * canal ou campo, este teste quebra — o que protege os três lados de derivarem
- * um do outro silenciosamente.
+ * The contract is the surface between main/preload/renderer. If anyone renames
+ * a channel or field, this test breaks — which protects the three sides from
+ * silently drifting apart.
  */
-describe("contrato IPC", () => {
-  it("canais estáveis", () => {
+describe("IPC contract", () => {
+  it("stable channels", () => {
     expect(IPC.ping).toBe("app:ping");
     expect(IPC.getBootstrap).toBe("app:get-bootstrap");
     expect(IPC.getVersion).toBe("app:get-version");
     expect(IPC.annotationWheel).toBe("annotation:wheel"); // AN.6 scroll-through
-    expect(IPC.listClips).toBe("library:list-clips"); // editor fase B
-    expect(IPC.exportCut).toBe("library:export-cut"); // editor fase B
+    expect(IPC.listClips).toBe("library:list-clips"); // editor phase B
+    expect(IPC.exportCut).toBe("library:export-cut"); // editor phase B
   });
 
-  it("payloads serializáveis (sem funções nos tipos de dados)", () => {
+  it("serializable payloads (no functions in data types)", () => {
     const req: PingRequest = { nonce: 1 };
     const res: PingResponse = { nonce: 1, at: Date.now() };
     expect(JSON.parse(JSON.stringify(req))).toEqual(req);
     expect(JSON.parse(JSON.stringify(res))).toEqual(res);
   });
 
-  it("AnnotationWheelRequest serializável e completo (AN.6)", () => {
+  it("AnnotationWheelRequest serializable and complete (AN.6)", () => {
     const wheel: AnnotationWheelRequest = {
       cx: 612,
       cy: 459,
@@ -63,7 +63,7 @@ describe("contrato IPC", () => {
     ]);
   });
 
-  it("Bootstrap bem formado", () => {
+  it("well-formed Bootstrap", () => {
     const b: Bootstrap = {
       version: "0.1.0",
       platform: "win32",
@@ -72,7 +72,7 @@ describe("contrato IPC", () => {
     expect(b.shortcuts.togglePanel).toContain("F9");
   });
 
-  it("payloads do editor fase B serializáveis (segmento, patch de meta, clipe)", () => {
+  it("editor phase B payloads serializable (segment, meta patch, clip)", () => {
     const seg: SessionSegment = { id: "seg-1", label: "demo", inS: 1.5, outS: 9.25 };
     const patch: SessionMetaPatch = { title: "t", tags: ["a"], segments: [seg] };
     const clip: ClipInfo = { file: "C:\\x\\a.mp4", name: "a.mp4", bytes: 10, mtimeMs: 1 };
@@ -81,12 +81,12 @@ describe("contrato IPC", () => {
     expect(JSON.parse(JSON.stringify(clip))).toEqual(clip);
   });
 
-  it("canais do cockpit (C4) estáveis", () => {
+  it("cockpit channels (C4) stable", () => {
     expect(IPC.agentRunGoal).toBe("agent:run-goal");
     expect(IPC.agentGetState).toBe("agent:get-state");
   });
 
-  it("canais do switch do modelo de transcrição estáveis + status serializável", () => {
+  it("transcription model switch channels stable + serializable status", () => {
     expect(IPC.asrHostGet).toBe("asr:host-get");
     expect(IPC.asrHostSet).toBe("asr:host-set");
     const off: AsrHostStatus = { enabled: false, source: "settings", external: false, hosted: false };
@@ -97,7 +97,7 @@ describe("contrato IPC", () => {
     expect(Object.keys(off).sort()).toEqual(["enabled", "external", "hosted", "source"]);
   });
 
-  it("evento agent-state e GoalState serializáveis (C4) — payload puro cruza a porta", () => {
+  it("agent-state event and GoalState serializable (C4) — pure payload crosses the port", () => {
     const state: GoalState = {
       id: "g1",
       goal: "abre um PR do C4",
@@ -122,7 +122,7 @@ describe("contrato IPC", () => {
     ]);
   });
 
-  it("canais da correção de ditados + dataset (W2a) estáveis", () => {
+  it("dictation correction + dataset channels (W2a) stable", () => {
     expect(IPC.saveCorrection).toBe("library:save-correction");
     expect(IPC.openCorpus).toBe("library:open-corpus");
     expect(IPC.listDatasetItems).toBe("dataset:list-items");
@@ -130,7 +130,7 @@ describe("contrato IPC", () => {
     expect(IPC.saveDatasetCorrection).toBe("dataset:save-correction");
   });
 
-  it("payloads da correção (W2a) serializáveis — schema do corpus cruza a porta", () => {
+  it("correction payloads (W2a) serializable — corpus schema crosses the port", () => {
     const edit: CorrectionEdit = { index: 3, originalW: "notch", correctedW: "note" };
     const req: SaveCorrectionRequest = { correctedText: "texto corrigido", edits: [edit] };
     const validation: ValidationBlock = {
@@ -155,7 +155,7 @@ describe("contrato IPC", () => {
     expect(Object.keys(edit).sort()).toEqual(["correctedW", "index", "originalW"]);
   });
 
-  it("itens do dataset (W2a) serializáveis e completos", () => {
+  it("dataset items (W2a) serializable and complete", () => {
     const summary: DatasetItemSummary = {
       id: "011430-6f1d3072",
       ts: "2026-09-19T01:14:52",

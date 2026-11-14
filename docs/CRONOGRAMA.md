@@ -1,147 +1,147 @@
-# Cronograma — voicecast até o "pronto"
+# Schedule — voicecast until "done"
 
-Data: 2026-09-23 · Status: **proposta** (mantenedor ratifica validando a Onda 0)
+Date: 2026-09-23 · Status: **proposal** (maintainer ratifies it by validating Wave 0)
 
-Consolida o que falta: Etapas 3–5 do [PLANO-JEV-CU](PLANO-JEV-CU.md), M3/M4 da
-visão original, pendências da telemetria ([RELATORIO-TELEMETRIA](RELATORIO-TELEMETRIA.md)),
-pendência AN.4 do plano de anotações e as issues #3/#4/#5.
+Consolidates what's left: Stages 3–5 of [PLANO-JEV-CU](PLANO-JEV-CU.md), M3/M4 from
+the original vision, telemetry pending items ([RELATORIO-TELEMETRIA](RELATORIO-TELEMETRIA.md)),
+the AN.4 pending item from the annotation plan and issues #3/#4/#5.
 
-## Premissas de ritmo
+## Pace assumptions
 
-- Ritmo observado 19–23/09: várias frentes por dia útil, com o mantenedor
-  validando no Windows (`pnpm dev:win`) no mesmo dia. **Datas abaixo assumem
-  esse ritmo; se cair, as datas deslizam — a sequência e as dependências não.**
-- Cada frente fecha com commit + validação no Windows pelo mantenedor (gate
-  humano) e relatório em `docs/` quando for marco.
-- **Instrumentação acompanha a frente** (ver "Regra transversal" abaixo).
-- Itens marcados ⚡ são ortogonais e podem andar em paralelo (inclusive
-  delegados a subagents em background).
+- Observed pace 19–23/09: several fronts per business day, with the maintainer
+  validating on Windows (`pnpm dev:win`) the same day. **The dates below assume
+  this pace; if it slips, the dates slide — the sequence and the dependencies don't.**
+- Each front closes with commit + Windows validation by the maintainer (human
+  gate) and a report in `docs/` when it's a milestone.
+- **Instrumentation comes with the front** (see "Cross-cutting rule" below).
+- Items marked ⚡ are orthogonal and can move in parallel (including
+  delegated to background subagents).
 
-## Já fechado (não reabrir)
+## Already closed (do not reopen)
 
-F0 ✅ · M0–M2 ✅ (+ editor fase B 2026-09-23, validação Windows pendente) ·
-v2 ditado F9 + ASR hospedado ✅ · Jev E1/E2 ✅ · AN.1/2/6 ✅ · telemetria OTel
-ponta a ponta ✅.
+F0 ✅ · M0–M2 ✅ (+ editor phase B 2026-09-23, Windows validation pending) ·
+v2 F9 dictation + hosted ASR ✅ · Jev E1/E2 ✅ · AN.1/2/6 ✅ · OTel telemetry
+end to end ✅.
 
 ---
 
-## Onda 0 — valer o que já está pronto · 23–24/09 (minutos, humano)
+## Wave 0 — cash in what's already done · 23–24/09 (minutes, human)
 
-| # | Item | Quem |
+| # | Item | Who |
 |---|---|---|
-| 0.1 | Validar editor fase B no Windows: segmento, ✂ clipe, exportar corte, "copiar contexto" com seção Trechos | mantenedor |
-| 0.2 | Push dos commits pendentes (4 à frente do origin) | mantenedor |
-| 0.3 | Checagem visual do dashboard `voicecast` no Grafana (pendência da telemetria) | mantenedor |
+| 0.1 | Validate editor phase B on Windows: segment, ✂ clip, export cut, "copy context" with the Trechos (Excerpts) section | maintainer |
+| 0.2 | Push pending commits (4 ahead of origin) | maintainer |
+| 0.3 | Visual check of the `voicecast` dashboard in Grafana (telemetry pending item) | maintainer |
 
-## Onda 1 — Metamorfose de harness: voicecast como cockpit do agente · M/L · 27/09–02/10
+## Wave 1 — Harness metamorphosis: voicecast as the agent's cockpit · M/L · 27/09–02/10
 
-> Plano detalhado e **ratificado**: **[PLANO-COCKPIT](PLANO-COCKPIT.md)** (WPs
-> C1–C7, teste, segurança, decisões fechadas em 2026-09-27). FD.0 resolvido
-> (2026-09-27): o engine do ZCode é dirigível por **stdio** (`zcode-server.cjs`,
-> protocolo `session/create/send/subscribe` + `turn.*` + `permission.respond`)
-> — o cockpit aciona agente de primeira classe, sem UIA/colagem (ficam de
+> Detailed, **ratified** plan: **[PLANO-COCKPIT](PLANO-COCKPIT.md)** (WPs
+> C1–C7, testing, security, decisions closed on 2026-09-27). FD.0 resolved
+> (2026-09-27): the ZCode engine is drivable over **stdio** (`zcode-server.cjs`,
+> protocol `session/create/send/subscribe` + `turn.*` + `permission.respond`)
+> — the cockpit drives a first-class agent, no UIA/pasting (those stay as
 > fallback).
 
-Direção do mantenedor (2026-09-23): a integração almejada **não é "ZCode
-consulta o voicecast"** (MCP ficou sem dono por enquanto) — é o **voicecast
-subir de gravador a porta de entrada do agente**. ZCode vira o engine atrás.
+Maintainer's direction (2026-09-23): the desired integration **is not "ZCode
+queries voicecast"** (the MCP was left ownerless for now) — it's **voicecast
+moving up from recorder to the agent's front door**. ZCode becomes the engine behind it.
 
-1. **FD.0 spike — disparar um goal no ZCode programaticamente** (S, primeiro):
-   - Caminho limpo: subir o harness (`scripts/opencode-harness.sh start` na
-     raiz — server em `127.0.0.1:4096`) e mapear a API de criar sessão /
-     submeter prompt. Achado inicial (2026-09-23): o server existe
-     (`~/.zcode/server/zcode-server.cjs`), hoje está **down**.
-   - Fallback v0 (quase de graça): F9 rota `comando_agente` já cola o goal na
-     janela focada do ZCode (E2) + leitura UIA da janela (probe: 381 nós em
-     140ms) para acompanhar o desfecho sem digitar nada.
-2. **Cockpit v1 na barra/painel**: goal falado → entregue ao engine → estado
-   ao vivo na barra (rodando/concluído/erro) → resultado narrado (TTS casa
-   com M3; na v1 basta texto na barra).
-3. **AN.4**: marcações de anotação (annotations.jsonl + prints queimados) no
-   `buildContext` — contexto continua sendo o produto.
-4. ⚡ Paralelo: hook `UserPromptSubmit` + skill `.zcode/skills/voicecast/`
-   (digest bounded por relevância Jev ≥2) — barato e independe do cockpit:
-   quando você trabalha DENTRO do ZCode, o contexto da última sessão chega sozinho.
-5. ⚡ Paralelo: **worker thread pro import do SDK OTel** (residual do delay do REC).
-6. ⚡ Paralelo (spike 5 min): habilitar plugin oficial `computer-use` do ZCode
-   via marketplace (pré-requisito leve da E5).
+1. **FD.0 spike — trigger a goal in ZCode programmatically** (S, first):
+   - Clean path: bring up the harness (`scripts/opencode-harness.sh start` at
+     the root — server on `127.0.0.1:4096`) and map the API to create a session /
+     submit a prompt. Initial finding (2026-09-23): the server exists
+     (`~/.zcode/server/zcode-server.cjs`), currently **down**.
+   - Fallback v0 (nearly free): F9 routing `comando_agente` already pastes the goal into the
+     focused ZCode window (E2) + UIA reading of the window (probe: 381 nodes in
+     140ms) to follow the outcome without typing anything.
+2. **Cockpit v1 in the bar/panel**: spoken goal → handed to the engine → live
+   state in the bar (running/done/error) → narrated result (TTS matches
+   M3; in v1 text in the bar suffices).
+3. **AN.4**: annotation marks (annotations.jsonl + burned-in screenshots) in
+   `buildContext` — context remains the product.
+4. ⚡ Parallel: hook `UserPromptSubmit` + skill `.zcode/skills/voicecast/`
+   (digest bounded by Jev relevance ≥2) — cheap and independent of the cockpit:
+   when you work INSIDE ZCode, the last session's context arrives on its own.
+5. ⚡ Parallel: **worker thread for the OTel SDK import** (residual from the REC delay).
+6. ⚡ Parallel (5 min spike): enable ZCode's official `computer-use` plugin
+   via marketplace (light prerequisite of E5).
 
-**Aceite**: falar "abre um PR…" no F9 e o goal rodar num agente de verdade sem
-digitar nada, com o desfecho visível na barra.
+**Acceptance**: say "abre um PR…" ("open a PR…" — example spoken goal) into the F9 and the goal runs on a real agent without
+typing anything, with the outcome visible in the bar.
 
-**MCP de sessões** (`sessions_list`/`session_get`/`sessions_search`/
-`latest_context`) → **adiado para a Onda 5** (só ganha dono no fabric
-multi-máquina).
+**Sessions MCP** (`sessions_list`/`session_get`/`sessions_search`/
+`latest_context`) → **postponed to Wave 5** (it only gets an owner with the
+multi-machine fabric).
 
-## Regra transversal — observabilidade por funcionalidade (mantenedor, 2026-09-23)
+## Cross-cutting rule — observability per feature (maintainer, 2026-09-23)
 
-**O que rodou, como e o que aconteceu sempre deve ser registrado.** Toda
-funcionalidade nova nasce instrumentada (span/métrica/log → collector local):
-instrumentação faz parte do aceite da própria frente — não existe "onda de
-telemetria" depois do fato. Os serviços (collector/Prometheus/Tempo/Grafana)
-já estão de pé; a regra é usá-los em cada entrega.
+**What ran, how, and what happened must always be recorded.** Every
+new feature is born instrumented (span/metric/log → local collector):
+instrumentation is part of the front's own acceptance — there is no
+"telemetry wave" after the fact. The services (collector/Prometheus/Tempo/Grafana)
+are already up; the rule is to use them in every delivery.
 
-- Cobertura retro das frentes já existentes (ditado-start, ASR host/boot,
-  erros globais): itens pequenos dentro da onda que tocar cada caminho.
-- ⚡ Enabler pequeno (qualquer onda): logs do app → Loki (handler OTLP) —
-  destrava log como sinal de primeira classe para as frentes seguintes.
+- Retro coverage of the already-existing fronts (dictation-start, ASR host/boot,
+  global errors): small items inside whichever wave touches each path.
+- ⚡ Small enabler (any wave): app logs → Loki (OTLP handler) —
+  unlocks the log as a first-class signal for the following fronts.
 
-## Onda 2 — Produto & dataset: aposentadoria definitiva do voice-dictation · S/M · 29/09–03/10
-2. **Issue #5** paridade voice-dictation: fechar o que a migração deixou cair.
-3. **Issue #3** dataset de treino: tela de correção/rotulação de ditados no
-   voicecast (substitui painel :8700) — último degrau da aposentadoria do daemon.
-4. ⚡ Opcional: **Issue #4** WASAPI loopback (áudio do sistema como faixa).
-5. Gate: dashboard revisado pelo mantenedor; daemon voice-dictation removido
-   das rotinas de boot se #5+#3 fecharem.
+## Wave 2 — Product & dataset: definitive retirement of voice-dictation · S/M · 29/09–03/10
+2. **Issue #5** voice-dictation parity: close what the migration dropped.
+3. **Issue #3** training dataset: dictation correction/labeling screen inside
+   voicecast (replaces the :8700 panel) — last step of the daemon's retirement.
+4. ⚡ Optional: **Issue #4** WASAPI loopback (system audio as a track).
+5. Gate: dashboard reviewed by the maintainer; voice-dictation daemon removed
+   from the boot routines if #5+#3 close.
 
-## Onda 3 — M3 modo ao vivo + TTS · M · 06–10/10
+## Wave 3 — M3 live mode + TTS · M · 06–10/10
 
-1. Spike do modo ao vivo (transcrição streaming enquanto grava — o ASR
-   hospedado já roda local; decidir janela de partials vs wave-file por marker).
-2. UI do modo ao vivo na barra REC (transcrição parcial viva).
-3. TTS local (par de ASR: mesma filosofia host-local).
-4. Gate: sessão real com transcrição viva + TTS validados no Windows.
+1. Live mode spike (streaming transcription while recording — the hosted ASR
+   already runs locally; decide the partials window vs wave-file per marker).
+2. Live mode UI in the REC bar (live partial transcription).
+3. Local TTS (ASR's pair: same host-local philosophy).
+4. Gate: real session with live transcription + TTS validated on Windows.
 
-## Onda 4 — Jev Etapa 4: computer use no voicecast · L · 13–24/10
+## Wave 4 — Jev Stage 4: computer use in voicecast · L · 13–24/10
 
-Porte Windows do loop voz→percepção→Jev→ação (referência
-`awlevin/typesafe-computer-use`). Aceite progressivo já definido no plano:
+Windows port of the voice→perception→Jev→action loop (reference
+`awlevin/typesafe-computer-use`). Progressive acceptance already defined in the plan:
 
-| Sub | Entrega | Aceite |
+| Sub | Deliverable | Acceptance |
 |---|---|---|
-| FD.1 | Percepção (`cu/perceive.ts`): frame + OCR WinRT + walk UIA → estado textual | loga estado da janela focada |
-| FD.2 | Decisão (`cu/decide.ts`): systemone por passo + stall rules | decide certo em cenário fixo |
-| FD.3 | Ação (`cu/act.ts`): InvokePattern UIA preferencial, SendInput/koffi fallback | abre URL com kill switch |
-| FD.4 | Segurança: gate noul pré-mutação + kill físico + sessão de auditoria | ação mutante bloqueada pelo gate |
-| FD.5 | Acionamento por voz/goal + overlay de estado | roteiro de 5 passos gravado |
+| FD.1 | Perception (`cu/perceive.ts`): frame + WinRT OCR + UIA walk → textual state | logs the focused window's state |
+| FD.2 | Decision (`cu/decide.ts`): systemone per step + stall rules | decides correctly in a fixed scenario |
+| FD.3 | Action (`cu/act.ts`): InvokePattern UIA preferred, SendInput/koffi fallback | opens a URL with the kill switch |
+| FD.4 | Security: noul gate before mutation + physical kill + audit session | mutating action blocked by the gate |
+| FD.5 | Voice/goal triggering + state overlay | 5-step script recorded |
 
-Depende de E1–E2 ✅. Spikes de FD.1 podem ser puxados p/ Onda 1 se sobrar margem.
+Depends on E1–E2 ✅. FD.1 spikes can be pulled into Wave 1 if there's slack.
 
-## Onda 5 — Jev Etapa 5: fabric multi-máquina + M4 polish · S/M · a partir de 27/10
+## Wave 5 — Jev Stage 5: multi-machine fabric + M4 polish · S/M · from 27/10
 
-1. **MCP voicecast** (tools `sessions_list`/`session_get`/`sessions_search`/
-   `latest_context`, desenhadas na E3 original) acessível de note/macmini via
-   SSH stdio (mcp-peer já registrado nos dois sentidos; `INFRA_MCP_LEVEL=ro`
-   de fora).
-2. Política de coexistência CUA-Zcode × loop-voicecast documentada + guardrail
-   estendido à superfície CUA.
-3. s10deck como peer (inventário; captura remota futura).
-4. **M4**: hosting ASR no linux/note (hoje só externo via `VOICECAST_ASR_URLS`),
-   import externo de mídia, re-sync de relógio do WSL2 (infra).
-5. Gate final: do note, `sessions_search` no pchome funcionando num agente real.
+1. **voicecast MCP** (tools `sessions_list`/`session_get`/`sessions_search`/
+   `latest_context`, designed in the original E3) accessible from note/macmini via
+   SSH stdio (mcp-peer already registered both ways; `INFRA_MCP_LEVEL=ro`
+   from outside).
+2. CUA-Zcode × voicecast-loop coexistence policy documented + guardrail
+   extended to the CUA surface.
+3. s10deck as a peer (inventory; future remote capture).
+4. **M4**: ASR hosting on linux/note (today only external via `VOICECAST_ASR_URLS`),
+   external media import, WSL2 clock re-sync (infra).
+5. Final gate: from the note, `sessions_search` on the pchome working in a real agent.
 
-## Visão de gantt (dependências)
+## Gantt view (dependencies)
 
 ```
-Onda 0 (24/09) ─► Onda 1 cockpit (30/09) ─► Onda 4 E4 (24/10) ─► Onda 5 E5 (out/nov)
+Wave 0 (24/09) ─► Wave 1 cockpit (30/09) ─► Wave 4 E4 (24/10) ─► Wave 5 E5 (oct/nov)
                         │
-                        └► Onda 2 produto/dataset (03/10) ─► Onda 3 M3 (10/10)
-⚡ worker OTel · hook/skill · plugin CUA · WASAPI: qualquer momento da Onda 1 em diante
+                        └► Wave 2 product/dataset (03/10) ─► Wave 3 M3 (10/10)
+⚡ OTel worker · hook/skill · CUA plugin · WASAPI: any time from Wave 1 on
 ```
 
-Data-alvo do "pronto" (M3+M4+E3+E4+E5+backlog): **fim de outubro/2026** no ritmo
-atual; começo de novembro com margem.
+Target date for "done" (M3+M4+E3+E4+E5+backlog): **end of October/2026** at the current
+pace; early November with slack.
 
-## Fora de escopo (reafirmado do PLANO-JEV-CU)
+## Out of scope (reaffirmed from PLANO-JEV-CU)
 
-Streaming/visão no Jev · ditado macOS/Linux · substituir o CUA do ZCode.
+Streaming/vision in Jev · dictation on macOS/Linux · replacing ZCode's CUA.

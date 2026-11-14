@@ -1,8 +1,8 @@
 /**
- * Testes do módulo Jev (src/main/jev.ts) — sem rede: o SDK aceita fetch
- * injetável (judgeDictation/judgeSession expõem o parâmetro), e as fixtures
- * espelham respostas reais da API (probe 2026-09-21, docs/RELATORIO-E1.md).
- * decidePaste é o coração do F9: a tabela-verdade abaixo é o contrato de UX.
+ * Tests of the Jev module (src/main/jev.ts) — no network: the SDK accepts an
+ * injectable fetch (judgeDictation/judgeSession expose the parameter), and the
+ * fixtures mirror real API responses (probe 2026-09-21, docs/RELATORIO-E1.md).
+ * decidePaste is the heart of F9: the truth table below is the UX contract.
  */
 import { describe, expect, it } from "vitest";
 import { decidePaste, jevJudge, judgeDictation, judgeSession, type DictationJudgment } from "../src/main/jev";
@@ -14,7 +14,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-/** Resposta real (probe): choice 4 opções. */
+/** Real response (probe): choice with 4 options. */
 const FIX_ROTA = {
   model: "jev-1.13.0",
   answers: {
@@ -28,7 +28,7 @@ const FIX_ROTA = {
   usage: { input_tokens: 300, output_tokens: 30 },
 };
 
-/** Resposta real (probe): as 4 perguntas da sessão. */
+/** Real response (probe): the session's 4 questions. */
 const FIX_SESSAO = {
   model: "jev-1.13.0",
   answers: {
@@ -50,12 +50,12 @@ function captureFetch(body: unknown, capture?: { url?: string; body?: any }) {
   };
 }
 
-describe("perguntas (jev-questions)", () => {
-  it("opções do choice ROTA são exatamente as ROTAS — decidePaste depende delas", () => {
+describe("questions (jev-questions)", () => {
+  it("ROTA choice options are exactly the ROTAS — decidePaste depends on them", () => {
     expect(Q_ROTA.type).toBe("choice");
     expect(Object.keys(Q_ROTA.criteria)).toEqual([...ROTAS]);
   });
-  it("primitivas corretas na sessão", () => {
+  it("correct primitives in the session", () => {
     expect(Q_RELEVANCIA.type).toBe("score");
     expect(Q_PEDIDO.type).toBe("noul");
     expect(Q_RISCO.type).toBe("noul");
@@ -63,24 +63,24 @@ describe("perguntas (jev-questions)", () => {
 });
 
 describe("judgeDictation (F9)", () => {
-  it("mapeia a resposta para rota+confiança", async () => {
+  it("maps the response to route+confidence", async () => {
     const j = await judgeDictation("abre um pull request do branch atual", captureFetch(FIX_ROTA));
     expect(j?.rota).toBe("comando_agente");
     expect(j?.confidence).toBeCloseTo(0.98);
     expect(j?.model).toBe("jev-1.13.0");
   });
-  it("resposta sem choice → null (não decide com lixo)", async () => {
+  it("response without choice → null (doesn't decide on garbage)", async () => {
     const j = await judgeDictation("x", captureFetch({ model: "m", answers: { rota: { type: "choice" } }, usage: { input_tokens: 1, output_tokens: 1 } }));
     expect(j).toBeNull();
   });
-  it("fail-soft: erro de API → null (F9 cola como sempre)", async () => {
+  it("fail-soft: API error → null (F9 pastes as always)", async () => {
     const j = await judgeDictation("x", async () => jsonResponse({ detail: { message: "boom" } }, 500));
     expect(j).toBeNull();
   });
 });
 
 describe("judgeSession", () => {
-  it("mapeia as 4 respostas", async () => {
+  it("maps the 4 responses", async () => {
     const s = await judgeSession("quero que você olha o diff…", { mode: "tela+mic" }, captureFetch(FIX_SESSAO));
     expect(s?.rota).toBe("comando_agente");
     expect(s?.relevancia).toBeCloseTo(2.92);
@@ -88,7 +88,7 @@ describe("judgeSession", () => {
     expect(s?.risco).toBeCloseTo(0.97);
     expect(s?.confidence).toBeCloseTo(0.98);
   });
-  it("opção desconhecida na resposta → rota null, resto de pé", async () => {
+  it("unknown option in the response → route null, rest standing", async () => {
     const bad = {
       model: "jev-1.13.0",
       answers: {
@@ -103,8 +103,8 @@ describe("judgeSession", () => {
   });
 });
 
-describe("jevJudge (payload e kill-switch)", () => {
-  it("payload no contrato da API (URL/model/questions)", async () => {
+describe("jevJudge (payload and kill-switch)", () => {
+  it("payload follows the API contract (URL/model/questions)", async () => {
     const cap: { url?: string; body?: any } = {};
     const v = await jevJudge({
       state: { transcript: "x" },
@@ -117,7 +117,7 @@ describe("jevJudge (payload e kill-switch)", () => {
     expect(Object.keys(cap.body.questions)).toEqual(["rota"]);
     expect(v?.respostas.rota.choice).toBe("comando_agente");
   });
-  it("VOICECAST_JEV=0 desliga sem tocar na rede", async () => {
+  it("VOICECAST_JEV=0 turns it off without touching the network", async () => {
     const prev = process.env.VOICECAST_JEV;
     process.env.VOICECAST_JEV = "0";
     const v = await jevJudge({
@@ -125,7 +125,7 @@ describe("jevJudge (payload e kill-switch)", () => {
       questions: { rota: Q_ROTA },
       origem: "ditado",
       fetch: async () => {
-        throw new Error("kill-switch ativo não deve chamar a rede");
+        throw new Error("active kill-switch must not hit the network");
       },
     });
     process.env.VOICECAST_JEV = prev;
@@ -133,27 +133,27 @@ describe("jevJudge (payload e kill-switch)", () => {
   });
 });
 
-describe("decidePaste — tabela-verdade do F9 (o contrato de UX)", () => {
+describe("decidePaste — F9 truth table (the UX contract)", () => {
   const j = (rota: string, confidence: number): DictationJudgment =>
     ({ rota: rota as DictationJudgment["rota"], confidence, model: "test", latenciaMs: 1 }) as DictationJudgment;
 
-  it("sem julgamento → cola (fail-soft preserva o comportamento antigo)", () => {
-    expect(decidePaste(null)).toEqual({ paste: true, motivo: expect.stringContaining("sem julgamento") });
+  it("no judgment → paste (fail-soft preserves the old behavior)", () => {
+    expect(decidePaste(null)).toEqual({ paste: true, motivo: expect.stringContaining("no judgment") });
   });
-  it("ditado puro → cola", () => {
+  it("pure dictation → paste", () => {
     expect(decidePaste(j("ditado_texto", 0.99)).paste).toBe(true);
   });
-  it("confiança baixa → cola (não decide sozinho)", () => {
+  it("low confidence → paste (doesn't decide on its own)", () => {
     const d = decidePaste(j("comando_agente", AUTO_CONFIDENCE - 0.01));
     expect(d.paste).toBe(true);
-    expect(d.motivo).toContain("confiança");
+    expect(d.motivo).toContain("confidence");
   });
-  it("comando pro agente com confiança alta → NÃO cola", () => {
+  it("command for the agent with high confidence → does NOT paste", () => {
     const d = decidePaste(j("comando_agente", 0.98));
     expect(d.paste).toBe(false);
     expect(d.motivo).toBe("comando_agente");
   });
-  it("anotação e conversa com confiança alta → NÃO colam", () => {
+  it("annotation and social chat with high confidence → do NOT paste", () => {
     expect(decidePaste(j("anotacao_contexto", 0.95)).paste).toBe(false);
     expect(decidePaste(j("conversa_social", 0.93)).paste).toBe(false);
   });

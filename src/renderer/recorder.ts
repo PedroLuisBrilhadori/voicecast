@@ -1,17 +1,17 @@
 /**
- * Renderer oculto de captura: getUserMedia(desktop) + mic + MediaRecorder.
- * Mesma malha do PoC da F0 (validada): track +1px, fMP4/avc1+aac nativo.
- * API exposta: window.vcRecord / vcStop / vcCancel / vcPause.
- * O canal de entrega vem via query ?ch=recorder:blob:<startedAt>.
+ * Hidden capture renderer: getUserMedia(desktop) + mic + MediaRecorder.
+ * Same mesh as the F0 PoC (validated): +1px track, native fMP4/avc1+aac.
+ * Exposed API: window.vcRecord / vcStop / vcCancel / vcPause.
+ * The delivery channel comes via the ?ch=recorder:blob:<startedAt> query.
  */
 export {};
 
 type VCRec = {
   ok: boolean;
   error?: string;
-  /** Date.now() do main e do renderer são o mesmo relógio: momento real do recorder.start(). */
+  /** main's and renderer's Date.now() are the same clock: real moment of recorder.start(). */
   startedAtReal?: number;
-  /** Breakdown do aquecimento (o delay percebido entre pedido e REC). */
+  /** Warm-up breakdown (the perceived delay between request and REC). */
   timings?: { desktopMs: number; micMs: number | null };
 };
 
@@ -45,8 +45,8 @@ function pickMime(): string {
 }
 
 async function blobToB64(b: Blob): Promise<string> {
-  // btoa direto nos bytes (dataURL+indexOf quebrava: o mime tem vírgula em
-  // codecs="...,..." e o slice comia o início do base64)
+  // btoa straight on the bytes (dataURL+indexOf broke: the mime has a comma in
+  // codecs="...,..." and the slice ate the start of the base64)
   const buf = new Uint8Array(await b.arrayBuffer());
   let s = "";
   for (let i = 0; i < buf.length; i += 0x8000) {
@@ -85,7 +85,7 @@ window.vcRecord = async (opts: { sourceId: string | null; withMic: boolean; mode
   cancelled = false;
   chunks = [];
   try {
-    if (!opts.sourceId) return { ok: false, error: "sourceId ausente no recorder" };
+    if (!opts.sourceId) return { ok: false, error: "sourceId missing in recorder" };
     const tDesktop = performance.now();
     const video = await navigator.mediaDevices.getUserMedia({
       audio: false,
@@ -112,7 +112,7 @@ window.vcRecord = async (opts: { sourceId: string | null; withMic: boolean; mode
     currentStream = new MediaStream([...video.getVideoTracks(), ...(audio ? audio.getAudioTracks() : [])]);
     if (audio) startMicLevel(audio);
 
-    // puxa frames para o compositor (o MediaRecorder precisa disso em janela oculta)
+    // pumps frames to the compositor (MediaRecorder needs this in a hidden window)
     const v = document.getElementById("v") as HTMLVideoElement;
     v.srcObject = currentStream;
     await v.play().catch(() => {});
@@ -145,7 +145,7 @@ window.vcStop = async (): Promise<void> => {
   });
   teardown();
 
-  if (cancelled || !BLOB_CH) return; // cancelado: nada entregue
+  if (cancelled || !BLOB_CH) return; // cancelled: nothing delivered
   const mime = rec.mimeType || "video/webm";
   console.info(`[recorder] stop: chunks=${chunks.length} mime=${mime}`);
   const blob = new Blob(chunks, { type: mime });
@@ -160,11 +160,11 @@ window.vcCancel = (): void => {
   } catch {}
 };
 
-// ── ditado (mic-only, sem vídeo) ───────────────────────────────
+// ── dictation (mic-only, no video) ───────────────────────────────
 
 let audioOnly: { rec: MediaRecorder; stream: MediaStream } | null = null;
 
-/** Beep de feedback (parity com o daemon antigo): tom alto no start, grave no stop. */
+/** Feedback beep (parity with the old daemon): high tone on start, low on stop. */
 function beep(freq: number, ms: number): void {
   try {
     const ctx = new AudioContext();
@@ -184,10 +184,10 @@ window.vcRecordDictation = async (): Promise<{ ok: boolean; error?: string }> =>
   chunks = [];
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    audioOnly = { stream, rec: new MediaRecorder(stream) }; // webm/opus default — ASR decodifica
+    audioOnly = { stream, rec: new MediaRecorder(stream) }; // webm/opus default — ASR decodes it
     audioOnly.rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
     audioOnly.rec.start(500);
-    startMicLevel(stream); // waveform na barra do ditado
+    startMicLevel(stream); // waveform on the dictation bar
     beep(1200, 90);
     return { ok: true };
   } catch (e) {
@@ -213,7 +213,7 @@ window.vcStopDictation = async (): Promise<void> => {
   if (cancelled || !BLOB_CH) return;
   const blob = new Blob(chunks, { type: "audio/webm" });
   const b64 = await blobToB64(blob);
-  console.info(`[ditado] stop: chunks=${chunks.length} bytes=${blob.size}`);
+  console.info(`[dictation] stop: chunks=${chunks.length} bytes=${blob.size}`);
   window.vcInternal.sendBlob(BLOB_CH, { b64, ext: "webm" });
 };
 

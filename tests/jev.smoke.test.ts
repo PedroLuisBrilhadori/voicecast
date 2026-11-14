@@ -1,20 +1,20 @@
 /**
- * Smoke da API real (TypeSafe/Jev) — NÃO roda no CI. Rodar sob pedido:
+ * Smoke of the real API (TypeSafe/Jev) — does NOT run on CI. Run on demand:
  *
  *   VOICECAST_JEV_SMOKE=1 TYPESAFE_API_KEY=<key> pnpm vitest run tests/jev.smoke.test.ts
  *
- * Valida que as perguntas de src/main/jev-questions.ts continuam produzindo
- * decisões coerentes com o modelo corrente (se o texto mudar sem revalidar,
- * é aqui que aparece).
+ * Validates that the questions in src/main/jev-questions.ts keep producing
+ * decisions consistent with the current model (if the text changes without
+ * revalidation, it shows up here).
  */
 import { describe, expect, it } from "vitest";
 import { judgeDictation, judgeSession } from "../src/main/jev";
 
 const SMOKE = process.env.VOICECAST_JEV_SMOKE === "1";
 
-describe.skipIf(!SMOKE)("jev smoke (API real)", () => {
+describe.skipIf(!SMOKE)("jev smoke (real API)", () => {
   it(
-    "F9: comando roteia como comando_agente com confiança alta",
+    "F9: command routes as comando_agente with high confidence",
     async () => {
       const j = await judgeDictation("abre um pull request do branch atual e pede revisão pro time");
       expect(j).not.toBeNull();
@@ -25,7 +25,7 @@ describe.skipIf(!SMOKE)("jev smoke (API real)", () => {
   );
 
   it(
-    "F9: ditado puro roteia como ditado_texto",
+    "F9: pure dictation routes as ditado_texto",
     async () => {
       const j = await judgeDictation("querido cliente segue em anexo o relatório da semana att pedro");
       expect(j?.rota).toBe("ditado_texto");
@@ -34,7 +34,7 @@ describe.skipIf(!SMOKE)("jev smoke (API real)", () => {
   );
 
   it(
-    "sessão: relevância alta + tarefa somente-leitura",
+    "session: high relevance + read-only task",
     async () => {
       const s = await judgeSession(
         "[00:12] cara, olha esse dashboard do grafana, o painel de latência tá com pico de 3 segundos de p99 desde ontem " +
@@ -45,7 +45,7 @@ describe.skipIf(!SMOKE)("jev smoke (API real)", () => {
       expect(s).not.toBeNull();
       expect(s!.relevancia).toBeGreaterThan(1.5);
       expect(s!.pedido).toBeGreaterThan(0.5);
-      expect(s!.risco).toBeGreaterThan(0.5); // somente-leitura = noul alto
+      expect(s!.risco).toBeGreaterThan(0.5); // read-only = high noul
     },
     20_000,
   );

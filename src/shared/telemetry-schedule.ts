@@ -1,25 +1,26 @@
 /**
- * Agendamento do init da telemetria pós-ready — PURO (sem electron), testável
- * com fake timers (W2b).
+ * Telemetry init scheduling post-ready — PURE (no electron), testable with
+ * fake timers (W2b).
  *
- * Histórico: o init esperava idle+15s porque o import do SDK OTel bloqueava o
- * event loop do main por ~9s (mitigação p/ não colidir com uma gravação).
- * Pós-W1 o SDK inteiro roda em worker_thread — o init não bloqueia mais nada,
- * então o delay inicial caiu p/ 2s (só p/ o arranque do app respirar). A
- * guarda de idle continua: se uma captura estiver em curso, adia e tenta de
- * novo (retry fixo) — init continua seguro em qualquer fase, mas não há
- * motivo p/ competir com o boot de uma sessão.
+ * History: init used to wait for idle+15s because the OTel SDK import blocked
+ * the main event loop for ~9s (mitigation to avoid colliding with a recording).
+ * Post-W1 the whole SDK runs in a worker_thread — init no longer blocks
+ * anything, so the initial delay dropped to 2s (just to let the app boot
+ * breathe). The idle guard remains: if a capture is in progress, it delays and
+ * retries (fixed retry) — init stays safe at any phase, but there is no reason
+ * to compete with a session's boot.
  */
 
-/** Delay inicial pós-ready (era 15s — residual desnecessário pós-W1). */
+/** Initial delay post-ready (was 15s — unnecessary leftover post-W1). */
 export const TELEMETRY_INIT_DELAY_MS = 2_000;
-/** Retry quando a captura não está idle (herdado do agendamento antigo). */
+/** Retry when the capture is not idle (inherited from the old scheduling). */
 export const TELEMETRY_INIT_RETRY_MS = 5_000;
 
 /**
- * Agenda `init` para rodar após `initialDelayMs`, esperando a captura ficar
- * idle (`getPhase() === "idle"`); não-idle → re-agenda a cada `retryDelayMs`.
- * Devolve o timer inicial (o caller pode clearTimeout no shutdown).
+ * Schedules `init` to run after `initialDelayMs`, waiting for the capture to
+ * be idle (`getPhase() === "idle"`); not idle → reschedules every
+ * `retryDelayMs`. Returns the initial timer (the caller may clearTimeout on
+ * shutdown).
  */
 export function scheduleTelemetryInit(
   getPhase: () => string,

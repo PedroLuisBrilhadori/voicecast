@@ -25,11 +25,11 @@ export function App() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionSearch, setSessionSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "ditado" | "screen" | "window" | "region">("all");
-  // C4 — cockpit: entrada digitada de goal (voz entra depois — F9 já roteia)
+  // C4 — cockpit: typed goal input (voice comes later — F9 already routes it)
   const [goalText, setGoalText] = useState("");
   const [goalState, setGoalState] = useState<GoalState | null>(null);
   const [goalBusy, setGoalBusy] = useState(false);
-  // switch do modelo de transcrição (ASR local) — settings.json
+  // transcription model switch (local ASR) — settings.json
   const [asr, setAsr] = useState<AsrHostStatus | null>(null);
 
   const refreshSessions = useCallback(() => {
@@ -45,7 +45,7 @@ export function App() {
     return off;
   }, [refreshSessions]);
 
-  // debounce da busca full-text
+  // full-text search debounce
   useEffect(() => {
     const t = setTimeout(refreshSessions, 250);
     return () => clearTimeout(t);
@@ -88,9 +88,9 @@ export function App() {
     refreshScreens();
   }, [refreshScreens]);
 
-  // Janelas: previews ao vivo SÓ com a tab delas aberta — cada tick de
-  // getSources captura TODAS as janelas do desktop (main a ~25% de CPU com o
-  // app parado quando isso rodava a cada 2.5s incondicionalmente).
+  // Windows: live previews ONLY while their tab is open — every getSources
+  // tick captures ALL desktop windows (main sat at ~25% CPU with the app idle
+  // when this ran unconditionally every 2.5s).
   useEffect(() => {
     if (tab !== "window") return;
     refreshWindows();
@@ -104,8 +104,8 @@ export function App() {
       setBusy(true);
       try {
         const res = await window.voicecast.startRecording({ ...req, withMic });
-        if (!res.ok) setError(res.error ?? "falha ao iniciar");
-        else window.close(); // gravação começou: painel some, barra fica
+        if (!res.ok) setError(res.error ?? "failed to start");
+        else window.close(); // recording started: panel hides, bar stays
       } finally {
         setBusy(false);
       }
@@ -132,13 +132,13 @@ export function App() {
         <h1>
           voicecast <span className="tag">{boot ? `v${boot.version}` : "…"}</span>
           {recording && (
-            <span className="tag rec-live">● {state.phase === "processing" ? "processando" : "REC"}</span>
+            <span className="tag rec-live">● {state.phase === "processing" ? "processing" : "REC"}</span>
           )}
         </h1>
         <p className="sub">
-          Grave voz + tela, transcreva local e vire contexto para o agente.{" "}
-          <kbd>{boot?.shortcuts.togglePanel ?? "Ctrl+F9"}</kbd> abre/oculta este painel ·{" "}
-          <kbd>{boot?.shortcuts.recordFullscreen ?? "Ctrl+Shift+F9"}</kbd> grava a tela inteira já.
+          Record voice + screen, transcribe locally, and turn it into context for the agent.{" "}
+          <kbd>{boot?.shortcuts.togglePanel ?? "Ctrl+F9"}</kbd> toggles this panel ·{" "}
+          <kbd>{boot?.shortcuts.recordFullscreen ?? "Ctrl+Shift+F9"}</kbd> records the whole screen right away.
         </p>
       </header>
 
@@ -148,12 +148,12 @@ export function App() {
         </div>
       )}
 
-      {/* C4 — cockpit: goal digitado para o agente (estados ao vivo abaixo) */}
+      {/* C4 — cockpit: goal typed for the agent (live states below) */}
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
         <input
           className="search"
           style={{ flex: 1, margin: 0 }}
-          placeholder="Goal para o agente (ex.: resume as sessões de hoje)…"
+          placeholder="Goal for the agent (e.g.: summarize today's sessions)…"
           value={goalText}
           onChange={(e) => setGoalText(e.target.value)}
           onKeyDown={(e) => {
@@ -166,7 +166,7 @@ export function App() {
       </div>
       {goalState && (
         <p className="muted" style={{ margin: "6px 0 0" }}>
-          agente: <strong>{goalSummary(goalState)}</strong>
+          agent: <strong>{goalSummary(goalState)}</strong>
           {goalState.error ? ` — ${goalState.error}` : ""}
         </p>
       )}
@@ -174,9 +174,9 @@ export function App() {
       <div className="tabs">
         {(
           [
-            ["screen", "🖥 Tela cheia"],
-            ["window", "🪟 Janela"],
-            ["region", "▭ Região"],
+            ["screen", "🖥 Full screen"],
+            ["window", "🪟 Window"],
+            ["region", "▭ Region"],
           ] as const
         ).map(([id, label]) => (
           <button key={id} className={`tab ${tab === id ? "on" : ""}`} onClick={() => setTab(id)}>
@@ -199,7 +199,7 @@ export function App() {
                 <span>{s.name}</span>
               </button>
             ))}
-            {!screens.length && <p className="muted">Nenhuma tela detectada ainda…</p>}
+            {!screens.length && <p className="muted">No screens detected yet…</p>}
           </div>
         )}
 
@@ -207,7 +207,7 @@ export function App() {
           <>
             <input
               className="search"
-              placeholder="Buscar janela…"
+              placeholder="Search windows…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -224,7 +224,7 @@ export function App() {
                   <span>{w.name.length > 46 ? w.name.slice(0, 46) + "…" : w.name}</span>
                 </button>
               ))}
-              {!filteredWindows.length && <p className="muted">Nenhuma janela com esse nome.</p>}
+              {!filteredWindows.length && <p className="muted">No window with that name.</p>}
             </div>
           </>
         )}
@@ -232,29 +232,29 @@ export function App() {
         {tab === "region" && (
           <div className="region-pane">
             <button className="big" disabled={recording || busy} onClick={() => void pickRegion()}>
-              ▭ Selecionar área na tela
+              ▭ Select area on screen
             </button>
             <p className="muted">
-              Overlays abrem em TODOS os monitores — arraste no que quiser e SOLTAR confirma (✕/Esc cancela).
+              Overlays open on ALL monitors — drag on whichever you want and RELEASING confirms (✕/Esc cancels).
             </p>
             {regionRect ? (
               <div className="region-summary">
                 <span>
-                  Selecionado: <strong>{regionRect.width}×{regionRect.height}</strong> px
+                  Selected: <strong>{regionRect.width}×{regionRect.height}</strong> px
                 </span>
                 <button className="go" disabled={recording || busy} onClick={() => void pickRegion()}>
-                  Re-selecionar
+                  Re-select
                 </button>
                 <button
                   className="go big"
                   disabled={recording || busy}
                   onClick={() => void start({ mode: "region", rect: regionRect, displayIndex: regionDisplay })}
                 >
-                  ● Gravar região
+                  ● Record region
                 </button>
               </div>
             ) : (
-              <p className="muted">Nada selecionado ainda.</p>
+              <p className="muted">Nothing selected yet.</p>
             )}
           </div>
         )}
@@ -268,17 +268,17 @@ export function App() {
             onChange={(e) => setWithMic(e.target.checked)}
             disabled={recording}
           />
-          🎙 microfone
+          🎙 microphone
         </label>
 
         <label
           className="mic"
           title={
             asr?.source === "env"
-              ? "desligado por env (VOICECAST_ASR_HOST=0) — o settings não pode ligar"
+              ? "disabled via env (VOICECAST_ASR_HOST=0) — settings cannot enable it"
               : asr?.enabled
-                ? "modelo de transcrição local ligado (settings.json asrHost)"
-                : "modelo de transcrição local DESLIGADO — ditado/sessões ficam sem fala"
+                ? "local transcription model enabled (settings.json asrHost)"
+                : "local transcription model DISABLED — dictation/sessions get no speech"
           }
         >
           <input
@@ -291,7 +291,7 @@ export function App() {
               window.voicecast.asrHostSet(on).then((r) => r.ok && setAsr(r.status)).catch(() => {});
             }}
           />
-          🗣 transcrição{asr && !asr.enabled ? " (off)" : ""}
+          🗣 transcription{asr && !asr.enabled ? " (off)" : ""}
         </label>
 
         {tab === "screen" && (
@@ -300,19 +300,19 @@ export function App() {
             disabled={!screens.length || recording || busy}
             onClick={() => void start({ mode: "screen", sourceId: screens[0]?.id })}
           >
-            ● Gravar tela
+            ● Record screen
           </button>
         )}
         {tab === "window" && (
           <p className="muted" style={{ margin: 0 }}>
-            Clique na janela desejada acima para gravá-la.
+            Click the desired window above to record it.
           </p>
         )}
       </footer>
 
       <section className="library">
         <h2>
-          Sessões{" "}
+          Sessions{" "}
           <span className="muted">
             (
             {
@@ -330,11 +330,11 @@ export function App() {
         <div className="tabs small">
           {(
             [
-              ["all", "Todos"],
-              ["ditado", "🎙 Ditados"],
-              ["region", "▭ Regiões"],
-              ["window", "🪟 Janelas"],
-              ["screen", "🖥 Telas"],
+              ["all", "All"],
+              ["ditado", "🎙 Dictations"],
+              ["region", "▭ Regions"],
+              ["window", "🪟 Windows"],
+              ["screen", "🖥 Screens"],
             ] as const
           ).map(([id, label]) => (
             <button key={id} className={`tab ${typeFilter === id ? "on" : ""}`} onClick={() => setTypeFilter(id)}>
@@ -344,16 +344,16 @@ export function App() {
         </div>
         <input
           className="search"
-          placeholder="Buscar na fala das transcrições… (full-text)"
+          placeholder="Search transcript speech… (full-text)"
           value={sessionSearch}
           onChange={(e) => setSessionSearch(e.target.value)}
         />
         <div className="lib-tools">
           <button
             onClick={() => void window.voicecast.openCorpus()}
-            title="corrigir ditados do histórico (dataset de treino do voice — substitui o painel :8700)"
+            title="correct historical dictations (voice training dataset — replaces the :8700 panel)"
           >
-            📚 dataset de treino
+            📚 training dataset
           </button>
         </div>
         <div className="grid sessions">
@@ -392,11 +392,11 @@ export function App() {
                   <span className="sess-title">{s.title || `${s.name.slice(0, 4)} · ${s.mode ?? "?"}`}</span>
                   {s.preview && <span className="sess-preview">{s.preview}</span>}
                   <span className="sess-meta">
-                    {quando} · {s.mode === "ditado" ? "ditado" : s.mode ?? "?"} ·{" "}
+                    {quando} · {s.mode === "ditado" ? "dictation" : s.mode ?? "?"} ·{" "}
                     {s.transcriptStatus === "done"
-                      ? "transcrito"
+                      ? "transcribed"
                       : s.transcriptStatus === "pending"
-                        ? "transcrevendo…"
+                        ? "transcribing…"
                         : s.status}
                   </span>
                 </button>
@@ -404,7 +404,7 @@ export function App() {
             })}
           {!sessions.length && (
             <p className="muted">
-              {sessionSearch ? "Nada encontrado nessa busca." : "Nenhuma sessão gravada ainda."}
+              {sessionSearch ? "Nothing found for this search." : "No sessions recorded yet."}
             </p>
           )}
         </div>
