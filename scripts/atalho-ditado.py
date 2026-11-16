@@ -84,7 +84,14 @@ def vigia(log=print) -> int:
             ultimo_scan = agora
             atuais = set(teclados())
             for fd, path in list(fds.items()):
-                if path not in atuais:
+                orfao = False
+                try:
+                    # device node recriado (re-enumeration): fd aponta para
+                    # inode unlinked que não recebe mais eventos
+                    orfao = os.fstat(fd).st_nlink == 0
+                except OSError:
+                    orfao = True
+                if path not in atuais or orfao:
                     try:
                         os.close(fd)
                     except OSError:

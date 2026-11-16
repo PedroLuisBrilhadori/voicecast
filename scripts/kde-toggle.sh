@@ -4,4 +4,4 @@
 # Usage: kde-toggle.sh [ditado|rec|painel]
 set -euo pipefail
 ACAO="${1:-painel}"
-exec /home/pedro/programing/projetos/voicecast/scripts/run-linux.sh "--$ACAO"
+exec "$(dirname "$0")/run-linux.sh" "--$ACAO"
